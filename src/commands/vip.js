@@ -242,24 +242,45 @@ module.exports = {
       return;
     }
 
+const { createPagination } = require("../utils/pagination");
+
+module.exports = {
+  // ... data ...
+  async execute(interaction) {
+    const vip = interaction.client.services?.vip;
+    const vipRole = interaction.client.services?.vipRole;
+    if (!vip) {
+      await interaction.reply({ content: "Serviço de VIP indisponível.", ephemeral: true });
+      return;
+    }
+
+    const sub = interaction.options.getSubcommand();
+
+    // ... add, remove, status ...
+
     if (sub === "list") {
       const ids = vip.listVipIds();
-      const mentions = ids.map((id) => `<@${id}>`);
+      
+      if (ids.length === 0) {
+          return interaction.reply({ embeds: [createEmbed({ description: "Nenhum VIP cadastrado." })], ephemeral: true });
+      }
 
-      const max = 25;
-      const shown = mentions.slice(0, max);
-      const remaining = mentions.length - shown.length;
-
-      const embed = createEmbed({
-        title: "VIPs",
-        description: shown.length ? shown.join("\n") : "Nenhum VIP cadastrado.",
-        footer:
-          remaining > 0
-            ? `Mostrando ${shown.length} de ${mentions.length} VIPs`
-            : `Total: ${mentions.length}`,
+      await createPagination({
+          interaction,
+          items: ids,
+          itemsPerPage: 25,
+          title: "VIPs",
+          embedBuilder: (items, page, total) => {
+              const mentions = items.map(id => `<@${id}>`).join("\n");
+              return createEmbed({
+                  title: "VIPs",
+                  description: mentions,
+                  footer: { text: `Página ${page + 1}/${total} • Total: ${ids.length}` }
+              });
+          }
       });
-
-      await interaction.reply({ embeds: [embed], ephemeral: true });
     }
+  },
+};
   },
 };

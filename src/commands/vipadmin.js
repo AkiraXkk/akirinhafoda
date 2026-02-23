@@ -105,6 +105,17 @@ module.exports = {
         });
     }
 
+const { createPagination } = require("../utils/pagination");
+
+module.exports = {
+  // ... data ...
+  async execute(interaction) {
+    const vipConfig = interaction.client.services.vipConfig;
+    const sub = interaction.options.getSubcommand();
+    const guildId = interaction.guildId;
+
+    // ... list_tiers ...
+
     if (sub === "list_families") {
         const families = await familyStore.load();
         const familyList = Object.values(families);
@@ -113,19 +124,26 @@ module.exports = {
             return interaction.reply({ embeds: [createEmbed({ description: "Nenhuma família criada." })] });
         }
 
-        // Paginação simples (top 10)
-        const top = await Promise.all(familyList.slice(0, 10).map(async f => {
-            return `**${f.name}** (Dono: <@${f.ownerId}>) - ${f.members.length} membros`;
-        }));
-
-        await interaction.reply({ 
-            embeds: [createEmbed({
-                title: "🏰 Famílias do Servidor",
-                description: top.join("\n"),
-                footer: `Total: ${familyList.length} famílias`
-            })] 
+        await createPagination({
+            interaction,
+            items: familyList,
+            itemsPerPage: 10,
+            title: "🏰 Famílias do Servidor",
+            embedBuilder: (items, page, total) => {
+                const desc = items.map(f => `**${f.name}** (Dono: <@${f.ownerId}>) - ${f.members.length} membros`).join("\n");
+                return createEmbed({
+                    title: "🏰 Famílias do Servidor",
+                    description: desc,
+                    footer: { text: `Página ${page + 1}/${total} • Total: ${familyList.length} famílias` }
+                });
+            }
         });
+        return;
     }
+
+    // ... delete_family ...
+  }
+};
 
     if (sub === "delete_family") {
         const owner = interaction.options.getUser("dono");
