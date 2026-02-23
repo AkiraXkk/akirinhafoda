@@ -1,0 +1,45 @@
+const { Events } = require("discord.js");
+const { logger } = require("../logger");
+
+module.exports = {
+  name: Events.InteractionCreate,
+  async execute(interaction, client) {
+    if (interaction.isButton()) {
+        const ticketCommand = client.commands.get("ticket");
+        if (ticketCommand && typeof ticketCommand.handleButton === "function") {
+            await ticketCommand.handleButton(interaction);
+            return;
+        }
+    }
+    
+    // Autocomplete Handler
+    if (interaction.isAutocomplete()) {
+        const command = client.commands.get(interaction.commandName);
+        if (!command || !command.autocomplete) return;
+        try {
+            await command.autocomplete(interaction);
+        } catch (error) {
+            logger.error({ err: error, command: interaction.commandName }, "Erro no Autocomplete");
+        }
+        return;
+    }
+
+    if (!interaction.isChatInputCommand()) return;
+
+    const command = client.commands.get(interaction.commandName);
+    if (!command) return;
+
+    try {
+      await command.execute(interaction);
+    } catch (error) {
+      logger.error({ err: error, command: interaction.commandName }, "Erro ao executar comando");
+
+      const payload = { content: "Ocorreu um erro ao executar esse comando.", ephemeral: true };
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp(payload).catch(() => {});
+      } else {
+        await interaction.reply(payload).catch(() => {});
+      }
+    }
+  },
+};

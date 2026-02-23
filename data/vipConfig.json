@@ -1,0 +1,13 @@
+{
+  "722253176283070506": {
+    "1475544546845659239": {
+      "name": "Vip Bronze",
+      "roleId": "1475544546845659239",
+      "limits": {
+        "familyMembers": 7,
+        "damas": 1,
+        "allowFamily": true
+      }
+    }
+  }
+}

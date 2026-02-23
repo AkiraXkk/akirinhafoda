@@ -1,0 +1,33 @@
+{
+  "vips": {},
+  "settings": {
+    "589646045756129301": {
+      "roleId": null,
+      "roleName": null,
+      "roleColor": null,
+      "hoist": false,
+      "mentionable": false,
+      "updatedAt": 1771876114490,
+      "createdAt": 1771873905353,
+      "userId": "589646045756129301",
+      "textChannelId": "1475574095243510054",
+      "voiceChannelId": "1475574097185345737"
+    },
+    "376557727079464960": {
+      "roleId": null,
+      "roleName": null,
+      "roleColor": null,
+      "hoist": false,
+      "mentionable": false,
+      "updatedAt": 1771875216599,
+      "createdAt": 1771874080596,
+      "userId": "376557727079464960"
+    }
+  },
+  "guilds": {
+    "722253176283070506": {
+      "vipRoleId": "1475544546845659239",
+      "vipCategoryId": "1475292443183284405"
+    }
+  }
+}
