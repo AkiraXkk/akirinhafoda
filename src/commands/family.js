@@ -64,15 +64,6 @@ module.exports = {
     .addSubcommand((sub) =>
         sub.setName("list").setDescription("Lista o ranking das maiores famílias")
     )
-    .addSubcommandGroup((group) =>
-        group.setName("bank").setDescription("Banco da Família")
-            .addSubcommand(sub => sub.setName("deposit").setDescription("Deposita moedas no banco da família").addIntegerOption(opt => opt.setName("quantia").setDescription("Valor").setMinValue(1).setRequired(true)))
-            .addSubcommand(sub => sub.setName("withdraw").setDescription("Saca moedas do banco da família (Dono/Admin)").addIntegerOption(opt => opt.setName("quantia").setDescription("Valor").setMinValue(1).setRequired(true)))
-            .addSubcommand(sub => sub.setName("balance").setDescription("Ver saldo do banco"))
-    )
-    .addSubcommand((sub) =>
-        sub.setName("upgrade").setDescription("Compra slot extra de membro (Custo progressivo)")
-    )
     .addSubcommand((sub) =>
         sub.setName("transfer").setDescription("Transfere a liderança da família").addUserOption(opt => opt.setName("novo_lider").setDescription("Novo dono").setRequired(true))
     )
@@ -178,43 +169,6 @@ module.exports = {
     
     // CONFIG GROUP
     if (group === "config") {
-        if (!myFamily) return interaction.reply({ embeds: [createErrorEmbed("Você não é dono de uma família!")], ephemeral: true });
-        // ... (rest of config code uses ownedFamily variable name implicitly if I change it or I need to map it)
-        // O código existente usa 'myFamily'. Vou renomear a variável local dentro do bloco ou ajustar.
-        // Como o código original já usava 'myFamily' vindo do `find(ownerId)`, e eu mudei o `myFamily` do topo para `find(members)`, isso vai quebrar a lógica de "só dono" se eu não ajustar.
-        
-        // CORREÇÃO:
-        // O código original fazia: const myFamily = Object.values(families).find(f => f.ownerId === userId);
-        // Eu mudei para: const myFamily = Object.values(families).find(f => f.members.includes(userId));
-        // Isso significa que 'myFamily' agora é "família que participo".
-        // Para comandos que exigem ser DONO (config, delete, transfer), eu preciso checar `myFamily.ownerId === userId`.
-        
-        // Vou manter a variável `myFamily` como "família que participo" e adicionar checagens de dono onde necessário.
-        // O código original de 'config' já tem `if (!myFamily) return ... "não é dono"`.
-        // Mas agora `myFamily` pode existir e eu NÃO ser o dono.
-        // Então tenho que mudar a checagem: `if (!myFamily || myFamily.ownerId !== userId) ...`
-        
-        // Porém, como estou usando SearchReplace, eu não posso editar o arquivo inteiro facilmente para mudar todas as referências.
-        // O que eu vou fazer:
-        // Manter o `myFamily` como "família que sou dono" para os blocos antigos que esperam isso? Não, porque `bank` precisa de membro.
-        // Vou criar `ownedFamily` e usar ele nos blocos de config/delete.
-        // Mas o código existente usa `myFamily`.
-        
-        // Estratégia:
-        // 1. Manter `const myFamily` como a busca pelo DONO no início (como era).
-        // 2. Criar `const memberFamily` para busca de membro (usado no bank).
-        // 3. No bloco `bank`, usar `memberFamily`.
-        
-        // Espere, o `execute` original começa com:
-        // const myFamily = Object.values(families).find(f => f.ownerId === userId);
-        
-        // Se eu mudar isso, quebro tudo.
-        // Vou manter `myFamily` como DONO.
-        // E criar `userFamily` para MEMBRO.
-        // O `bank` usa `userFamily`.
-    }
-    // ...
-
         if (!myFamily) return interaction.reply({ embeds: [createErrorEmbed("Você não é dono de uma família!")], ephemeral: true });
 
         if (sub === "rename") {
@@ -392,8 +346,6 @@ module.exports = {
         await interaction.reply({ embeds: [createSuccessEmbed(`Liderança transferida para ${newOwner}!`)] });
         return;
     }
-    
-    // ... resto dos comandos (create, invite, info, etc) mantidos abaixo ...
     
     // CREATE
     if (sub === "create") {
