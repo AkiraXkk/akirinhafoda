@@ -56,7 +56,34 @@ module.exports = {
             )
     )
     .addSubcommand((sub) =>
+        sub.setName("promote").setDescription("Promove um membro a admin da família").addUserOption(opt => opt.setName("usuario").setDescription("Membro a promover").setRequired(true))
+    )
+    .addSubcommand((sub) =>
+        sub.setName("demote").setDescription("Rebaixa um admin da família").addUserOption(opt => opt.setName("usuario").setDescription("Admin a rebaixar").setRequired(true))
+    )
+    .addSubcommand((sub) =>
+        sub.setName("list").setDescription("Lista o ranking das maiores famílias")
+    )
+    .addSubcommandGroup((group) =>
+        group.setName("bank").setDescription("Banco da Família")
+            .addSubcommand(sub => sub.setName("deposit").setDescription("Deposita moedas no banco da família").addIntegerOption(opt => opt.setName("quantia").setDescription("Valor").setMinValue(1).setRequired(true)))
+            .addSubcommand(sub => sub.setName("withdraw").setDescription("Saca moedas do banco da família (Dono/Admin)").addIntegerOption(opt => opt.setName("quantia").setDescription("Valor").setMinValue(1).setRequired(true)))
+            .addSubcommand(sub => sub.setName("balance").setDescription("Ver saldo do banco"))
+    )
+    .addSubcommand((sub) =>
+        sub.setName("upgrade").setDescription("Compra slot extra de membro (Custo progressivo)")
+    )
+    .addSubcommand((sub) =>
         sub.setName("transfer").setDescription("Transfere a liderança da família").addUserOption(opt => opt.setName("novo_lider").setDescription("Novo dono").setRequired(true))
+    )
+    .addSubcommandGroup((group) =>
+        group.setName("bank").setDescription("Banco da Família")
+            .addSubcommand(sub => sub.setName("deposit").setDescription("Deposita moedas").addIntegerOption(opt => opt.setName("quantia").setDescription("Valor").setMinValue(1).setRequired(true)))
+            .addSubcommand(sub => sub.setName("withdraw").setDescription("Saca moedas (Dono/Admin)").addIntegerOption(opt => opt.setName("quantia").setDescription("Valor").setMinValue(1).setRequired(true)))
+            .addSubcommand(sub => sub.setName("balance").setDescription("Ver saldo"))
+    )
+    .addSubcommand((sub) =>
+        sub.setName("upgrade").setDescription("Compra slot extra de membro")
     ),
 
   async execute(interaction) {
@@ -65,12 +92,129 @@ module.exports = {
     const families = await familyStore.load();
     const userId = interaction.user.id;
     const guildId = interaction.guildId;
+    const economyService = interaction.client.services.economy;
+
+    // Helper: Buscar família onde sou MEMBRO (para bank/upgrade)
+    const userFamily = Object.values(families).find(f => f.members.includes(userId));
+
+    // BANK GROUP
+    if (group === "bank") {
+        if (!userFamily) return interaction.reply({ embeds: [createErrorEmbed("Você não tem família!")], ephemeral: true });
+
+        if (sub === "balance") {
+            await interaction.reply({ embeds: [createEmbed({ 
+                title: `🏦 Banco da Família ${userFamily.name}`,
+                description: `Saldo: **${userFamily.bank || 0} 🪙**`,
+                color: 0xF1C40F
+            })] });
+        }
+
+        if (sub === "deposit") {
+            const amount = interaction.options.getInteger("quantia");
+            const balance = await economyService.getBalance(userId);
+            
+            if ((balance.coins || 0) < amount) {
+                return interaction.reply({ embeds: [createErrorEmbed(`Você não tem **${amount} 🪙**.`)] });
+            }
+
+            await economyService.removeCoins(userId, amount);
+            userFamily.bank = (userFamily.bank || 0) + amount;
+            await familyStore.save(families);
+
+            await interaction.reply({ embeds: [createSuccessEmbed(`Você depositou **${amount} 🪙** no cofre da família.`)] });
+        }
+
+        if (sub === "withdraw") {
+            const isOwner = userFamily.ownerId === userId;
+            const isAdmin = userFamily.admins && userFamily.admins.includes(userId);
+            
+            if (!isOwner && !isAdmin) {
+                return interaction.reply({ embeds: [createErrorEmbed("Apenas Dono e Admins podem sacar.")] });
+            }
+
+            const amount = interaction.options.getInteger("quantia");
+            if ((userFamily.bank || 0) < amount) {
+                return interaction.reply({ embeds: [createErrorEmbed(`A família não tem **${amount} 🪙** (Saldo: ${userFamily.bank || 0}).`)] });
+            }
+
+            userFamily.bank -= amount;
+            await familyStore.save(families);
+            await economyService.addCoins(userId, amount);
+
+            await interaction.reply({ embeds: [createSuccessEmbed(`Você sacou **${amount} 🪙** do cofre da família.`)] });
+        }
+        return;
+    }
+
+    // UPGRADE
+    if (sub === "upgrade") {
+        if (!userFamily) return interaction.reply({ embeds: [createErrorEmbed("Você não tem família!")], ephemeral: true });
+        
+        const isOwner = userFamily.ownerId === userId;
+        const isAdmin = userFamily.admins && userFamily.admins.includes(userId);
+        
+        if (!isOwner && !isAdmin) {
+             return interaction.reply({ embeds: [createErrorEmbed("Apenas Dono e Admins podem comprar upgrades.")] });
+        }
+
+        const boughtSlots = userFamily.boughtSlots || 0;
+        const nextSlot = boughtSlots + 1;
+        const cost = nextSlot * 5000;
+
+        if ((userFamily.bank || 0) < cost) {
+            return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente no banco da família!\nCusto do próximo slot: **${cost} 🪙**\nSaldo atual: **${userFamily.bank || 0} 🪙**`)] });
+        }
+
+        userFamily.bank -= cost;
+        userFamily.boughtSlots = nextSlot;
+        await familyStore.save(families);
+
+        await interaction.reply({ embeds: [createSuccessEmbed(`Upgrade realizado! A família agora tem **+${nextSlot}** slots extras de membro.\nCusto: **${cost} 🪙**`)] });
+        return;
+    }
 
     // Helper: Buscar família do usuário (dono)
     const myFamily = Object.values(families).find(f => f.ownerId === userId);
     
     // CONFIG GROUP
     if (group === "config") {
+        if (!myFamily) return interaction.reply({ embeds: [createErrorEmbed("Você não é dono de uma família!")], ephemeral: true });
+        // ... (rest of config code uses ownedFamily variable name implicitly if I change it or I need to map it)
+        // O código existente usa 'myFamily'. Vou renomear a variável local dentro do bloco ou ajustar.
+        // Como o código original já usava 'myFamily' vindo do `find(ownerId)`, e eu mudei o `myFamily` do topo para `find(members)`, isso vai quebrar a lógica de "só dono" se eu não ajustar.
+        
+        // CORREÇÃO:
+        // O código original fazia: const myFamily = Object.values(families).find(f => f.ownerId === userId);
+        // Eu mudei para: const myFamily = Object.values(families).find(f => f.members.includes(userId));
+        // Isso significa que 'myFamily' agora é "família que participo".
+        // Para comandos que exigem ser DONO (config, delete, transfer), eu preciso checar `myFamily.ownerId === userId`.
+        
+        // Vou manter a variável `myFamily` como "família que participo" e adicionar checagens de dono onde necessário.
+        // O código original de 'config' já tem `if (!myFamily) return ... "não é dono"`.
+        // Mas agora `myFamily` pode existir e eu NÃO ser o dono.
+        // Então tenho que mudar a checagem: `if (!myFamily || myFamily.ownerId !== userId) ...`
+        
+        // Porém, como estou usando SearchReplace, eu não posso editar o arquivo inteiro facilmente para mudar todas as referências.
+        // O que eu vou fazer:
+        // Manter o `myFamily` como "família que sou dono" para os blocos antigos que esperam isso? Não, porque `bank` precisa de membro.
+        // Vou criar `ownedFamily` e usar ele nos blocos de config/delete.
+        // Mas o código existente usa `myFamily`.
+        
+        // Estratégia:
+        // 1. Manter `const myFamily` como a busca pelo DONO no início (como era).
+        // 2. Criar `const memberFamily` para busca de membro (usado no bank).
+        // 3. No bloco `bank`, usar `memberFamily`.
+        
+        // Espere, o `execute` original começa com:
+        // const myFamily = Object.values(families).find(f => f.ownerId === userId);
+        
+        // Se eu mudar isso, quebro tudo.
+        // Vou manter `myFamily` como DONO.
+        // E criar `userFamily` para MEMBRO.
+        // O `bank` usa `userFamily`.
+    }
+    // ...
+
         if (!myFamily) return interaction.reply({ embeds: [createErrorEmbed("Você não é dono de uma família!")], ephemeral: true });
 
         if (sub === "rename") {
@@ -169,6 +313,62 @@ module.exports = {
                 await i.update({ content: `Estilo aplicado! Canais atualizados para: **${newName}**`, components: [] });
             });
         }
+        return;
+    }
+
+    // LIST
+    if (sub === "list") {
+        const sorted = Object.values(families).sort((a, b) => b.members.length - a.members.length).slice(0, 10);
+        
+        const description = sorted.map((f, i) => {
+            return `**${i + 1}. ${f.name}** - ${f.members.length} membros (Dono: <@${f.ownerId}>)`;
+        }).join("\n");
+
+        await interaction.reply({ 
+            embeds: [createEmbed({
+                title: "🏆 Top Famílias",
+                description: description || "Nenhuma família encontrada.",
+                color: 0xF1C40F
+            })] 
+        });
+        return;
+    }
+
+    // PROMOTE
+    if (sub === "promote") {
+        if (!myFamily) return interaction.reply({ embeds: [createErrorEmbed("Você não é dono de uma família!")], ephemeral: true });
+        
+        const target = interaction.options.getUser("usuario");
+        if (!myFamily.members.includes(target.id)) {
+            return interaction.reply({ embeds: [createErrorEmbed("Usuário não está na família.")], ephemeral: true });
+        }
+        if (target.id === userId) return interaction.reply({ embeds: [createErrorEmbed("Você já é o dono.")], ephemeral: true });
+
+        if (!myFamily.admins) myFamily.admins = [];
+        if (myFamily.admins.includes(target.id)) {
+            return interaction.reply({ embeds: [createErrorEmbed("Usuário já é admin.")], ephemeral: true });
+        }
+
+        myFamily.admins.push(target.id);
+        await familyStore.save(families);
+        
+        await interaction.reply({ embeds: [createSuccessEmbed(`${target} foi promovido a admin da família!`)] });
+        return;
+    }
+
+    // DEMOTE
+    if (sub === "demote") {
+        if (!myFamily) return interaction.reply({ embeds: [createErrorEmbed("Você não é dono de uma família!")], ephemeral: true });
+        
+        const target = interaction.options.getUser("usuario");
+        if (!myFamily.admins || !myFamily.admins.includes(target.id)) {
+            return interaction.reply({ embeds: [createErrorEmbed("Usuário não é admin.")], ephemeral: true });
+        }
+
+        myFamily.admins = myFamily.admins.filter(id => id !== target.id);
+        await familyStore.save(families);
+        
+        await interaction.reply({ embeds: [createSuccessEmbed(`${target} foi rebaixado para membro.`)] });
         return;
     }
 
@@ -336,36 +536,48 @@ module.exports = {
 
     // KICK
     if (sub === "kick") {
-        if (!myFamily) return interaction.reply({ embeds: [createErrorEmbed("Você não é dono de uma família!")], ephemeral: true });
+        const family = Object.values(families).find(f => f.ownerId === userId || (f.admins && f.admins.includes(userId)));
+        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para expulsar!")], ephemeral: true });
 
         const target = interaction.options.getUser("usuario");
         
-        if (!myFamily.members.includes(target.id)) {
+        if (!family.members.includes(target.id)) {
             return interaction.reply({ embeds: [createErrorEmbed("Esse usuário não está na sua família!")], ephemeral: true });
         }
 
         if (target.id === userId) {
-            return interaction.reply({ embeds: [createErrorEmbed("Você não pode se expulsar! Use `/family leave` ou `/family delete`.")], ephemeral: true });
+            return interaction.reply({ embeds: [createErrorEmbed("Você não pode se expulsar!")], ephemeral: true });
+        }
+        
+        if (target.id === family.ownerId) {
+            return interaction.reply({ embeds: [createErrorEmbed("Você não pode expulsar o dono!")], ephemeral: true });
+        }
+        
+        // Admin não pode expulsar outro admin (só dono pode)
+        if (family.admins && family.admins.includes(target.id) && family.ownerId !== userId) {
+            return interaction.reply({ embeds: [createErrorEmbed("Você não pode expulsar outro admin!")], ephemeral: true });
         }
 
-        myFamily.members = myFamily.members.filter(id => id !== target.id);
+        family.members = family.members.filter(id => id !== target.id);
+        if (family.admins) family.admins = family.admins.filter(id => id !== target.id); // Remove de admin também se for kickado (pelo dono)
+        
         await familyStore.save(families);
 
         // Remover cargo
         const guild = interaction.guild;
-        if (myFamily.roleId) {
+        if (family.roleId) {
             const member = await guild.members.fetch(target.id).catch(() => null);
-            if (member) await member.roles.remove(myFamily.roleId).catch(() => {});
+            if (member) await member.roles.remove(family.roleId).catch(() => {});
         }
         
-        // Se não tiver cargo, remove permissões dos canais (fallback)
-        if (!myFamily.roleId) {
-             if (myFamily.textChannelId) {
-                 const channel = await guild.channels.fetch(myFamily.textChannelId).catch(() => null);
+        // Se não tiver cargo, remove permissões dos canais
+        if (!family.roleId) {
+             if (family.textChannelId) {
+                 const channel = await guild.channels.fetch(family.textChannelId).catch(() => null);
                  if (channel) await channel.permissionOverwrites.delete(target.id).catch(() => {});
              }
-             if (myFamily.voiceChannelId) {
-                 const channel = await guild.channels.fetch(myFamily.voiceChannelId).catch(() => null);
+             if (family.voiceChannelId) {
+                 const channel = await guild.channels.fetch(family.voiceChannelId).catch(() => null);
                  if (channel) await channel.permissionOverwrites.delete(target.id).catch(() => {});
              }
         }
@@ -410,18 +622,27 @@ module.exports = {
 
     // INVITE
     if (sub === "invite") {
-        const family = Object.values(families).find(f => f.ownerId === userId);
+        const family = Object.values(families).find(f => f.ownerId === userId || (f.admins && f.admins.includes(userId)));
         if (!family) {
-            return interaction.reply({ embeds: [createErrorEmbed("Você não é dono de uma família!")], ephemeral: true });
+            return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para convidar (não é dono nem admin de família)!")], ephemeral: true });
         }
 
         // Checar limite de membros do Tier do Dono
+        // Precisamos buscar o dono para checar o tier DELE, não do admin que está convidando
+        const ownerMember = await interaction.guild.members.fetch(family.ownerId).catch(() => null);
         const vipConfig = interaction.client.services.vipConfig;
-        const tier = await vipConfig.getMemberTier(interaction.member);
-        const limit = tier?.limits?.familyMembers || 3; // Default 3 se não tiver tier
+        
+        let limit = 3;
+        if (ownerMember) {
+            const tier = await vipConfig.getMemberTier(ownerMember);
+            limit = tier?.limits?.familyMembers || 3;
+        }
+        
+        // Adiciona slots comprados via upgrade
+        limit += (family.boughtSlots || 0);
 
         if (family.members.length >= limit) {
-             return interaction.reply({ embeds: [createErrorEmbed(`Você atingiu o limite de **${limit}** membros na família para o seu VIP (${tier?.name || "Padrão"}).`)], ephemeral: true });
+             return interaction.reply({ embeds: [createErrorEmbed(`A família atingiu o limite de **${limit}** membros.`)], ephemeral: true });
         }
 
         const target = interaction.options.getUser("usuario");
@@ -442,7 +663,7 @@ module.exports = {
             await targetMember.roles.add(family.roleId).catch(() => {});
         }
         
-        // Permissões nos canais (agora é automático via cargo, mas mantemos o código antigo como fallback se não tiver cargo)
+        // Permissões nos canais
         if (!family.roleId) {
              const guild = interaction.guild;
              if (family.textChannelId) {
@@ -471,11 +692,16 @@ module.exports = {
 
         const owner = await interaction.client.users.fetch(family.ownerId).catch(() => ({ tag: "Desconhecido" }));
         
+        const admins = family.admins && family.admins.length > 0 
+            ? family.admins.map(id => `<@${id}>`).join(", ") 
+            : "Nenhum";
+
         await interaction.reply({
             embeds: [createEmbed({
                 title: `🏰 Família ${family.name}`,
                 fields: [
                     { name: "Dono", value: `${owner.tag}`, inline: true },
+                    { name: "Admins", value: admins, inline: true },
                     { name: "Membros", value: `${family.members.length}`, inline: true },
                     { name: "Criada em", value: `<t:${Math.floor(family.createdAt / 1000)}:d>`, inline: true },
                     { name: "Canais", value: `${family.textChannelId ? `<#${family.textChannelId}>` : "Nenhum"} | ${family.voiceChannelId ? `<#${family.voiceChannelId}>` : "Nenhum"}` }

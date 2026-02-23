@@ -25,6 +25,7 @@ function createClient() {
 const { loadEvents } = require("./loadEvents");
 
 const { createLogService } = require("./services/logService");
+const { createEconomyService } = require("./services/economyService");
 
 async function main() {
   const client = createClient();
@@ -33,6 +34,8 @@ async function main() {
   client.services = {};
   
   client.services.log = createLogService({ client });
+  client.services.economy = createEconomyService(); // Adiciona EconomyService
+
 
   const vipStore = createVipStore({ filePath: config.vip.storePath });
   client.services.vip = createVipService({
