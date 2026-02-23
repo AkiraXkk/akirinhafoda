@@ -183,9 +183,7 @@ module.exports = {
                 if (role) await role.setName(`Família ${newName}`).catch(() => {});
             }
 
-            // Renomear canais (se tiver) - opcional, talvez queira manter decorado
-            // Vamos manter o nome dos canais como está se já estiver decorado, ou atualizar para base
-            // Para simplificar, renomeia canais para o padrão com novo nome
+            // Renomear canais (se tiver)
             if (myFamily.textChannelId) {
                 const channel = await guild.channels.fetch(myFamily.textChannelId).catch(() => null);
                 if (channel) await channel.setName(`🏰・${newName}`).catch(() => {});
@@ -210,7 +208,6 @@ module.exports = {
                 if (role) await role.setColor(color).catch(() => {});
             }
             
-            // Opcional: Salvar cor na struct da família para info embed
             myFamily.color = color;
             await familyStore.save(families);
 
@@ -256,7 +253,6 @@ module.exports = {
                 const guild = interaction.guild;
                 if (myFamily.textChannelId) {
                     const channel = await guild.channels.fetch(myFamily.textChannelId).catch(() => null);
-                    // Texto sempre lower e sem espaço no discord normal, mas bot consegue forçar unicode
                     if (channel) await channel.setName(newName.toLowerCase().replace(/\s+/g, '-')).catch(() => {});
                 }
                 if (myFamily.voiceChannelId) {

@@ -4,12 +4,36 @@ const { logger } = require("../logger");
 module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction, client) {
+    // Button Handler
     if (interaction.isButton()) {
-        const ticketCommand = client.commands.get("ticket");
-        if (ticketCommand && typeof ticketCommand.handleButton === "function") {
-            await ticketCommand.handleButton(interaction);
-            return;
+        const commands = client.commands.values();
+        for (const command of commands) {
+            if (typeof command.handleButton === "function") {
+                try {
+                    await command.handleButton(interaction);
+                    if (interaction.replied || interaction.deferred) return;
+                } catch (error) {
+                    logger.error({ err: error, command: command.data.name }, "Erro ao processar botão");
+                }
+            }
         }
+        return;
+    }
+
+    // Modal Submit Handler
+    if (interaction.isModalSubmit()) {
+        const commands = client.commands.values();
+        for (const command of commands) {
+            if (typeof command.handleModal === "function") {
+                try {
+                    await command.handleModal(interaction);
+                    if (interaction.replied || interaction.deferred) return;
+                } catch (error) {
+                    logger.error({ err: error, command: command.data.name }, "Erro ao processar modal");
+                }
+            }
+        }
+        return;
     }
     
     // Autocomplete Handler

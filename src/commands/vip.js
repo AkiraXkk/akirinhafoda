@@ -1,5 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
-const { createEmbed } = require("../embeds");
+const { SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType } = require("discord.js");
+const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createPagination } = require("../utils/pagination");
 
 function canManageVip(interaction) {
@@ -155,30 +155,6 @@ module.exports = {
           const member = await interaction.guild.members.fetch(user.id).catch(() => null);
           if (member) {
               await member.roles.add(tierId).catch(() => {});
-              
-              const vipConfig = interaction.client.services.vipConfig;
-              const tiers = await vipConfig.getGuildTiers(interaction.guildId);
-              const tierData = tiers[tierId];
-              
-              if (tierData && tierData.aesthetic) {
-                  try {
-                      const aestheticRole = await interaction.guild.roles.create({
-                          name: `VIP ${user.username}`,
-                          color: 0xFFD700, 
-                          reason: `Cargo estético VIP para ${user.tag}`
-                      });
-                      
-                      await member.roles.add(aestheticRole);
-                      
-                      const settings = vip.getSettings(user.id) || {};
-                      await vip.setSettings(user.id, {
-                          ...settings,
-                          aestheticRoleId: aestheticRole.id
-                      });
-                  } catch (e) {
-                      console.error("Erro ao criar cargo estético:", e);
-                  }
-              }
           }
       }
 
@@ -196,11 +172,6 @@ module.exports = {
               value: `<t:${Math.floor(result.vip.expiresAt / 1000)}:R>`,
               inline: true
           });
-      }
-      
-      const settings = vip.getSettings(user.id);
-      if (settings && settings.aestheticRoleId) {
-          fields.push({ name: "Cargo Estético", value: `<@&${settings.aestheticRoleId}>`, inline: true });
       }
       
       if (ensured.ok) {
@@ -339,5 +310,248 @@ module.exports = {
           }
       });
     }
+  },
+
+  async handleButton(interaction) {
+      if (!interaction.customId.startsWith("vip_")) return;
+
+      const vip = interaction.client.services.vip;
+      const vipConfig = interaction.client.services.vipConfig;
+      
+      // Check if VIP
+      const isVip = vip.isVip({ userId: interaction.user.id, member: interaction.member });
+      if (!isVip) {
+          return interaction.reply({ content: "Você precisa ser VIP para usar este botão.", ephemeral: true });
+      }
+
+      const settings = vip.getSettings(interaction.user.id) || {};
+
+      // ROLE MANAGE MENU
+      if (interaction.customId === "vip_role_manage") {
+          const row = new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId("vip_role_rename").setLabel("Renomear").setStyle(ButtonStyle.Primary).setEmoji("✏️"),
+              new ButtonBuilder().setCustomId("vip_role_color").setLabel("Alterar Cor").setStyle(ButtonStyle.Secondary).setEmoji("🎨"),
+              new ButtonBuilder().setCustomId("vip_role_delete").setLabel("Deletar").setStyle(ButtonStyle.Danger).setEmoji("🗑️")
+          );
+
+          await interaction.reply({
+              content: "O que você deseja fazer com seu cargo VIP?",
+              components: [row],
+              ephemeral: true
+          });
+      }
+
+      // ROLE ACTIONS
+      if (interaction.customId === "vip_role_rename") {
+          const modal = new ModalBuilder()
+              .setCustomId("vip_role_rename_modal")
+              .setTitle("Renomear Cargo VIP");
+
+          const nameInput = new TextInputBuilder()
+              .setCustomId("vip_role_new_name")
+              .setLabel("Novo Nome")
+              .setStyle(TextInputStyle.Short)
+              .setPlaceholder("Ex: Rei do Gado")
+              .setMaxLength(32)
+              .setRequired(true);
+
+          modal.addComponents(new ActionRowBuilder().addComponents(nameInput));
+          await interaction.showModal(modal);
+      }
+
+      if (interaction.customId === "vip_role_color") {
+          const modal = new ModalBuilder()
+              .setCustomId("vip_role_color_modal")
+              .setTitle("Alterar Cor do Cargo VIP");
+
+          const colorInput = new TextInputBuilder()
+              .setCustomId("vip_role_new_color")
+              .setLabel("Nova Cor (Hex)")
+              .setStyle(TextInputStyle.Short)
+              .setPlaceholder("Ex: #FF0000")
+              .setMinLength(7)
+              .setMaxLength(7)
+              .setRequired(true);
+
+          modal.addComponents(new ActionRowBuilder().addComponents(colorInput));
+          await interaction.showModal(modal);
+      }
+
+      if (interaction.customId === "vip_role_delete") {
+          if (!settings.roleId) {
+              return interaction.reply({ embeds: [createErrorEmbed("Você não tem um cargo personalizado.")], ephemeral: true });
+          }
+          
+          const role = await interaction.guild.roles.fetch(settings.roleId).catch(() => null);
+          if (role) await role.delete().catch(() => {});
+          
+          await vip.setSettings(interaction.user.id, { ...settings, roleId: null });
+          await interaction.reply({ embeds: [createSuccessEmbed("Cargo personalizado removido.")], ephemeral: true });
+      }
+
+      // ROOM MANAGE MENU
+      if (interaction.customId === "vip_room_manage") {
+          // Check if user has a room (by checking if they own a channel in the VIP category)
+          // Store room ID in settings? If not, search.
+          let voiceChannelId = settings.voiceChannelId;
+          
+          if (!voiceChannelId) {
+               // Search manually
+               const config = vipConfig.getGuildConfig(interaction.guildId);
+               if (config?.vipCategoryId) {
+                   const channel = interaction.guild.channels.cache.find(c => c.parentId === config.vipCategoryId && c.name.includes(interaction.user.username)); // Simple search
+                   if (channel) voiceChannelId = channel.id;
+               }
+          }
+
+          if (!voiceChannelId) {
+              const row = new ActionRowBuilder().addComponents(
+                  new ButtonBuilder().setCustomId("vip_room_create").setLabel("Criar Sala").setStyle(ButtonStyle.Success).setEmoji("➕")
+              );
+              return interaction.reply({ content: "Você não tem uma sala VIP criada.", components: [row], ephemeral: true });
+          }
+
+          const row = new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId("vip_room_rename").setLabel("Renomear").setStyle(ButtonStyle.Primary).setEmoji("✏️"),
+              new ButtonBuilder().setCustomId("vip_room_limit").setLabel("Limite").setStyle(ButtonStyle.Secondary).setEmoji("👥"),
+              new ButtonBuilder().setCustomId("vip_room_delete").setLabel("Deletar").setStyle(ButtonStyle.Danger).setEmoji("🗑️")
+          );
+
+          await interaction.reply({
+              content: `Gerenciando sala <#${voiceChannelId}>`,
+              components: [row],
+              ephemeral: true
+          });
+      }
+
+      if (interaction.customId === "vip_room_create") {
+          const config = vipConfig.getGuildConfig(interaction.guildId);
+          if (!config?.vipCategoryId) {
+              return interaction.reply({ embeds: [createErrorEmbed("Categoria VIP não configurada no servidor.")], ephemeral: true });
+          }
+
+          try {
+              const channel = await interaction.guild.channels.create({
+                  name: `Sala de ${interaction.user.username}`,
+                  type: ChannelType.GuildVoice,
+                  parent: config.vipCategoryId,
+                  permissionOverwrites: [
+                      { id: interaction.guild.id, deny: [PermissionFlagsBits.Connect] }, // Private by default? Maybe public? Let's make it private-ish
+                      { id: interaction.user.id, allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers] }
+                  ]
+              });
+
+              await vip.setSettings(interaction.user.id, { ...settings, voiceChannelId: channel.id });
+              await interaction.reply({ embeds: [createSuccessEmbed(`Sala criada: ${channel}`)], ephemeral: true });
+          } catch (e) {
+              console.error(e);
+              await interaction.reply({ embeds: [createErrorEmbed("Erro ao criar sala. Verifique permissões.")], ephemeral: true });
+          }
+      }
+      
+      if (interaction.customId === "vip_room_rename") {
+          const modal = new ModalBuilder().setCustomId("vip_room_rename_modal").setTitle("Renomear Sala VIP");
+          const nameInput = new TextInputBuilder().setCustomId("vip_room_new_name").setLabel("Novo Nome").setStyle(TextInputStyle.Short).setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(nameInput));
+          await interaction.showModal(modal);
+      }
+
+      if (interaction.customId === "vip_room_limit") {
+          const modal = new ModalBuilder().setCustomId("vip_room_limit_modal").setTitle("Limite de Usuários");
+          const limitInput = new TextInputBuilder().setCustomId("vip_room_new_limit").setLabel("Limite (0-99)").setStyle(TextInputStyle.Short).setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(limitInput));
+          await interaction.showModal(modal);
+      }
+
+      if (interaction.customId === "vip_room_delete") {
+          if (settings.voiceChannelId) {
+              const channel = await interaction.guild.channels.fetch(settings.voiceChannelId).catch(() => null);
+              if (channel) await channel.delete().catch(() => {});
+              await vip.setSettings(interaction.user.id, { ...settings, voiceChannelId: null });
+              await interaction.reply({ embeds: [createSuccessEmbed("Sala deletada.")], ephemeral: true });
+          } else {
+              await interaction.reply({ embeds: [createErrorEmbed("Sala não encontrada.")], ephemeral: true });
+          }
+      }
+
+      // FAMILY MANAGE
+      if (interaction.customId === "vip_family_manage") {
+          // Just redirect to family command or show info
+          await interaction.reply({ 
+              content: "Para gerenciar sua família, use o comando `/family`. Lá você pode criar, convidar, promover e muito mais!",
+              ephemeral: true
+          });
+      }
+  },
+
+  async handleModal(interaction) {
+      if (!interaction.customId.startsWith("vip_")) return;
+      
+      const vip = interaction.client.services.vip;
+      const settings = vip.getSettings(interaction.user.id) || {};
+
+      // ROLE RENAME
+      if (interaction.customId === "vip_role_rename_modal") {
+          const newName = interaction.fields.getTextInputValue("vip_role_new_name");
+          if (!settings.roleId) {
+               return interaction.reply({ embeds: [createErrorEmbed("Você não tem um cargo personalizado para renomear.")], ephemeral: true });
+          }
+          
+          const role = await interaction.guild.roles.fetch(settings.roleId).catch(() => null);
+          if (role) {
+              await role.setName(newName).catch(() => {});
+              await interaction.reply({ embeds: [createSuccessEmbed(`Cargo renomeado para **${newName}**!`)] });
+          } else {
+              await interaction.reply({ embeds: [createErrorEmbed("Cargo não encontrado.")], ephemeral: true });
+          }
+      }
+
+      // ROLE COLOR
+      if (interaction.customId === "vip_role_color_modal") {
+          const newColor = interaction.fields.getTextInputValue("vip_role_new_color");
+          if (!/^#[0-9A-F]{6}$/i.test(newColor)) {
+              return interaction.reply({ embeds: [createErrorEmbed("Cor inválida! Use formato HEX (ex: #FF0000).")], ephemeral: true });
+          }
+
+          if (!settings.roleId) {
+               return interaction.reply({ embeds: [createErrorEmbed("Você não tem um cargo personalizado.")], ephemeral: true });
+          }
+
+          const role = await interaction.guild.roles.fetch(settings.roleId).catch(() => null);
+          if (role) {
+              await role.setColor(newColor).catch(() => {});
+              await interaction.reply({ embeds: [createSuccessEmbed(`Cor alterada para **${newColor}**!`)] });
+          } else {
+               await interaction.reply({ embeds: [createErrorEmbed("Cargo não encontrado.")], ephemeral: true });
+          }
+      }
+      
+      // ROOM RENAME
+      if (interaction.customId === "vip_room_rename_modal") {
+          const newName = interaction.fields.getTextInputValue("vip_room_new_name");
+          if (!settings.voiceChannelId) return interaction.reply({ embeds: [createErrorEmbed("Você não tem uma sala.")], ephemeral: true });
+          
+          const channel = await interaction.guild.channels.fetch(settings.voiceChannelId).catch(() => null);
+          if (channel) {
+              await channel.setName(newName).catch(() => {});
+              await interaction.reply({ embeds: [createSuccessEmbed(`Sala renomeada para **${newName}**!`)] });
+          }
+      }
+
+      // ROOM LIMIT
+      if (interaction.customId === "vip_room_limit_modal") {
+          const limit = parseInt(interaction.fields.getTextInputValue("vip_room_new_limit"));
+          if (isNaN(limit) || limit < 0 || limit > 99) {
+              return interaction.reply({ embeds: [createErrorEmbed("Limite inválido (0-99).")], ephemeral: true });
+          }
+          
+          if (!settings.voiceChannelId) return interaction.reply({ embeds: [createErrorEmbed("Você não tem uma sala.")], ephemeral: true });
+
+          const channel = await interaction.guild.channels.fetch(settings.voiceChannelId).catch(() => null);
+          if (channel) {
+              await channel.setUserLimit(limit).catch(() => {});
+              await interaction.reply({ embeds: [createSuccessEmbed(`Limite da sala alterado para **${limit}**!`)] });
+          }
+      }
   },
 };
