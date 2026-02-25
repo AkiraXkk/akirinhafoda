@@ -8,6 +8,16 @@
         "damas": 1,
         "allowFamily": true
       }
+    },
+    "1475867067680030926": {
+      "name": "BLACK",
+      "roleId": "1475867067680030926",
+      "aesthetic": true,
+      "limits": {
+        "familyMembers": 1000,
+        "damas": 1000,
+        "allowFamily": true
+      }
     }
   }
 }
