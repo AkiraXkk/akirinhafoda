@@ -91,6 +91,7 @@ function createVipRoleManager({ client, vipService, logger }) {
     await vipService
       .setSettings(userId, {
         roleId: role.id,
+        guildId: targetGuildId || guild.id,
         roleName: desiredName,
         roleColor: settings.roleColor || null,
         hoist: desiredHoist,

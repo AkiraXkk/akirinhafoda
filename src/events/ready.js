@@ -1,11 +1,23 @@
 const { Events } = require("discord.js");
 const { logger } = require("../logger");
+const { createVipExpiryManager } = require("../vip/vipExpiryManager");
 
 module.exports = {
   name: Events.ClientReady,
   once: true,
   execute(readyClient, client) {
     logger.info({ user: readyClient.user.tag }, "Bot online");
+
+    if (client?.services?.vip && client?.services?.vipRole && client?.services?.vipChannel) {
+      const expiry = createVipExpiryManager({
+        client,
+        vipService: client.services.vip,
+        vipRoleManager: client.services.vipRole,
+        vipChannelManager: client.services.vipChannel,
+      });
+
+      expiry.start({ intervalMs: 5 * 60 * 1000 });
+    }
 
     // Voice XP Loop
     // Movido do index.js para o evento ready

@@ -77,6 +77,7 @@ function createVipChannelManager({ client, vipService, logger }) {
     // Salva IDs
     if (textChannel.id !== settings.textChannelId || voiceChannel.id !== settings.voiceChannelId) {
       await vipService.setSettings(userId, {
+        guildId: targetGuildId || guild.id,
         textChannelId: textChannel.id,
         voiceChannelId: voiceChannel.id,
       });
@@ -102,6 +103,82 @@ function createVipChannelManager({ client, vipService, logger }) {
     }
 
     await vipService.setSettings(userId, { textChannelId: null, voiceChannelId: null });
+    return { ok: true };
+  }
+
+  async function archiveVipChannels(userId, { guildId: targetGuildId } = {}) {
+    const guild = await fetchGuild(targetGuildId);
+    if (!guild) return { ok: false, reason: "guild_unavailable" };
+
+    const settings = vipService.getSettings(userId) || {};
+    let textChannel = settings.textChannelId
+      ? await guild.channels.fetch(settings.textChannelId).catch(() => null)
+      : null;
+    let voiceChannel = settings.voiceChannelId
+      ? await guild.channels.fetch(settings.voiceChannelId).catch(() => null)
+      : null;
+
+    if (!textChannel && !voiceChannel) return { ok: false, reason: "no_channels" };
+
+    const ensureArchiveCategory = async () => {
+      const config = vipService.getGuildConfig(guild.id) || {};
+      if (config.vipArchiveCategoryId) {
+        const existing = await guild.channels.fetch(config.vipArchiveCategoryId).catch(() => null);
+        if (existing) return existing;
+      }
+
+      const category = await guild.channels
+        .create({
+          name: "📦｜Arquivo VIP",
+          type: ChannelType.GuildCategory,
+          reason: "Categoria de arquivamento de canais VIP",
+        })
+        .catch(() => null);
+
+      if (category) {
+        await vipService.setGuildConfig(guild.id, { vipArchiveCategoryId: category.id }).catch(() => {});
+      }
+
+      return category;
+    };
+
+    const archiveCategory = await ensureArchiveCategory().catch(() => null);
+
+    const archiveChannel = async (channel) => {
+        if (!channel) return;
+        try {
+            // Rename
+            const oldName = channel.name;
+            const newName = `arq-${oldName.slice(0, 90)}`; // Ensure length limit
+            if (channel.type === ChannelType.GuildText) {
+              await channel.setName(newName.toLowerCase().replace(/\s+/g, "-")).catch(() => {});
+            } else {
+              await channel.setName(newName).catch(() => {});
+            }
+
+            if (archiveCategory && channel.parentId !== archiveCategory.id) {
+              await channel.setParent(archiveCategory.id).catch(() => {});
+            }
+
+            // Remove user permissions (or deny View)
+            await channel.permissionOverwrites.edit(userId, {
+                [PermissionFlagsBits.ViewChannel]: false,
+                [PermissionFlagsBits.Connect]: false,
+                [PermissionFlagsBits.SendMessages]: false
+            }).catch(() => {});
+            
+            // Optionally move to an archive category if you had one, but we don't.
+        } catch (e) {
+            logger?.error?.({ err: e, channelId: channel.id }, "Failed to archive channel");
+        }
+    };
+
+    await archiveChannel(textChannel);
+    await archiveChannel(voiceChannel);
+
+    // Remove from settings so they are no longer "active" VIP channels
+    await vipService.setSettings(userId, { textChannelId: null, voiceChannelId: null }).catch(() => {});
+
     return { ok: true };
   }
 
@@ -171,7 +248,7 @@ function createVipChannelManager({ client, vipService, logger }) {
     return { ok: true };
   }
 
-  return { ensureVipChannels, deleteVipChannels, updateChannelPermissions, updateChannelName };
+  return { ensureVipChannels, deleteVipChannels, archiveVipChannels, updateChannelPermissions, updateChannelName };
 }
 
 module.exports = { createVipChannelManager };

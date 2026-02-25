@@ -107,7 +107,7 @@ function createMongoDataStore(fileName) {
       await Model.findByIdAndUpdate(
         key,
         { $set: next },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
       
       return next;

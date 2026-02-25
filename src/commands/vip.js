@@ -223,6 +223,7 @@ module.exports = {
       const user = interaction.options.getUser("usuario", true);
       const result = await vip.removeVip(user.id);
       const settings = vip.getSettings ? vip.getSettings(user.id) : null;
+      const vipChannel = interaction.client.services?.vipChannel;
 
       if (result.removed && interaction.guild && settings?.roleId) {
         const role = await interaction.guild.roles.fetch(settings.roleId).catch(() => null);
@@ -237,6 +238,22 @@ module.exports = {
             updatedAt: Date.now(),
           })
           .catch(() => {});
+      }
+
+      if (result.removed && vipChannel && interaction.guildId) {
+        await vipChannel.archiveVipChannels(user.id, { guildId: interaction.guildId }).catch(() => {});
+      }
+
+      if (result.removed && interaction.guild) {
+        const guildConfig = vip.getGuildConfig(interaction.guildId);
+        const functionalVipRoleId = guildConfig?.vipRoleId;
+        const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+        if (member && functionalVipRoleId) {
+          await member.roles.remove(functionalVipRoleId).catch(() => {});
+        }
+        if (member && result.vip?.tierId) {
+          await member.roles.remove(result.vip.tierId).catch(() => {});
+        }
       }
 
       const embed = createEmbed({
@@ -397,7 +414,7 @@ module.exports = {
           
           if (!voiceChannelId) {
                // Search manually
-               const config = vipConfig.getGuildConfig(interaction.guildId);
+               const config = vip.getGuildConfig(interaction.guildId);
                if (config?.vipCategoryId) {
                    const channel = interaction.guild.channels.cache.find(c => c.parentId === config.vipCategoryId && c.name.includes(interaction.user.username)); // Simple search
                    if (channel) voiceChannelId = channel.id;
@@ -425,7 +442,7 @@ module.exports = {
       }
 
       if (interaction.customId === "vip_room_create") {
-          const config = vipConfig.getGuildConfig(interaction.guildId);
+          const config = vip.getGuildConfig(interaction.guildId);
           if (!config?.vipCategoryId) {
               return interaction.reply({ embeds: [createErrorEmbed("Categoria VIP não configurada no servidor.")], ephemeral: true });
           }
