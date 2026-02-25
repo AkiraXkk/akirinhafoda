@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ComponentType } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ComponentType, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, UserSelectMenuBuilder } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
 
@@ -75,6 +75,9 @@ module.exports = {
     )
     .addSubcommand((sub) =>
         sub.setName("upgrade").setDescription("Compra slot extra de membro")
+    )
+    .addSubcommand((sub) =>
+        sub.setName("panel").setDescription("Abre o painel de controle da família")
     ),
 
   async execute(interaction) {
@@ -87,6 +90,32 @@ module.exports = {
 
     // Helper: Buscar família onde sou MEMBRO (para bank/upgrade)
     const userFamily = Object.values(families).find(f => f.members.includes(userId));
+
+    // PANEL
+    if (sub === "panel") {
+        if (!userFamily) return interaction.reply({ embeds: [createErrorEmbed("Você não tem família!")], ephemeral: true });
+
+        const embed = createEmbed({
+            title: `🏰 Painel da Família: ${userFamily.name}`,
+            description: `Gerencie sua família com facilidade.\nCargo: <@&${userFamily.roleId || "Nenhum"}>\nSaldo: **${userFamily.bank || 0} 🪙**`,
+            color: 0x9B59B6
+        });
+
+        const row1 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId("family_btn_info").setLabel("Info").setStyle(ButtonStyle.Primary).setEmoji("ℹ️"),
+            new ButtonBuilder().setCustomId("family_btn_members").setLabel("Membros").setStyle(ButtonStyle.Secondary).setEmoji("👥"),
+            new ButtonBuilder().setCustomId("family_btn_bank").setLabel("Banco").setStyle(ButtonStyle.Success).setEmoji("🏦"),
+            new ButtonBuilder().setCustomId("family_btn_upgrade").setLabel("Upgrade").setStyle(ButtonStyle.Success).setEmoji("⬆️")
+        );
+        
+        const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId("family_btn_invite_menu").setLabel("Convidar").setStyle(ButtonStyle.Primary).setEmoji("📩"),
+            new ButtonBuilder().setCustomId("family_btn_leave").setLabel("Sair").setStyle(ButtonStyle.Danger).setEmoji("🚪")
+        );
+
+        await interaction.reply({ embeds: [embed], components: [row1, row2], ephemeral: true });
+        return;
+    }
 
     // BANK GROUP
     if (group === "bank") {
@@ -237,31 +266,12 @@ module.exports = {
 
             const row = new ActionRowBuilder().addComponents(select);
 
-            const response = await interaction.reply({
+            await interaction.reply({
                 content: "Escolha um estilo para os canais da família:",
                 components: [row],
                 ephemeral: true
             });
-
-            const collector = response.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 60000 });
-
-            collector.on('collect', async i => {
-                const template = i.values[0];
-                const baseName = myFamily.name;
-                const newName = template.replace("{nome}", baseName);
-                
-                const guild = interaction.guild;
-                if (myFamily.textChannelId) {
-                    const channel = await guild.channels.fetch(myFamily.textChannelId).catch(() => null);
-                    if (channel) await channel.setName(newName.toLowerCase().replace(/\s+/g, '-')).catch(() => {});
-                }
-                if (myFamily.voiceChannelId) {
-                    const channel = await guild.channels.fetch(myFamily.voiceChannelId).catch(() => null);
-                    if (channel) await channel.setName(newName).catch(() => {});
-                }
-
-                await i.update({ content: `Estilo aplicado! Canais atualizados para: **${newName}**`, components: [] });
-            });
+            // Local collector removed, using global handleSelectMenu
         }
         return;
     }
@@ -658,5 +668,287 @@ module.exports = {
             })]
         });
     }
+  },
+
+  async handleSelectMenu(interaction) {
+      if (interaction.customId === "family_decorate") {
+          const families = await familyStore.load();
+          const userId = interaction.user.id;
+          const myFamily = Object.values(families).find(f => f.ownerId === userId);
+
+          if (!myFamily) {
+              return interaction.reply({ embeds: [createErrorEmbed("Você não é dono de uma família!")], ephemeral: true });
+          }
+
+          const template = interaction.values[0];
+          const baseName = myFamily.name;
+          const newName = template.replace("{nome}", baseName);
+          
+          const guild = interaction.guild;
+          if (myFamily.textChannelId) {
+              const channel = await guild.channels.fetch(myFamily.textChannelId).catch(() => null);
+              if (channel) await channel.setName(newName.toLowerCase().replace(/\s+/g, '-')).catch(() => {});
+          }
+          if (myFamily.voiceChannelId) {
+              const channel = await guild.channels.fetch(myFamily.voiceChannelId).catch(() => null);
+              if (channel) await channel.setName(newName).catch(() => {});
+          }
+
+          await interaction.update({ content: `Estilo aplicado! Canais atualizados para: **${newName}**`, components: [] });
+      }
+
+      // Invite User Selection
+      if (interaction.customId === "family_invite_select") {
+          const targetId = interaction.values[0];
+          // Call invite logic (similar to command)
+          // Need to reuse invite logic. For now, just reply with instruction.
+          // Or duplicate logic? Let's duplicate carefully or refactor.
+          // Duplication is safer for now.
+          
+          const families = await familyStore.load();
+          const userId = interaction.user.id;
+          const family = Object.values(families).find(f => f.ownerId === userId || (f.admins && f.admins.includes(userId)));
+          
+          if (!family) {
+              return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para convidar!")], ephemeral: true });
+          }
+          
+          // Checar limite de membros
+          const ownerMember = await interaction.guild.members.fetch(family.ownerId).catch(() => null);
+          const vipConfig = interaction.client.services.vipConfig;
+          
+          let limit = 3;
+          if (ownerMember) {
+              const tier = await vipConfig.getMemberTier(ownerMember);
+              limit = tier?.limits?.familyMembers || 3;
+          }
+          limit += (family.boughtSlots || 0);
+  
+          if (family.members.length >= limit) {
+               return interaction.reply({ embeds: [createErrorEmbed(`A família atingiu o limite de **${limit}** membros.`)], ephemeral: true });
+          }
+
+          if (family.members.includes(targetId)) {
+               return interaction.reply({ embeds: [createErrorEmbed("Usuário já na família.")], ephemeral: true });
+          }
+          
+          if (targetId === userId) {
+              return interaction.reply({ embeds: [createErrorEmbed("Você não pode convidar a si mesmo.")], ephemeral: true });
+          }
+
+          const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+          if (!targetMember) return interaction.reply({ embeds: [createErrorEmbed("Usuário não encontrado.")], ephemeral: true });
+          
+          if (targetMember.user.bot) {
+              return interaction.reply({ embeds: [createErrorEmbed("Você não pode convidar bots.")], ephemeral: true });
+          }
+          
+          family.members.push(targetId);
+          await familyStore.save(families);
+          
+          if (family.roleId) {
+              await targetMember.roles.add(family.roleId).catch(() => {});
+          }
+
+          await interaction.reply({ embeds: [createSuccessEmbed(`<@${targetId}> convidado com sucesso!`)] });
+      }
+  },
+
+  async handleButton(interaction) {
+      if (!interaction.customId.startsWith("family_btn_")) return;
+      
+      const families = await familyStore.load();
+      const userId = interaction.user.id;
+      const userFamily = Object.values(families).find(f => f.members.includes(userId));
+
+      if (!userFamily) {
+          return interaction.reply({ embeds: [createErrorEmbed("Você não tem família!")], ephemeral: true });
+      }
+
+      if (interaction.customId === "family_btn_info") {
+        const owner = await interaction.client.users.fetch(userFamily.ownerId).catch(() => ({ tag: "Desconhecido" }));
+        const admins = userFamily.admins && userFamily.admins.length > 0 
+            ? userFamily.admins.map(id => `<@${id}>`).join(", ") 
+            : "Nenhum";
+
+        await interaction.reply({
+            embeds: [createEmbed({
+                title: `🏰 Família ${userFamily.name}`,
+                fields: [
+                    { name: "Dono", value: `${owner.tag}`, inline: true },
+                    { name: "Admins", value: admins, inline: true },
+                    { name: "Membros", value: `${userFamily.members.length}`, inline: true },
+                    { name: "Criada em", value: `<t:${Math.floor(userFamily.createdAt / 1000)}:d>`, inline: true },
+                    { name: "Banco", value: `${userFamily.bank || 0} 🪙`, inline: true }
+                ],
+                color: 0x9B59B6
+            })],
+            ephemeral: true
+        });
+      }
+
+      if (interaction.customId === "family_btn_members") {
+          const members = userFamily.members.map(id => `<@${id}>`).join("\n");
+          await interaction.reply({
+              embeds: [createEmbed({
+                  title: `👥 Membros de ${userFamily.name}`,
+                  description: members || "Nenhum membro.",
+                  color: 0x9B59B6
+              })],
+              ephemeral: true
+          });
+      }
+
+      if (interaction.customId === "family_btn_bank") {
+          const row = new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId("family_btn_deposit_modal").setLabel("Depositar").setStyle(ButtonStyle.Success).setEmoji("💰"),
+              new ButtonBuilder().setCustomId("family_btn_withdraw_modal").setLabel("Sacar").setStyle(ButtonStyle.Danger).setEmoji("💸")
+          );
+
+          await interaction.reply({
+              content: `💰 **Banco da Família**\nSaldo atual: **${userFamily.bank || 0} 🪙**`,
+              components: [row],
+              ephemeral: true
+          });
+      }
+
+      if (interaction.customId === "family_btn_upgrade") {
+          const boughtSlots = userFamily.boughtSlots || 0;
+          const nextSlot = boughtSlots + 1;
+          const cost = nextSlot * 5000;
+          
+          const row = new ActionRowBuilder().addComponents(
+              new ButtonBuilder()
+                  .setCustomId("family_btn_upgrade_confirm")
+                  .setLabel(`Comprar Slot (${cost} 🪙)`)
+                  .setStyle(ButtonStyle.Success)
+                  .setEmoji("🛒")
+          );
+
+          await interaction.reply({
+              content: `**Upgrade de Família**\nSlots extras atuais: ${boughtSlots}\nPróximo slot custa: **${cost} 🪙**\nSaldo do banco: **${userFamily.bank || 0} 🪙**`,
+              components: [row],
+              ephemeral: true
+          });
+      }
+
+      if (interaction.customId === "family_btn_upgrade_confirm") {
+          const isOwner = userFamily.ownerId === userId;
+          const isAdmin = userFamily.admins && userFamily.admins.includes(userId);
+          
+          if (!isOwner && !isAdmin) {
+               return interaction.reply({ embeds: [createErrorEmbed("Apenas Dono e Admins podem comprar upgrades.")], ephemeral: true });
+          }
+  
+          const boughtSlots = userFamily.boughtSlots || 0;
+          const nextSlot = boughtSlots + 1;
+          const cost = nextSlot * 5000;
+  
+          if ((userFamily.bank || 0) < cost) {
+              return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente no banco da família!\nCusto: **${cost} 🪙**\nSaldo: **${userFamily.bank || 0} 🪙**`)] });
+          }
+  
+          userFamily.bank -= cost;
+          userFamily.boughtSlots = nextSlot;
+          await familyStore.save(families);
+  
+          await interaction.reply({ embeds: [createSuccessEmbed(`Upgrade realizado! A família agora tem **+${nextSlot}** slots extras de membro.\nNovo Saldo: **${userFamily.bank} 🪙**`)] });
+      }
+      
+      if (interaction.customId === "family_btn_invite_menu") {
+          // Show User Select Menu
+          const userSelect = new UserSelectMenuBuilder()
+              .setCustomId("family_invite_select")
+              .setPlaceholder("Selecione um usuário para convidar")
+              .setMaxValues(1);
+
+          const row = new ActionRowBuilder().addComponents(userSelect);
+
+          await interaction.reply({
+              content: "Quem você deseja convidar?",
+              components: [row],
+              ephemeral: true
+          });
+      }
+      
+      if (interaction.customId === "family_btn_leave") {
+          // Confirm leave? Just execute leave logic.
+          // Reuse leave logic logic
+           if (userFamily.ownerId === userId) {
+               return interaction.reply({ embeds: [createErrorEmbed("Você é o dono! Use `/family delete` ou `/family transfer`.")], ephemeral: true });
+           }
+           
+           userFamily.members = userFamily.members.filter(id => id !== userId);
+           await familyStore.save(families);
+           
+           // Remove roles... (Simplified)
+           const guild = interaction.guild;
+           if (userFamily.roleId) {
+               const member = await guild.members.fetch(userId).catch(() => null);
+               if (member) await member.roles.remove(userFamily.roleId).catch(() => {});
+           }
+           
+           await interaction.reply({ embeds: [createSuccessEmbed(`Você saiu da família **${userFamily.name}**.`)] });
+      }
+
+      // SUB-BUTTONS (Modals)
+      if (interaction.customId === "family_btn_deposit_modal") {
+          const modal = new ModalBuilder().setCustomId("family_deposit_modal").setTitle("Depositar no Banco");
+          const input = new TextInputBuilder().setCustomId("amount").setLabel("Quantia").setStyle(TextInputStyle.Short).setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(input));
+          await interaction.showModal(modal);
+      }
+      
+      if (interaction.customId === "family_btn_withdraw_modal") {
+          const modal = new ModalBuilder().setCustomId("family_withdraw_modal").setTitle("Sacar do Banco");
+          const input = new TextInputBuilder().setCustomId("amount").setLabel("Quantia").setStyle(TextInputStyle.Short).setRequired(true);
+          modal.addComponents(new ActionRowBuilder().addComponents(input));
+          await interaction.showModal(modal);
+      }
+  },
+
+  async handleModal(interaction) {
+      if (interaction.customId === "family_deposit_modal" || interaction.customId === "family_withdraw_modal") {
+          const amount = parseInt(interaction.fields.getTextInputValue("amount"));
+          if (isNaN(amount) || amount <= 0) {
+              return interaction.reply({ embeds: [createErrorEmbed("Quantia inválida.")], ephemeral: true });
+          }
+
+          const families = await familyStore.load();
+          const userId = interaction.user.id;
+          const userFamily = Object.values(families).find(f => f.members.includes(userId));
+          
+          if (!userFamily) return interaction.reply({ embeds: [createErrorEmbed("Você não tem família!")], ephemeral: true });
+          const economyService = interaction.client.services.economy;
+
+          if (interaction.customId === "family_deposit_modal") {
+              const balance = await economyService.getBalance(userId);
+              if ((balance.coins || 0) < amount) {
+                  return interaction.reply({ embeds: [createErrorEmbed("Saldo insuficiente na carteira.")], ephemeral: true });
+              }
+              
+              await economyService.removeCoins(userId, amount);
+              userFamily.bank = (userFamily.bank || 0) + amount;
+              await familyStore.save(families);
+              
+              await interaction.reply({ embeds: [createSuccessEmbed(`Depositado **${amount} 🪙** com sucesso!`)] });
+          }
+          
+          if (interaction.customId === "family_withdraw_modal") {
+              const isOwner = userFamily.ownerId === userId;
+              const isAdmin = userFamily.admins && userFamily.admins.includes(userId);
+              if (!isOwner && !isAdmin) return interaction.reply({ embeds: [createErrorEmbed("Apenas admins podem sacar.")], ephemeral: true });
+              
+              if ((userFamily.bank || 0) < amount) {
+                  return interaction.reply({ embeds: [createErrorEmbed("Saldo insuficiente no banco.")], ephemeral: true });
+              }
+              
+              userFamily.bank -= amount;
+              await familyStore.save(families);
+              await economyService.addCoins(userId, amount);
+              
+              await interaction.reply({ embeds: [createSuccessEmbed(`Sacado **${amount} 🪙** com sucesso!`)] });
+          }
+      }
   }
 };

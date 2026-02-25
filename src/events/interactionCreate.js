@@ -35,6 +35,22 @@ module.exports = {
         }
         return;
     }
+
+    // Select Menu Handler (String, User, Role, Channel, Mentionable)
+    if (interaction.isAnySelectMenu()) {
+        const commands = client.commands.values();
+        for (const command of commands) {
+            if (typeof command.handleSelectMenu === "function") {
+                try {
+                    await command.handleSelectMenu(interaction);
+                    if (interaction.replied || interaction.deferred) return;
+                } catch (error) {
+                    logger.error({ err: error, command: command.data.name }, "Erro ao processar menu de seleção");
+                }
+            }
+        }
+        return;
+    }
     
     // Autocomplete Handler
     if (interaction.isAutocomplete()) {

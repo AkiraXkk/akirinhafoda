@@ -46,11 +46,18 @@ async function createPagination({
     return row;
   };
 
-  const response = await interaction.reply({
+  const payload = {
     embeds: [generateEmbed(currentPage)],
     components: [generateRow(currentPage)],
     fetchReply: true,
-  });
+  };
+
+  let response;
+  if (interaction.deferred || interaction.replied) {
+    response = await interaction.editReply(payload);
+  } else {
+    response = await interaction.reply(payload);
+  }
 
   const collector = response.createMessageComponentCollector({
     componentType: ComponentType.Button,

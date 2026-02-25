@@ -1,5 +1,7 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const { isMongoConnected } = require("../database/connect");
+const { createMongoDataStore } = require("../store/mongoStore");
 
 async function ensureParentDir(filePath) {
   const dir = path.dirname(filePath);
@@ -23,7 +25,7 @@ async function writeJsonAtomic(filePath, data) {
   await fs.rename(tmpPath, filePath);
 }
 
-function createVipStore({ filePath }) {
+function createLocalVipStore({ filePath }) {
   async function load() {
     const data = await readJson(filePath);
     if (!data || typeof data !== "object") return { vips: {}, settings: {}, guilds: {} };
@@ -38,6 +40,40 @@ function createVipStore({ filePath }) {
   }
 
   return { load, save };
+}
+
+function createMongoVipStore() {
+    // We use 3 separate stores for the 3 parts of VIP state
+    const vipStore = createMongoDataStore("vips");
+    const settingsStore = createMongoDataStore("vip_settings");
+    const guildsStore = createMongoDataStore("vip_guilds");
+
+    async function load() {
+        const [vips, settings, guilds] = await Promise.all([
+            vipStore.load(),
+            settingsStore.load(),
+            guildsStore.load()
+        ]);
+        return { vips, settings, guilds };
+    }
+
+    async function save(state) {
+        // We only save what changed? No, save interface implies full save.
+        // But efficient implementation in mongoStore uses delete/insert.
+        // We should call save on each store.
+        if (state.vips) await vipStore.save(state.vips);
+        if (state.settings) await settingsStore.save(state.settings);
+        if (state.guilds) await guildsStore.save(state.guilds);
+    }
+
+    return { load, save };
+}
+
+function createVipStore(options) {
+    if (isMongoConnected()) {
+        return createMongoVipStore();
+    }
+    return createLocalVipStore(options);
 }
 
 module.exports = { createVipStore };

@@ -35,6 +35,9 @@ const config = Object.freeze({
   vip: {
     storePath: getEnv("VIP_STORE_PATH", { defaultValue: "data/vips.json" }),
   },
+  mongo: {
+    uri: getEnv("MONGO_URI"),
+  },
   logLevel: getEnv("LOG_LEVEL", { defaultValue: "info" }),
 });
 

@@ -476,9 +476,8 @@ module.exports = {
 
       // FAMILY MANAGE
       if (interaction.customId === "vip_family_manage") {
-          // Just redirect to family command or show info
           await interaction.reply({ 
-              content: "Para gerenciar sua família, use o comando `/family`. Lá você pode criar, convidar, promover e muito mais!",
+              content: "🏰 **Gerenciamento de Família**\n\nUse o comando `/family panel` para acessar o painel completo da sua família.\nSe você ainda não tem uma, use `/family create`.",
               ephemeral: true
           });
       }

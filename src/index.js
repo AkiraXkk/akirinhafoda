@@ -9,6 +9,7 @@ const { createVipChannelManager } = require("./vip/vipChannelManager");
 const { createVipConfigManager } = require("./vip/vipConfigManager");
 const { getGuildConfig } = require("./config/guildConfig");
 const { createEmbed } = require("./embeds");
+const { connectToMongo } = require("./database/connect");
 
 function createClient() {
   return new Client({
@@ -29,6 +30,7 @@ const { createEconomyService } = require("./services/economyService");
 
 async function main() {
   const client = createClient();
+  await connectToMongo(config.mongo.uri);
   const { commands } = loadCommands({ logger });
   client.commands = commands;
   client.services = {};
