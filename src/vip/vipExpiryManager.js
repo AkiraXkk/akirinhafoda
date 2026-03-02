@@ -1,10 +1,7 @@
 const { logger } = require("../logger");
 
 function createVipExpiryManager({ client, vipService, vipRoleManager, vipChannelManager, familyService }) {
-  async function cleanupVipUser(userId, vipEntry) {
-    const guilds = client.guilds.cache.values();
-
-    for (const guild of guilds) {
+  async function cleanupVipUser(guild, userId, vipEntry) {
       const guildId = guild.id;
 
       if (vipRoleManager?.deletePersonalRole) {
@@ -25,7 +22,7 @@ function createVipExpiryManager({ client, vipService, vipRoleManager, vipChannel
 
       try {
         const member = await guild.members.fetch(userId).catch(() => null);
-        if (!member) continue;
+        if (!member) return;
 
         const guildConfig = vipService.getGuildConfig(guildId);
         const functionalVipRoleId = guildConfig?.vipRoleId;
@@ -35,33 +32,39 @@ function createVipExpiryManager({ client, vipService, vipRoleManager, vipChannel
         }
 
         if (vipEntry?.tierId) {
-          await member.roles.remove(vipEntry.tierId).catch(() => {});
+          const tier = await vipService.getTierConfig(guildId, vipEntry.tierId).catch(() => null);
+          if (tier?.roleId) {
+            await member.roles.remove(tier.roleId).catch(() => {});
+          }
         }
       } catch (e) {
         logger.error({ err: e, userId, guildId }, "Falha ao remover roles de VIP expirado");
       }
-    }
   }
 
   async function runOnce() {
     const now = Date.now();
-    const ids = vipService.listVipIds();
     let expiredCount = 0;
 
-    for (const userId of ids) {
-      const entry = vipService.getVip(userId);
-      const expiresAt = entry?.expiresAt;
-      if (!expiresAt) continue;
-      if (expiresAt > now) continue;
+    for (const guild of client.guilds.cache.values()) {
+      const guildId = guild.id;
+      const ids = vipService.listVipIds(guildId);
 
-      try {
-        const removed = await vipService.removeVip(userId);
-        if (!removed?.removed) continue;
+      for (const userId of ids) {
+        const entry = vipService.getVip(guildId, userId);
+        const expiresAt = entry?.expiresAt;
+        if (!expiresAt) continue;
+        if (expiresAt > now) continue;
 
-        expiredCount += 1;
-        await cleanupVipUser(userId, removed.vip);
-      } catch (e) {
-        logger.error({ err: e, userId }, "Falha ao processar expiração de VIP");
+        try {
+          const removed = await vipService.removeVip(guildId, userId);
+          if (!removed?.removed) continue;
+
+          expiredCount += 1;
+          await cleanupVipUser(guild, userId, removed.vip);
+        } catch (e) {
+          logger.error({ err: e, userId, guildId }, "Falha ao processar expiração de VIP");
+        }
       }
     }
 

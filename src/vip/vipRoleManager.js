@@ -45,7 +45,7 @@ function createVipRoleManager({ client, vipService, logger }) {
 
     const botMember = guild.members.me;
 
-    const settings = vipService.getSettings(userId) || {};
+    const settings = vipService.getSettings(guild.id, userId) || {};
     const existingRole = await fetchRole(guild, settings.roleId);
 
     const fallbackName = `VIP | ${member.user.username}`;
@@ -114,9 +114,8 @@ function createVipRoleManager({ client, vipService, logger }) {
     }
 
     await vipService
-      .setSettings(userId, {
+      .setSettings(guild.id, userId, {
         roleId: role.id,
-        guildId: targetGuildId || guild.id,
         roleName: desiredName,
         roleColor: settings.roleColor || null,
         hoist: desiredHoist,
@@ -134,9 +133,9 @@ function createVipRoleManager({ client, vipService, logger }) {
     if (patch.roleColor && parseHexColor(patch.roleColor) === null) {
         return { ok: false, reason: "Cor inválida. Use formato HEX (ex: #FF0000)" };
     }
-    const existing = vipService.getSettings(userId) || {};
+    const existing = vipService.getSettings(targetGuildId, userId) || {};
     const next = { ...existing, ...patch };
-    await vipService.setSettings(userId, next);
+    await vipService.setSettings(targetGuildId, userId, next);
     return ensurePersonalRole(userId, { guildId: targetGuildId });
   }
 
@@ -146,7 +145,7 @@ function createVipRoleManager({ client, vipService, logger }) {
 
     const botMember = guild.members.me;
 
-    const settings = vipService.getSettings(userId) || {};
+    const settings = vipService.getSettings(guild.id, userId) || {};
     if (!settings.roleId) return { ok: true, reason: "no_role_saved" };
 
     const role = await fetchRole(guild, settings.roleId);
@@ -156,7 +155,7 @@ function createVipRoleManager({ client, vipService, logger }) {
       }
     }
 
-    await vipService.setSettings(userId, { roleId: null }).catch(() => {});
+    await vipService.setSettings(guild.id, userId, { roleId: null }).catch(() => {});
     return { ok: true };
   }
 

@@ -22,7 +22,7 @@ function createVipChannelManager({ client, vipService, logger }) {
     if (!catId) return { ok: false, reason: "no_category_configured" };
 
     // Verifica se já existem
-    const settings = vipService.getSettings(userId) || {};
+    const settings = vipService.getSettings(guild.id, userId) || {};
     const personalRoleId = settings.roleId;
     let textChannel = settings.textChannelId
       ? await guild.channels.fetch(settings.textChannelId).catch(() => null)
@@ -91,8 +91,7 @@ function createVipChannelManager({ client, vipService, logger }) {
 
     // Salva IDs
     if (textChannel.id !== settings.textChannelId || voiceChannel.id !== settings.voiceChannelId) {
-      await vipService.setSettings(userId, {
-        guildId: targetGuildId || guild.id,
+      await vipService.setSettings(guild.id, userId, {
         textChannelId: textChannel.id,
         voiceChannelId: voiceChannel.id,
       });
@@ -117,7 +116,7 @@ function createVipChannelManager({ client, vipService, logger }) {
       if (c) await c.delete().catch(() => {});
     }
 
-    await vipService.setSettings(userId, { textChannelId: null, voiceChannelId: null });
+    await vipService.setSettings(guild.id, userId, { textChannelId: null, voiceChannelId: null });
     return { ok: true };
   }
 
@@ -125,7 +124,7 @@ function createVipChannelManager({ client, vipService, logger }) {
     const guild = await fetchGuild(targetGuildId);
     if (!guild) return { ok: false, reason: "guild_unavailable" };
 
-    const settings = vipService.getSettings(userId) || {};
+    const settings = vipService.getSettings(guild.id, userId) || {};
     let textChannel = settings.textChannelId
       ? await guild.channels.fetch(settings.textChannelId).catch(() => null)
       : null;
@@ -192,7 +191,7 @@ function createVipChannelManager({ client, vipService, logger }) {
     await archiveChannel(voiceChannel);
 
     // Remove from settings so they are no longer "active" VIP channels
-    await vipService.setSettings(userId, { textChannelId: null, voiceChannelId: null }).catch(() => {});
+    await vipService.setSettings(guild.id, userId, { textChannelId: null, voiceChannelId: null }).catch(() => {});
 
     return { ok: true };
   }
@@ -201,7 +200,7 @@ function createVipChannelManager({ client, vipService, logger }) {
     const guild = await fetchGuild(targetGuildId);
     if (!guild) return { ok: false, reason: "guild_unavailable" };
 
-    const settings = vipService.getSettings(userId) || {};
+    const settings = vipService.getSettings(guild.id, userId) || {};
     const textChannel = settings.textChannelId
       ? await guild.channels.fetch(settings.textChannelId).catch(() => null)
       : null;
@@ -237,7 +236,7 @@ function createVipChannelManager({ client, vipService, logger }) {
     const guild = await fetchGuild(targetGuildId);
     if (!guild) return { ok: false, reason: "guild_unavailable" };
 
-    const settings = vipService.getSettings(userId) || {};
+    const settings = vipService.getSettings(guild.id, userId) || {};
     const textChannel = settings.textChannelId
       ? await guild.channels.fetch(settings.textChannelId).catch(() => null)
       : null;

@@ -3,9 +3,31 @@ function createVipService({ store, logger, configManager }) {
 
   async function init() {
     state = await store.load();
+    if (!state || typeof state !== "object") state = { vips: {}, settings: {}, guilds: {} };
+    if (!state.vips || typeof state.vips !== "object") state.vips = {};
     if (!state.settings || typeof state.settings !== "object") state.settings = {};
     if (!state.guilds || typeof state.guilds !== "object") state.guilds = {};
-    logger?.info?.({ count: Object.keys(state.vips).length }, "VIP carregado");
+
+    // Migration: older versions stored vips/settings globally by userId.
+    // New format: vips[guildId][userId] and settings[guildId][userId]
+    const looksLikeOldVipMap = Object.values(state.vips).some(
+      (v) => v && typeof v === "object" && typeof v.userId === "string"
+    );
+    if (looksLikeOldVipMap) {
+      // We cannot infer guildId, so keep legacy data under a special key.
+      state.vips = { __legacy__: state.vips };
+    }
+    const looksLikeOldSettingsMap = Object.values(state.settings).some(
+      (v) => v && typeof v === "object" && typeof v.userId === "string"
+    );
+    if (looksLikeOldSettingsMap) {
+      state.settings = { __legacy__: state.settings };
+    }
+
+    const vipCount = Object.values(state.vips)
+      .filter((x) => x && typeof x === "object")
+      .reduce((acc, guildMap) => acc + Object.keys(guildMap).length, 0);
+    logger?.info?.({ count: vipCount }, "VIP carregado");
   }
 
   function normalizeUserId(userId) {
@@ -35,102 +57,144 @@ function createVipService({ store, logger, configManager }) {
     return member.roles.cache.has(roleId);
   }
 
-  function isVip({ userId, member } = {}) {
+  function isVip({ guildId, userId, member } = {}) {
+    const gid = guildId || member?.guild?.id;
     const id = normalizeUserId(userId) || normalizeUserId(member?.user?.id);
-    if (!id) return false;
+    if (!gid || !id) return false;
     if (member && isVipByRole(member)) return true;
-    return Boolean(state.vips[id]);
+    return Boolean(state.vips?.[gid]?.[id]);
   }
 
-  async function addVip(userId, { days, tierId } = {}) {
+  async function addVip(guildId, userId, { days, tierId } = {}) {
+    const gid = String(guildId || "").trim();
     const id = normalizeUserId(userId);
+    if (!gid) throw new Error("guildId inválido");
     if (!id) throw new Error("userId inválido");
 
     const now = Date.now();
-    const existing = state.vips[id];
+    if (!state.vips[gid] || typeof state.vips[gid] !== "object") state.vips[gid] = {};
+    const existing = state.vips[gid][id];
     let expiresAt = null;
     if (days && days > 0) {
       const base = existing?.expiresAt > now ? existing.expiresAt : now;
       expiresAt = base + days * 24 * 60 * 60 * 1000;
     }
 
-    state.vips[id] = {
+    state.vips[gid][id] = {
       userId: id,
+      guildId: gid,
       addedAt: existing?.addedAt ?? now,
       expiresAt: expiresAt || existing?.expiresAt || null,
       tierId: tierId ?? existing?.tierId ?? null,
     };
     await store.save(state);
-    return { created: !existing, vip: state.vips[id] };
+    return { created: !existing, vip: state.vips[gid][id] };
   }
 
-  async function removeVip(userId) {
+  async function removeVip(guildId, userId) {
+    const gid = String(guildId || "").trim();
     const id = normalizeUserId(userId);
+    if (!gid) throw new Error("guildId inválido");
     if (!id) throw new Error("userId inválido");
-    const existing = state.vips[id];
+    const existing = state.vips?.[gid]?.[id];
     if (!existing) return { removed: false };
-    delete state.vips[id];
+    delete state.vips[gid][id];
     await store.save(state);
     return { removed: true, vip: existing };
   }
 
-  function listVipIds() {
-    return Object.keys(state.vips);
+  function listVipIds(guildId) {
+    const gid = String(guildId || "").trim();
+    if (!gid) return [];
+    return Object.keys(state.vips?.[gid] || {});
   }
 
-  function getVip(userId) {
+  function getVip(guildId, userId) {
+    const gid = String(guildId || "").trim();
     const id = normalizeUserId(userId);
-    return id ? (state.vips[id] || null) : null;
+    if (!gid || !id) return null;
+    return state.vips?.[gid]?.[id] || null;
   }
 
-  function getSettings(userId) {
+  function getSettings(guildId, userId) {
+    const gid = String(guildId || "").trim();
     const id = normalizeUserId(userId);
-    return id ? (state.settings[id] || null) : null;
+    if (!gid || !id) return null;
+    return state.settings?.[gid]?.[id] || null;
   }
 
-  async function setSettings(userId, patch) {
+  async function setSettings(guildId, userId, patch) {
+    const gid = String(guildId || "").trim();
     const id = normalizeUserId(userId);
+    if (!gid) throw new Error("guildId inválido");
     if (!id) throw new Error("userId inválido");
     if (!patch || typeof patch !== "object") throw new Error("patch inválido");
-    const existing = state.settings[id] || {};
-    state.settings[id] = { ...existing, ...patch, userId: id };
+    if (!state.settings[gid] || typeof state.settings[gid] !== "object") state.settings[gid] = {};
+    const existing = state.settings[gid][id] || {};
+    state.settings[gid][id] = { ...existing, ...patch, userId: id, guildId: gid };
     await store.save(state);
-    return state.settings[id];
+    return state.settings[gid][id];
   }
 
-  function getDamasCount(userId) {
+  function getDamasCount(guildId, userId) {
+    const gid = String(guildId || "").trim();
     const id = normalizeUserId(userId);
     if (!id) return 0;
-    const damas = state.settings[id]?.damas;
+    const damas = state.settings?.[gid]?.[id]?.damas;
     return Array.isArray(damas) ? damas.length : 0;
   }
 
-  function getDamas(userId) {
+  function getDamas(guildId, userId) {
+    const gid = String(guildId || "").trim();
     const id = normalizeUserId(userId);
     if (!id) return [];
-    const damas = state.settings[id]?.damas;
+    const damas = state.settings?.[gid]?.[id]?.damas;
     return Array.isArray(damas) ? [...damas] : [];
   }
 
-  async function addDama(donoId, damaId) {
+  async function addDama(guildId, donoId, damaId) {
+    const gid = String(guildId || "").trim();
     const id = normalizeUserId(donoId);
+    if (!gid) throw new Error("guildId inválido");
     if (!id || !damaId) throw new Error("donoId e damaId obrigatórios");
-    const settings = state.settings[id] || {};
+    if (!state.settings[gid] || typeof state.settings[gid] !== "object") state.settings[gid] = {};
+    const settings = state.settings[gid][id] || {};
     const lista = Array.isArray(settings.damas) ? settings.damas : [];
     if (lista.includes(damaId)) return;
-    state.settings[id] = { ...settings, userId: id, damas: [...lista, damaId] };
+    state.settings[gid][id] = { ...settings, userId: id, guildId: gid, damas: [...lista, damaId] };
     await store.save(state);
   }
 
-  async function removeDama(donoId, damaId) {
+  async function removeDama(guildId, donoId, damaId) {
+    const gid = String(guildId || "").trim();
     const id = normalizeUserId(donoId);
+    if (!gid) throw new Error("guildId inválido");
     if (!id) throw new Error("donoId inválido");
-    const settings = state.settings[id] || {};
+    if (!state.settings[gid] || typeof state.settings[gid] !== "object") state.settings[gid] = {};
+    const settings = state.settings[gid][id] || {};
     let lista = Array.isArray(settings.damas) ? settings.damas : [];
     if (damaId) lista = lista.filter((x) => x !== damaId);
     else lista = [];
-    state.settings[id] = { ...settings, userId: id, damas: lista };
+    state.settings[gid][id] = { ...settings, userId: id, guildId: gid, damas: lista };
     await store.save(state);
+  }
+
+  async function getUserTierConfig({ guildId, userId, member } = {}) {
+    const gid = guildId || member?.guild?.id;
+    const id = normalizeUserId(userId) || normalizeUserId(member?.user?.id);
+    if (!gid || !id) return null;
+
+    const vipEntry = getVip(gid, id);
+    if (vipEntry?.tierId) {
+      const tier = await getTierConfig(gid, vipEntry.tierId);
+      if (tier) return tier;
+    }
+
+    if (member && configManager?.getMemberTier) {
+      return configManager.getMemberTier(member);
+    }
+
+    return null;
   }
 
   async function getTierConfig(guildId, tierId) {
@@ -166,8 +230,10 @@ function createVipService({ store, logger, configManager }) {
     return true;
   }
 
-  function listSettingsUserIds() {
-    return Object.keys(state.settings || {});
+  function listSettingsUserIds(guildId) {
+    const gid = String(guildId || "").trim();
+    if (!gid) return [];
+    return Object.keys(state.settings?.[gid] || {});
   }
 
   return {
@@ -185,6 +251,7 @@ function createVipService({ store, logger, configManager }) {
     getDamas,
     addDama,
     removeDama,
+    getUserTierConfig,
     getTierConfig,
     updateTier,
     resetGuildConfig,

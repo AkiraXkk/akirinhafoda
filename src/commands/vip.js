@@ -32,7 +32,7 @@ module.exports = {
   async execute(interaction) {
     const vipService = interaction.client.services.vip;
     const sub = interaction.options.getSubcommand();
-    const entrada = vipService.getVip(interaction.user.id);
+    const entrada = vipService.getVip(interaction.guildId, interaction.user.id);
 
     if (!entrada) {
       return interaction.reply({ embeds: [createErrorEmbed("Você não é VIP.")], ephemeral: true });
@@ -116,7 +116,7 @@ module.exports = {
     if (!customId.startsWith("vip_")) return;
 
     const vipService = interaction.client.services.vip;
-    const entrada = vipService.getVip(interaction.user.id);
+    const entrada = vipService.getVip(interaction.guildId, interaction.user.id);
     if (!entrada) {
       return interaction.reply({ embeds: [createErrorEmbed("Você não é VIP.")], ephemeral: true });
     }
@@ -235,7 +235,7 @@ module.exports = {
     if (customId !== "vip_select_secondrole" && customId !== "vip_select_family") return;
 
     const vipService = interaction.client.services.vip;
-    const entrada = vipService.getVip(interaction.user.id);
+    const entrada = vipService.getVip(interaction.guildId, interaction.user.id);
     if (!entrada) {
       return interaction.reply({ embeds: [createErrorEmbed("Você não é VIP.")], ephemeral: true });
     }
@@ -256,7 +256,7 @@ module.exports = {
         return interaction.update({ embeds: [createErrorEmbed("Sistema de cargos VIP indisponível.")], components: [] });
       }
 
-      const settings = vipService.getSettings(interaction.user.id) || {};
+      const settings = vipService.getSettings(interaction.guildId, interaction.user.id) || {};
       const guild = interaction.guild;
       let role = null;
 
@@ -289,7 +289,7 @@ module.exports = {
         }
       }
 
-      await vipService.setSettings(interaction.user.id, { secondRoleMembers: selectedIds }).catch(() => {});
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { secondRoleMembers: selectedIds }).catch(() => {});
 
       return interaction.update({
         embeds: [createSuccessEmbed("Membros do 2º cargo atualizados.")],

@@ -38,7 +38,9 @@ module.exports = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const economyService = interaction.client.services.economy;
+    const vipService = interaction.client.services.vip;
     const userId = interaction.user.id;
+    const guildId = interaction.guildId;
 
     if (!economyService) {
         return interaction.reply({ content: "Serviço de economia indisponível.", ephemeral: true });
@@ -47,7 +49,7 @@ module.exports = {
     // BALANCE
     if (sub === "balance") {
       const user = interaction.options.getUser("usuario") || interaction.user;
-      const balance = await economyService.getBalance(user.id);
+      const balance = await economyService.getBalance(guildId, user.id);
       
       await interaction.reply({ 
           embeds: [createEmbed({
@@ -63,7 +65,7 @@ module.exports = {
 
     // WORK
     if (sub === "work") {
-      const data = await economyService.getBalance(userId);
+      const data = await economyService.getBalance(guildId, userId);
       const lastWork = data.lastWork || 0;
       const cooldown = 60 * 60 * 1000; // 1 hora
       const now = Date.now();
@@ -74,7 +76,7 @@ module.exports = {
       }
       
       const earnings = Math.floor(Math.random() * 200) + 50; // 50-250 coins
-      await economyService.work(userId, earnings);
+      await economyService.work(guildId, userId, earnings);
 
       await interaction.reply({ 
           embeds: [createSuccessEmbed(`Você trabalhou duro e ganhou **${earnings} 🪙**!`)] 
@@ -83,7 +85,7 @@ module.exports = {
 
     // DAILY
     if (sub === "daily") {
-      const data = await economyService.getBalance(userId);
+      const data = await economyService.getBalance(guildId, userId);
       const lastDaily = data.lastDaily || 0;
       const cooldown = 24 * 60 * 60 * 1000; // 24 horas
       const now = Date.now();
@@ -93,8 +95,18 @@ module.exports = {
           return interaction.reply({ embeds: [createErrorEmbed(`Você já pegou seu prêmio hoje! Volte em ${remaining} horas.`)], ephemeral: true });
       }
       
-      const earnings = 500;
-      await economyService.daily(userId, earnings);
+      const base = 500;
+      let extra = 0;
+      try {
+        const tier = vipService?.getUserTierConfig ? await vipService.getUserTierConfig({ guildId, member: interaction.member }) : null;
+        extra = tier?.valor_daily_extra ? Number(tier.valor_daily_extra) : 0;
+        if (!Number.isFinite(extra) || extra < 0) extra = 0;
+      } catch {
+        extra = 0;
+      }
+
+      const earnings = base + extra;
+      await economyService.daily(guildId, userId, earnings);
 
       await interaction.reply({ 
           embeds: [createSuccessEmbed(`Você resgatou seu prêmio diário de **${earnings} 🪙**!`)] 
@@ -110,7 +122,7 @@ module.exports = {
           return interaction.reply({ embeds: [createErrorEmbed("Você não pode pagar a si mesmo.")], ephemeral: true });
       }
       
-      const success = await economyService.transfer(userId, target.id, amount);
+      const success = await economyService.transfer(guildId, userId, target.id, amount);
       
       if (!success) {
           return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente!`)], ephemeral: true });
@@ -131,10 +143,10 @@ module.exports = {
         const amount = interaction.options.getInteger("quantidade");
         
         if (sub === "add") {
-            await economyService.addCoins(target.id, amount);
+            await economyService.addCoins(guildId, target.id, amount);
             await interaction.reply({ embeds: [createSuccessEmbed(`Adicionado **${amount} 🪙** para ${target}.`)] });
         } else {
-            await economyService.removeCoins(target.id, amount);
+            await economyService.removeCoins(guildId, target.id, amount);
             await interaction.reply({ embeds: [createSuccessEmbed(`Removido **${amount} 🪙** de ${target}.`)] });
         }
     }

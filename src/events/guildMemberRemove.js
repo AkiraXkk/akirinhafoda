@@ -15,7 +15,7 @@ module.exports = {
         const vipChannelManager = client.services.vipChannel;
 
         // Check if user was VIP
-        if (vipService.isVip({ userId })) {
+        if (vipService.isVip({ guildId, userId })) {
           logger.info({ userId, guildId, userTag: member.user.tag }, "VIP deixou o servidor - iniciando cleanup");
 
           // Remove VIP role
@@ -27,13 +27,13 @@ module.exports = {
 
           // Remove VIP channels
           if (vipChannelManager) {
-            await vipChannelManager.deletePersonalChannels(userId, { guildId }).catch((error) => {
+            await vipChannelManager.deleteVipChannels(userId, { guildId }).catch((error) => {
               logger.error({ err: error, userId }, "Erro ao remover canais VIP do usuário que saiu");
             });
           }
 
           // Remove VIP from service
-          await vipService.removeVip(userId).catch((error) => {
+          await vipService.removeVip(guildId, userId).catch((error) => {
             logger.error({ err: error, userId }, "Erro ao remover VIP do serviço");
           });
         }

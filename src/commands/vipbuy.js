@@ -29,13 +29,15 @@ module.exports = {
       }
 
       // Verificar saldo do usuário
-      const balance = await economyService.getBalance(userId);
+      const balance = await economyService.getBalance(guildId, userId);
       const coins = balance?.coins || 0;
       
       // Criar opções do menu dinamicamente
       const options = [];
       for (const [tierId, tierData] of Object.entries(tiers)) {
-        const precoTotal = (tierData.price || 0) * dias;
+        const tierConfig = await vipConfig.getTierConfig(guildId, tierId);
+        const unit = tierConfig?.preco_shop ?? tierData.preco_shop ?? tierData.price ?? 0;
+        const precoTotal = unit * dias;
         const podeComprar = coins >= precoTotal;
         
         options.push(
@@ -147,7 +149,7 @@ module.exports = {
       }
 
       // Verificar saldo
-      const balance = await economyService.getBalance(userId);
+      const balance = await economyService.getBalance(guildId, userId);
       const coins = balance?.coins || 0;
       if (coins < parseInt(precoTotal)) {
         return await interaction.update({
@@ -157,7 +159,7 @@ module.exports = {
       }
 
       // Processar pagamento
-      const ok = await economyService.removeCoins(userId, parseInt(precoTotal));
+      const ok = await economyService.removeCoins(guildId, userId, parseInt(precoTotal));
       if (!ok) {
         return await interaction.update({
           embeds: [createErrorEmbed("Não foi possível debitar suas moedas. Tente novamente.")],
@@ -166,7 +168,7 @@ module.exports = {
       }
 
       // Adicionar VIP
-      await vipService.addVip(userId, {
+      await vipService.addVip(guildId, userId, {
         days: parseInt(dias),
         tierId: tierId
       });

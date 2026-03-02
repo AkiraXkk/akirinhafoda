@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
 module.exports = {
@@ -51,22 +51,59 @@ module.exports = {
         });
       }
 
-      const fields = Object.entries(tiers).map(([tierId, tierData]) => ({
-        name: `💎 ${tierData.name || tierId}`,
-        value: `**${tierData.price || 0} WDA Coins** por dia\n` +
-               `📅 Duração: ${tierData.days === 0 ? 'Permanente' : `${tierData.days} dias`}\n` +
-               `🎁 Benefícios: ${tierData.maxDamas} Damas, Família: ${tierData.canFamily ? '✅' : '❌'}, Cargo Extra: ${tierData.hasSecondRole ? '✅' : '❌'}`
+      const tierEntries = [];
+      for (const tierId of Object.keys(tiers)) {
+        const tier = await vipConfig.getTierConfig(guildId, tierId);
+        if (!tier) continue;
+        if (!tier.preco_shop || tier.preco_shop <= 0) continue;
+        tierEntries.push(tier);
+      }
+
+      if (tierEntries.length === 0) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Nenhum Tier com `preco_shop > 0` foi configurado ainda. Use /vipadmin tier para configurar.")],
+          ephemeral: true,
+        });
+      }
+
+      tierEntries.sort((a, b) => (a.preco_shop || 0) - (b.preco_shop || 0));
+
+      const fields = tierEntries.map((t) => ({
+        name: `💎 ${t.name || t.id}`,
+        value: [
+          `Preço: **${t.preco_shop} 🪙**`,
+          `Daily Extra: **+${t.valor_daily_extra || 0} 🪙**`,
+          `Bônus Inicial: **+${t.bonus_inicial || 0} 🪙**`,
+          `Limites: Família **${t.limite_familia ?? t.maxFamilyMembers ?? 0}** | Damas **${t.limite_damas ?? t.maxDamas ?? 1}**`,
+          `Presentear: ${t.pode_presentear ? "✅" : "❌"}`,
+          `Ignorar Slowmode: ${t.ignorar_slowmode ? "✅" : "❌"}`,
+          `Criar Call VIP: ${t.criar_call_vip ? "✅" : "❌"}`,
+        ].join("\n"),
       }));
+
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId(`shop_vip_buy_${guildId}`)
+        .setPlaceholder("Selecione um VIP para comprar")
+        .addOptions(
+          tierEntries.slice(0, 25).map((t) =>
+            new StringSelectMenuOptionBuilder()
+              .setLabel(`${t.name || t.id} - ${t.preco_shop} 🪙`)
+              .setValue(t.id)
+          )
+        );
+
+      const row = new ActionRowBuilder().addComponents(menu);
 
       return interaction.reply({
         embeds: [createEmbed({
           title: "💎 Planos VIP Disponíveis",
-          description: "Escolha seu plano e use `/vipbuy` para comprar!",
+          description: "Selecione no menu abaixo para comprar.",
           fields,
           color: 0x9b59b6,
-          footer: { text: "Use /vipbuy [dias] para comprar" }
+          footer: { text: "Compra via /shop vip" }
         })],
-        ephemeral: true
+        components: [row],
+        ephemeral: true,
       });
     }
 
@@ -132,5 +169,79 @@ module.exports = {
         ephemeral: true
       });
     }
+  }
+  ,
+
+  async handleSelectMenu(interaction) {
+    if (!interaction.customId.startsWith("shop_vip_buy_")) return;
+    if (!interaction.inGuild()) {
+      return interaction.reply({ embeds: [createErrorEmbed("Use este menu em um servidor.")], ephemeral: true });
+    }
+
+    const guildId = interaction.guildId;
+    const tierId = interaction.values?.[0];
+    if (!tierId) {
+      return interaction.reply({ embeds: [createErrorEmbed("Seleção inválida." )], ephemeral: true });
+    }
+
+    const economyService = interaction.client.services.economy;
+    const vipService = interaction.client.services.vip;
+    const vipConfig = interaction.client.services.vipConfig;
+    if (!economyService || !vipService || !vipConfig) {
+      return interaction.reply({ embeds: [createErrorEmbed("Serviços indisponíveis.")], ephemeral: true });
+    }
+
+    const tier = await vipConfig.getTierConfig(guildId, tierId);
+    if (!tier || !tier.preco_shop || tier.preco_shop <= 0) {
+      return interaction.reply({ embeds: [createErrorEmbed("Tier inválido ou não está à venda.")], ephemeral: true });
+    }
+
+    const member = interaction.member;
+    const currentTier = await vipService.getUserTierConfig({ guildId, member });
+    if (currentTier?.preco_shop && currentTier.preco_shop > tier.preco_shop) {
+      return interaction.reply({
+        embeds: [createErrorEmbed(`Você já possui um VIP superior (**${currentTier.name || currentTier.id}**).`) ],
+        ephemeral: true,
+      });
+    }
+
+    const balance = await economyService.getBalance(guildId, interaction.user.id);
+    if ((balance.coins || 0) < tier.preco_shop) {
+      return interaction.reply({
+        embeds: [createErrorEmbed(`Saldo insuficiente. Você precisa de **${tier.preco_shop} 🪙** e tem **${balance.coins || 0} 🪙**.`)],
+        ephemeral: true,
+      });
+    }
+
+    const ok = await economyService.removeCoins(guildId, interaction.user.id, tier.preco_shop);
+    if (!ok) {
+      return interaction.reply({ embeds: [createErrorEmbed("Falha ao cobrar moedas.")], ephemeral: true });
+    }
+
+    const days = Number.isFinite(tier.days) ? tier.days : 0;
+    await vipService.addVip(guildId, interaction.user.id, { days: days > 0 ? days : undefined, tierId: tier.id });
+
+    // Roles
+    try {
+      const vipGuildConfig = vipService.getGuildConfig(guildId) || {};
+      if (vipGuildConfig.vipRoleId) {
+        await member.roles.add(vipGuildConfig.vipRoleId).catch(() => {});
+      }
+      if (tier.roleId) {
+        await member.roles.add(tier.roleId).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+
+    // Bonus inicial
+    if (tier.bonus_inicial && tier.bonus_inicial > 0) {
+      await economyService.addCoins(guildId, interaction.user.id, tier.bonus_inicial);
+    }
+
+    return interaction.reply({
+      embeds: [createSuccessEmbed(`VIP **${tier.name || tier.id}** comprado com sucesso por **${tier.preco_shop} 🪙**.`)],
+      ephemeral: true,
+    });
   }
 };

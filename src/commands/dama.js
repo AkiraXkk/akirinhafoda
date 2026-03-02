@@ -84,7 +84,7 @@ module.exports = {
         });
       }
 
-      const atual = vipService.getDamasCount(user.id);
+      const atual = vipService.getDamasCount(guildId, user.id);
       if (atual >= maxDamas) {
         return interaction.reply({
           embeds: [createErrorEmbed(`Limite de **${maxDamas}** dama(s) atingido. Melhore seu VIP para aumentar.`)],

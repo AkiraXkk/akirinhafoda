@@ -4,10 +4,32 @@ const {
   ChannelType,
   ActionRowBuilder,
   RoleSelectMenuBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } = require("discord.js");
 const { createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { getGuildConfig, setGuildConfig } = require("../config/guildConfig");
 const { checkCommandPermissions } = require("../utils/permissions");
+
+function parseBoolLike(value) {
+  if (typeof value !== "string") return null;
+  const v = value.trim().toLowerCase();
+  if (["1", "true", "sim", "s", "yes", "y", "on"].includes(v)) return true;
+  if (["0", "false", "nao", "não", "n", "no", "off"].includes(v)) return false;
+  return null;
+}
+
+function parseHexColor(value) {
+  if (typeof value !== "string") return null;
+  const v = value.trim();
+  if (!v) return null;
+  const raw = v.startsWith("#") ? v : `#${v}`;
+  if (!/^#[0-9a-fA-F]{6}$/.test(raw)) return null;
+  return raw.toUpperCase();
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -17,17 +39,9 @@ module.exports = {
     .addSubcommand((s) =>
       s
         .setName("tier")
-        .setDescription("Configura as regras de um plano VIP")
+        .setDescription("Configura um Tier VIP por benefícios (interativo)")
         .addStringOption((o) => o.setName("id").setDescription("ID único (ex: gold)").setRequired(true))
-        .addStringOption((o) => o.setName("nome").setDescription("Nome de exibição").setRequired(true))
-        .addNumberOption((o) => o.setName("preco").setDescription("Preço").setRequired(true))
-        .addRoleOption((o) => o.setName("cargo_principal").setDescription("Cargo fixo do cliente").setRequired(true))
-        .addIntegerOption((o) => o.setName("dias").setDescription("Duração em dias (0 = Permanente)").setRequired(true))
-        .addIntegerOption((o) => o.setName("limite_damas").setDescription("Qtd de Primeiras Damas permitidas").setRequired(true))
-        .addIntegerOption((o) => o.setName("limite_membros_cargo").setDescription("Qtd de membros no 2º cargo").setRequired(true))
-        .addIntegerOption((o) => o.setName("limite_membros_familia").setDescription("Qtd de membros na família").setRequired(true))
-        .addBooleanOption((o) => o.setName("familia").setDescription("Pode criar família?").setRequired(true))
-        .addBooleanOption((o) => o.setName("duplo_cargo").setDescription("Pode criar 2º cargo personalizável?").setRequired(true))
+        .addRoleOption((o) => o.setName("cargo").setDescription("Cargo do Tier VIP").setRequired(true))
     )
     .addSubcommand((s) =>
       s
@@ -105,29 +119,43 @@ module.exports = {
 
     if (sub === "tier") {
       const id = interaction.options.getString("id");
-      const config = {
-        name: interaction.options.getString("nome"),
-        price: interaction.options.getNumber("preco"),
-        roleId: interaction.options.getRole("cargo_principal").id,
-        days: interaction.options.getInteger("dias"),
-        maxDamas: interaction.options.getInteger("limite_damas"),
-        maxSecondRoleMembers: interaction.options.getInteger("limite_membros_cargo"),
-        maxFamilyMembers: interaction.options.getInteger("limite_membros_familia"),
-        canFamily: interaction.options.getBoolean("familia"),
-        hasSecondRole: interaction.options.getBoolean("duplo_cargo"),
-      };
-      try {
-        await vipConfig.setGuildTier(interaction.guildId, id, config);
-        const texto = [
-          `**Plano ${config.name} configurado.**`,
-          `Preço: \`R$ ${config.price}\` | Duração: ${config.days === 0 ? "♾️ Permanente" : config.days + " dias"}`,
-          `Damas: \`${config.maxDamas}\` • 2º Cargo: até \`${config.maxSecondRoleMembers}\` membros • Família: até \`${config.maxFamilyMembers}\` membros`,
-          `Recursos: Família ${config.canFamily ? "✅" : "❌"} • 2º Cargo ${config.hasSecondRole ? "✅" : "❌"}`,
-        ].join("\n");
-        return interaction.reply({ embeds: [createSuccessEmbed(texto)], ephemeral: true });
-      } catch (err) {
-        return interaction.reply({ embeds: [createErrorEmbed("Falha ao salvar tier.")], ephemeral: true });
+      const role = interaction.options.getRole("cargo");
+
+      if (!vipConfig?.setGuildTier) {
+        return interaction.reply({ embeds: [createErrorEmbed("VipConfigManager indisponível.")], ephemeral: true });
       }
+
+      await vipConfig.setGuildTier(interaction.guildId, id, {
+        roleId: role.id,
+        name: role.name,
+        benefits: {
+          economy: {},
+          social: {},
+          tech: {},
+        },
+      });
+
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId(`vipadmin_tier_category_${interaction.guildId}_${id}`)
+        .setPlaceholder("Selecione a categoria para configurar")
+        .addOptions(
+          new StringSelectMenuOptionBuilder()
+            .setLabel("💰 Economia & Loja")
+            .setValue("economy"),
+          new StringSelectMenuOptionBuilder()
+            .setLabel("👥 Social & Limites")
+            .setValue("social"),
+          new StringSelectMenuOptionBuilder()
+            .setLabel("⚡ Permissões Técnicas")
+            .setValue("tech"),
+        );
+
+      const row = new ActionRowBuilder().addComponents(menu);
+      return interaction.reply({
+        embeds: [createSuccessEmbed(`Tier **${id}** iniciado com o cargo ${role}. Agora selecione uma categoria para configurar.`)],
+        components: [row],
+        ephemeral: true,
+      });
     }
 
     if (sub === "setup") {
@@ -190,7 +218,7 @@ module.exports = {
       const duracaoDias = dias < 0 ? 0 : dias;
 
       try {
-        await vipService.addVip(alvo.id, { days: duracaoDias || undefined, tierId });
+        await vipService.addVip(interaction.guildId, alvo.id, { days: duracaoDias || undefined, tierId });
 
         const membro = await interaction.guild.members.fetch(alvo.id).catch(() => null);
         const vipGuildConfig = vipService.getGuildConfig(interaction.guildId) || {};
@@ -248,11 +276,11 @@ module.exports = {
       const alvo = interaction.options.getUser("usuario");
       const guildId = interaction.guildId;
       const membro = await interaction.guild.members.fetch(alvo.id).catch(() => null);
-      const entrada = vipService.getVip(alvo.id);
+      const entrada = vipService.getVip(guildId, alvo.id);
 
       try {
         if (entrada) {
-          await vipService.removeVip(alvo.id).catch(() => {});
+          await vipService.removeVip(guildId, alvo.id).catch(() => {});
         }
 
         if (vipRoleManager) {
@@ -355,18 +383,238 @@ module.exports = {
   },
 
   async handleSelectMenu(interaction) {
-    if (interaction.customId !== "vipadmin_staff_roles") return;
+    // Existing staff config select
+    if (interaction.customId === "vipadmin_staff_roles") {
+      if (!interaction.guild) {
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas em servidores.")], ephemeral: true });
+      }
+
+      const selectedRoleIds = interaction.values || [];
+
+      await setGuildConfig(interaction.guild.id, { authorizedVipStaff: selectedRoleIds });
+
+      return interaction.update({
+        embeds: [createSuccessEmbed("Cargos de staff VIP atualizados.")],
+        components: [],
+      });
+    }
+
+    if (!interaction.customId.startsWith("vipadmin_tier_category_")) return;
     if (!interaction.guild) {
       return interaction.reply({ embeds: [createErrorEmbed("Apenas em servidores.")], ephemeral: true });
     }
 
-    const selectedRoleIds = interaction.values || [];
+    const parts = interaction.customId.split("_");
+    const guildId = parts[4];
+    const tierId = parts.slice(5).join("_");
+    if (interaction.guildId !== guildId) {
+      return interaction.reply({ embeds: [createErrorEmbed("Guild inválida para esta configuração.")], ephemeral: true });
+    }
 
-    await setGuildConfig(interaction.guild.id, { authorizedVipStaff: selectedRoleIds });
+    const category = interaction.values?.[0];
+    if (!category) {
+      return interaction.reply({ embeds: [createErrorEmbed("Categoria inválida.")], ephemeral: true });
+    }
 
-    return interaction.update({
-      embeds: [createSuccessEmbed("Cargos de staff VIP atualizados.")],
-      components: [],
-    });
+    if (category === "economy") {
+      const modal = new ModalBuilder()
+        .setCustomId(`vipadmin_tier_modal_economy_${guildId}_${tierId}`)
+        .setTitle("Economia & Loja");
+
+      const dailyExtra = new TextInputBuilder()
+        .setCustomId("valor_daily_extra")
+        .setLabel("valor_daily_extra (moedas fixas a mais)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const precoShop = new TextInputBuilder()
+        .setCustomId("preco_shop")
+        .setLabel("preco_shop (custo do VIP)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const bonusInicial = new TextInputBuilder()
+        .setCustomId("bonus_inicial")
+        .setLabel("bonus_inicial (moedas ao ativar)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(dailyExtra),
+        new ActionRowBuilder().addComponents(precoShop),
+        new ActionRowBuilder().addComponents(bonusInicial)
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    if (category === "social") {
+      const modal = new ModalBuilder()
+        .setCustomId(`vipadmin_tier_modal_social_${guildId}_${tierId}`)
+        .setTitle("Social & Limites");
+
+      const limiteFamilia = new TextInputBuilder()
+        .setCustomId("limite_familia")
+        .setLabel("limite_familia (vagas)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const limiteDamas = new TextInputBuilder()
+        .setCustomId("limite_damas")
+        .setLabel("limite_damas (vagas)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const podePresentear = new TextInputBuilder()
+        .setCustomId("pode_presentear")
+        .setLabel("pode_presentear (true/false)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(limiteFamilia),
+        new ActionRowBuilder().addComponents(limiteDamas),
+        new ActionRowBuilder().addComponents(podePresentear)
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    if (category === "tech") {
+      const modal = new ModalBuilder()
+        .setCustomId(`vipadmin_tier_modal_tech_${guildId}_${tierId}`)
+        .setTitle("Permissões Técnicas");
+
+      const ignorarSlowmode = new TextInputBuilder()
+        .setCustomId("ignorar_slowmode")
+        .setLabel("ignorar_slowmode (true/false)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const criarCallVip = new TextInputBuilder()
+        .setCustomId("criar_call_vip")
+        .setLabel("criar_call_vip (true/false)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const corExclusiva = new TextInputBuilder()
+        .setCustomId("cor_exclusiva")
+        .setLabel("cor_exclusiva (HEX ex: #FF0000)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(ignorarSlowmode),
+        new ActionRowBuilder().addComponents(criarCallVip),
+        new ActionRowBuilder().addComponents(corExclusiva)
+      );
+
+      return interaction.showModal(modal);
+    }
+  },
+
+  async handleModal(interaction) {
+    if (!interaction.customId.startsWith("vipadmin_tier_modal_")) return;
+    if (!interaction.guild) {
+      return interaction.reply({ embeds: [createErrorEmbed("Apenas em servidores.")], ephemeral: true });
+    }
+
+    const parts = interaction.customId.split("_");
+    const category = parts[4];
+    const guildId = parts[5];
+    const tierId = parts.slice(6).join("_");
+    if (interaction.guildId !== guildId) {
+      return interaction.reply({ embeds: [createErrorEmbed("Guild inválida para esta configuração.")], ephemeral: true });
+    }
+
+    const vipConfig = interaction.client.services.vipConfig;
+    if (!vipConfig?.setGuildTier) {
+      return interaction.reply({ embeds: [createErrorEmbed("VipConfigManager indisponível.")], ephemeral: true });
+    }
+
+    const tier = await vipConfig.getTierConfig(guildId, tierId);
+    if (!tier) {
+      return interaction.reply({ embeds: [createErrorEmbed("Tier não encontrado.")], ephemeral: true });
+    }
+
+    const patch = { benefits: { economy: {}, social: {}, tech: {} } };
+
+    if (category === "economy") {
+      const dailyExtraRaw = interaction.fields.getTextInputValue("valor_daily_extra");
+      const precoShopRaw = interaction.fields.getTextInputValue("preco_shop");
+      const bonusRaw = interaction.fields.getTextInputValue("bonus_inicial");
+
+      const valorDailyExtra = Number(dailyExtraRaw);
+      const precoShop = Number(precoShopRaw);
+      const bonusInicial = Number(bonusRaw);
+
+      if (!Number.isFinite(valorDailyExtra) || valorDailyExtra < 0) {
+        return interaction.reply({ embeds: [createErrorEmbed("valor_daily_extra inválido.")], ephemeral: true });
+      }
+      if (!Number.isFinite(precoShop) || precoShop < 0) {
+        return interaction.reply({ embeds: [createErrorEmbed("preco_shop inválido.")], ephemeral: true });
+      }
+      if (!Number.isFinite(bonusInicial) || bonusInicial < 0) {
+        return interaction.reply({ embeds: [createErrorEmbed("bonus_inicial inválido.")], ephemeral: true });
+      }
+
+      patch.preco_shop = precoShop;
+      patch.valor_daily_extra = valorDailyExtra;
+      patch.bonus_inicial = bonusInicial;
+      patch.benefits.economy = { valor_daily_extra: valorDailyExtra, preco_shop: precoShop, bonus_inicial: bonusInicial };
+    }
+
+    if (category === "social") {
+      const limiteFamiliaRaw = interaction.fields.getTextInputValue("limite_familia");
+      const limiteDamasRaw = interaction.fields.getTextInputValue("limite_damas");
+      const podeRaw = interaction.fields.getTextInputValue("pode_presentear");
+
+      const limiteFamilia = Number(limiteFamiliaRaw);
+      const limiteDamas = Number(limiteDamasRaw);
+      const podePresentear = parseBoolLike(podeRaw);
+
+      if (!Number.isFinite(limiteFamilia) || limiteFamilia < 0) {
+        return interaction.reply({ embeds: [createErrorEmbed("limite_familia inválido.")], ephemeral: true });
+      }
+      if (!Number.isFinite(limiteDamas) || limiteDamas < 0) {
+        return interaction.reply({ embeds: [createErrorEmbed("limite_damas inválido.")], ephemeral: true });
+      }
+      if (typeof podePresentear !== "boolean") {
+        return interaction.reply({ embeds: [createErrorEmbed("pode_presentear deve ser true/false.")], ephemeral: true });
+      }
+
+      patch.limite_familia = limiteFamilia;
+      patch.limite_damas = limiteDamas;
+      patch.pode_presentear = podePresentear;
+      patch.benefits.social = { limite_familia: limiteFamilia, limite_damas: limiteDamas, pode_presentear: podePresentear };
+    }
+
+    if (category === "tech") {
+      const ignorarRaw = interaction.fields.getTextInputValue("ignorar_slowmode");
+      const criarRaw = interaction.fields.getTextInputValue("criar_call_vip");
+      const corRaw = interaction.fields.getTextInputValue("cor_exclusiva") || "";
+
+      const ignorarSlowmode = parseBoolLike(ignorarRaw);
+      const criarCallVip = parseBoolLike(criarRaw);
+      const corExclusiva = corRaw ? parseHexColor(corRaw) : null;
+
+      if (typeof ignorarSlowmode !== "boolean") {
+        return interaction.reply({ embeds: [createErrorEmbed("ignorar_slowmode deve ser true/false.")], ephemeral: true });
+      }
+      if (typeof criarCallVip !== "boolean") {
+        return interaction.reply({ embeds: [createErrorEmbed("criar_call_vip deve ser true/false.")], ephemeral: true });
+      }
+      if (corRaw && !corExclusiva) {
+        return interaction.reply({ embeds: [createErrorEmbed("cor_exclusiva inválida. Use formato #RRGGBB.")], ephemeral: true });
+      }
+
+      patch.ignorar_slowmode = ignorarSlowmode;
+      patch.criar_call_vip = criarCallVip;
+      patch.cor_exclusiva = corExclusiva;
+      patch.benefits.tech = { ignorar_slowmode: ignorarSlowmode, criar_call_vip: criarCallVip, cor_exclusiva: corExclusiva };
+    }
+
+    await vipConfig.setGuildTier(guildId, tierId, patch);
+    return interaction.reply({ embeds: [createSuccessEmbed(`Tier **${tierId}** atualizado (${category}).`)], ephemeral: true });
   },
 };
