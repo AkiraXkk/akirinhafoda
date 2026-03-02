@@ -1,10 +1,8 @@
 const { createDataStore } = require("../store/dataStore");
 
-// Armazena configurações de tiers VIP por guilda
-// Estrutura: { guildId: { tierId: { name: "Gold", roleId: "123", limits: { familyMembers: 5, damas: 1 } } } }
 const vipConfigStore = createDataStore("vipConfig.json");
 
-function createVipConfigManager() {
+function createVipConfigManager({ logger } = {}) {
   async function getGuildTiers(guildId) {
     if (!guildId) return {};
     const data = await vipConfigStore.load();
@@ -12,44 +10,58 @@ function createVipConfigManager() {
   }
 
   async function setGuildTier(guildId, tierId, tierData) {
-    if (!guildId || !tierId) return;
+    if (!guildId || !tierId) throw new Error("guildId e tierId são obrigatórios");
     await vipConfigStore.update(guildId, (current) => {
       const tiers = current || {};
-      tiers[tierId] = { ...(tiers[tierId] || {}), ...tierData };
+      tiers[tierId] = {
+        ...(tiers[tierId] || {}),
+        id: tierId,
+        name: tierData.name,
+        roleId: tierData.roleId,
+        price: Number(tierData.price || 0),
+        multiplicadorXp: Number(tierData.multiplicadorXp || 1),
+        bonusDaily: Number(tierData.bonusDaily || 0),
+        voiceChannelId: tierData.voiceChannelId || null,
+        limits: {
+          familyMembers: Number(tierData.limits?.familyMembers || 0),
+          damas: Number(tierData.limits?.damas || 0),
+          allowFamily: Boolean(tierData.limits?.allowFamily),
+        },
+      };
       return tiers;
     });
+    logger?.info?.({ guildId, tierId }, "Tier VIP salvo");
   }
-  
+
   async function removeGuildTier(guildId, tierId) {
-      if (!guildId || !tierId) return;
-      await vipConfigStore.update(guildId, (current) => {
-          const tiers = current || {};
-          delete tiers[tierId];
-          return tiers;
-      });
+    if (!guildId || !tierId) throw new Error("guildId e tierId são obrigatórios");
+    await vipConfigStore.update(guildId, (current) => {
+      const tiers = current || {};
+      delete tiers[tierId];
+      return tiers;
+    });
+    logger?.info?.({ guildId, tierId }, "Tier VIP removido");
   }
 
   async function getMemberTier(member) {
-    if (!member) return null;
+    if (!member?.guild?.id) return null;
     const tiers = await getGuildTiers(member.guild.id);
-    
-    // Procura o tier mais alto que o membro possui (baseado na ordem ou prioridade se implementada)
-    // Por enquanto, retorna o primeiro encontrado ou o que tiver maiores limites
-    // Vamos priorizar limites maiores
-    
+    const entries = Object.entries(tiers);
     let bestTier = null;
-    let maxFamily = -1;
 
-    for (const [id, tier] of Object.entries(tiers)) {
-        if (member.roles.cache.has(tier.roleId)) {
-            const limit = tier.limits?.familyMembers || 0;
-            if (limit > maxFamily) {
-                maxFamily = limit;
-                bestTier = { id, ...tier };
-            }
-        }
+    for (const [id, tier] of entries) {
+      if (!member.roles.cache.has(tier.roleId)) continue;
+      if (!bestTier) {
+        bestTier = { id, ...tier };
+        continue;
+      }
+      const currentMultiplier = Number(bestTier.multiplicadorXp || 1);
+      const nextMultiplier = Number(tier.multiplicadorXp || 1);
+      if (nextMultiplier >= currentMultiplier) {
+        bestTier = { id, ...tier };
+      }
     }
-    
+
     return bestTier;
   }
 

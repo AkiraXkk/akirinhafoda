@@ -35,9 +35,9 @@ module.exports = {
         sub.setName("remove").setDescription("Remove moedas (Admin)").addUserOption(opt => opt.setName("usuario").setDescription("Usuário").setRequired(true)).addIntegerOption(opt => opt.setName("quantidade").setDescription("Valor").setRequired(true))
     ),
 
-  async execute(interaction) {
+  async execute(interaction, services) {
     const sub = interaction.options.getSubcommand();
-    const economyService = interaction.client.services.economy;
+    const economyService = services?.economy;
     const userId = interaction.user.id;
 
     if (!economyService) {
@@ -112,10 +112,10 @@ module.exports = {
       }
       
       const earnings = 500;
-      await economyService.daily(userId, earnings); // Need to implement
+      const dailyResult = await economyService.daily(userId, earnings, { guildId: interaction.guildId });
 
       await interaction.reply({ 
-          embeds: [createSuccessEmbed(`Você resgatou seu prêmio diário de **${earnings} 🪙**!`)] 
+          embeds: [createSuccessEmbed(`Você resgatou **${dailyResult.total} 🪙** de daily!${dailyResult.bonus > 0 ? ` (Inclui bônus VIP de ${dailyResult.bonus} 🪙)` : ""}`)] 
       });
     }
 

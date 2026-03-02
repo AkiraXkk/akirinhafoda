@@ -1,169 +1,189 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
-const { createSuccessEmbed, createErrorEmbed, createEmbed } = require("../embeds");
-const { createDataStore } = require("../store/dataStore");
-const { createPagination } = require("../utils/pagination");
-
-const familyStore = createDataStore("families.json");
+const { createEmbed, createErrorEmbed, createSuccessEmbed } = require("../embeds");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("vipadmin")
-    .setDescription("Gerencia configurações avançadas de VIP (Tiers e Administração)")
+    .setDescription("Administração completa do sistema VIP")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addSubcommand((sub) => sub.setName("list_tiers").setDescription("Lista todos os Tiers VIP configurados"))
     .addSubcommand((sub) =>
       sub
-        .setName("add_tier")
-        .setDescription("Adiciona ou atualiza um Tier VIP")
-        .addRoleOption((opt) => opt.setName("cargo").setDescription("Cargo do Tier (Permissões)").setRequired(true))
-        .addStringOption((opt) => opt.setName("nome").setDescription("Nome do Tier (ex: Gold)").setRequired(true))
-        .addIntegerOption((opt) => opt.setName("limite_familia").setDescription("Máximo de membros na família").setRequired(true))
-        .addIntegerOption((opt) => opt.setName("limite_damas").setDescription("Máximo de damas").setRequired(true))
-        .addBooleanOption((opt) => opt.setName("pode_criar_familia").setDescription("Pode criar família?").setRequired(true))
-        .addBooleanOption((opt) => opt.setName("cargo_estetico").setDescription("Cria cargo estético separado?").setRequired(false))
+        .setName("tier")
+        .setDescription("Cria ou atualiza um tier VIP")
+        .addRoleOption((opt) => opt.setName("cargo").setDescription("Cargo do tier VIP").setRequired(true))
+        .addStringOption((opt) => opt.setName("nome").setDescription("Nome de exibição do tier").setRequired(true))
+        .addIntegerOption((opt) => opt.setName("preco").setDescription("Preço em moedas para compra").setMinValue(0).setRequired(true))
+        .addNumberOption((opt) => opt.setName("multiplicador_xp").setDescription("Multiplicador de XP para o tier").setMinValue(1).setRequired(true))
+        .addIntegerOption((opt) => opt.setName("bonus_daily").setDescription("Bônus diário em porcentagem").setMinValue(0).setRequired(true))
+        .addChannelOption((opt) => opt.setName("canal_voz").setDescription("Canal de voz VIP do tier").setRequired(false))
+        .addIntegerOption((opt) => opt.setName("limite_familia").setDescription("Limite de membros de família").setMinValue(0).setRequired(false))
+        .addIntegerOption((opt) => opt.setName("limite_damas").setDescription("Limite de damas").setMinValue(0).setRequired(false))
+        .addBooleanOption((opt) => opt.setName("pode_criar_familia").setDescription("Permite criar família").setRequired(false)),
     )
     .addSubcommand((sub) =>
       sub
-        .setName("remove_tier")
-        .setDescription("Remove um Tier VIP")
-        .addRoleOption((opt) => opt.setName("cargo").setDescription("Cargo do Tier a remover").setRequired(true))
+        .setName("add")
+        .setDescription("Adiciona VIP para um usuário")
+        .addUserOption((opt) => opt.setName("usuario").setDescription("Usuário que receberá VIP").setRequired(true))
+        .addRoleOption((opt) => opt.setName("cargo").setDescription("Tier (cargo) que será aplicado").setRequired(true))
+        .addIntegerOption((opt) => opt.setName("dias").setDescription("Dias de duração do VIP").setMinValue(1).setRequired(false)),
     )
-    .addSubcommand((sub) => sub.setName("list_families").setDescription("Lista todas as famílias criadas"))
     .addSubcommand((sub) =>
       sub
-        .setName("delete_family")
-        .setDescription("Força a exclusão de uma família (Admin)")
-        .addUserOption((opt) => opt.setName("dono").setDescription("Dono da família a deletar").setRequired(true))
+        .setName("remove")
+        .setDescription("Remove VIP de um usuário")
+        .addUserOption((opt) => opt.setName("usuario").setDescription("Usuário que perderá VIP").setRequired(true)),
+    )
+    .addSubcommand((sub) => sub.setName("list").setDescription("Lista tiers e usuários VIP ativos"))
+    .addSubcommand((sub) =>
+      sub
+        .setName("setup")
+        .setDescription("Configura o cargo VIP funcional do servidor")
+        .addRoleOption((opt) => opt.setName("cargo_vip").setDescription("Cargo VIP funcional para recursos gerais").setRequired(true)),
     ),
 
-  async execute(interaction) {
-    const vipConfig = interaction.client.services.vipConfig;
+  async execute(interaction, services) {
+    const vipService = services?.vip;
+    const vipRoleManager = services?.vipRole;
+    const vipConfig = services?.vipConfig;
+
+    if (!vipService || !vipConfig) {
+      return interaction.reply({ embeds: [createErrorEmbed("Serviços VIP indisponíveis no momento.")], ephemeral: true });
+    }
+
     const sub = interaction.options.getSubcommand();
-    const guildId = interaction.guildId;
 
-    if (sub === "list_tiers") {
-      const tiers = await vipConfig.getGuildTiers(guildId);
-      if (!tiers || Object.keys(tiers).length === 0) {
-        return interaction.reply({ embeds: [createEmbed({ description: "Nenhum Tier VIP configurado." })], ephemeral: true });
+    try {
+      if (sub === "setup") {
+        const role = interaction.options.getRole("cargo_vip", true);
+        await vipService.setGuildConfig(interaction.guildId, { vipRoleId: role.id, updatedAt: Date.now() });
+        return interaction.reply({ embeds: [createSuccessEmbed(`Cargo VIP funcional configurado para ${role}.`)], ephemeral: true });
       }
 
-      const fields = Object.values(tiers).map((t) => ({
-        name: t.name,
-        value: `Cargo: <@&${t.roleId}>\nFamília: ${t.limits.familyMembers} membros\nDamas: ${t.limits.damas}\nCria Família: ${t.limits.allowFamily ? "Sim" : "Não"}`,
-        inline: true,
-      }));
+      if (sub === "tier") {
+        const role = interaction.options.getRole("cargo", true);
+        const voiceChannel = interaction.options.getChannel("canal_voz");
+        const payload = {
+          name: interaction.options.getString("nome", true),
+          roleId: role.id,
+          price: interaction.options.getInteger("preco", true),
+          multiplicadorXp: interaction.options.getNumber("multiplicador_xp", true),
+          bonusDaily: interaction.options.getInteger("bonus_daily", true),
+          voiceChannelId: voiceChannel?.id || null,
+          limits: {
+            familyMembers: interaction.options.getInteger("limite_familia") ?? 0,
+            damas: interaction.options.getInteger("limite_damas") ?? 0,
+            allowFamily: interaction.options.getBoolean("pode_criar_familia") ?? false,
+          },
+        };
 
-      return interaction.reply({
-        embeds: [
-          createEmbed({
-            title: "💎 Tiers VIP Configurados",
-            fields,
-            color: 0x9B59B6,
-          }),
-        ],
-        ephemeral: true,
-      });
-    }
+        await vipConfig.setGuildTier(interaction.guildId, role.id, payload);
 
-    if (sub === "add_tier") {
-      const role = interaction.options.getRole("cargo");
-      const name = interaction.options.getString("nome");
-      const limitFamily = interaction.options.getInteger("limite_familia");
-      const limitDamas = interaction.options.getInteger("limite_damas");
-      const allowFamily = interaction.options.getBoolean("pode_criar_familia");
-      const aestheticRole = interaction.options.getBoolean("cargo_estetico");
-
-      const tierData = {
-        name,
-        roleId: role.id,
-        aesthetic: Boolean(aestheticRole),
-        limits: {
-          familyMembers: limitFamily,
-          damas: limitDamas,
-          allowFamily,
-        },
-      };
-
-      await vipConfig.setGuildTier(guildId, role.id, tierData);
-
-      return interaction.reply({
-        embeds: [
-          createSuccessEmbed(
-            `Tier **${name}** configurado para o cargo ${role}!\nCria cargo estético: ${aestheticRole ? "Sim" : "Não"}`
-          ),
-        ],
-        ephemeral: true,
-      });
-    }
-
-    if (sub === "remove_tier") {
-      const role = interaction.options.getRole("cargo");
-      await vipConfig.removeGuildTier(guildId, role.id);
-
-      return interaction.reply({
-        embeds: [createSuccessEmbed(`Tier do cargo ${role} removido.`)],
-        ephemeral: true,
-      });
-    }
-
-    if (sub === "list_families") {
-      const families = await familyStore.load();
-      const familyList = Object.values(families || {});
-
-      if (familyList.length === 0) {
-        return interaction.reply({ embeds: [createEmbed({ description: "Nenhuma família criada." })], ephemeral: true });
+        return interaction.reply({
+          embeds: [
+            createEmbed({
+              title: "✅ Tier VIP salvo",
+              color: 0x2ecc71,
+              fields: [
+                { name: "Tier", value: payload.name, inline: true },
+                { name: "Cargo", value: `<@&${role.id}>`, inline: true },
+                { name: "Preço", value: `${payload.price} 🪙`, inline: true },
+                { name: "Multiplicador XP", value: `${payload.multiplicadorXp}x`, inline: true },
+                { name: "Bônus Daily", value: `${payload.bonusDaily}%`, inline: true },
+                { name: "Canal de Voz", value: payload.voiceChannelId ? `<#${payload.voiceChannelId}>` : "Não definido", inline: true },
+              ],
+            }),
+          ],
+          ephemeral: true,
+        });
       }
 
-      await createPagination({
-        interaction,
-        items: familyList,
-        itemsPerPage: 10,
-        title: "🏰 Famílias do Servidor",
-        embedBuilder: (items, page, total) => {
-          const desc = items
-            .map((f) => `**${f.name}** (Dono: <@${f.ownerId}>) - ${f.members.length} membros`)
-            .join("\n");
-          return createEmbed({
-            title: "🏰 Famílias do Servidor",
-            description: desc,
-            footer: { text: `Página ${page + 1}/${total} • Total: ${familyList.length} famílias` },
-          });
-        },
-      });
+      if (sub === "add") {
+        const user = interaction.options.getUser("usuario", true);
+        const role = interaction.options.getRole("cargo", true);
+        const days = interaction.options.getInteger("dias") ?? null;
+        const tiers = await vipConfig.getGuildTiers(interaction.guildId);
+        const tier = tiers[role.id];
 
-      return;
-    }
+        if (!tier) {
+          return interaction.reply({ embeds: [createErrorEmbed("Esse cargo ainda não foi configurado como tier. Use /vipadmin tier primeiro.")], ephemeral: true });
+        }
 
-    if (sub === "delete_family") {
-      const owner = interaction.options.getUser("dono");
-      const families = await familyStore.load();
-      const family = Object.values(families || {}).find((f) => f.ownerId === owner.id);
+        const result = await vipService.addVip(user.id, { days, tierId: role.id });
+        const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+        if (member) {
+          await member.roles.add(role.id).catch(() => null);
+          const guildConfig = vipService.getGuildConfig(interaction.guildId);
+          if (guildConfig?.vipRoleId) {
+            await member.roles.add(guildConfig.vipRoleId).catch(() => null);
+          }
+        }
 
-      if (!family) {
-        return interaction.reply({ embeds: [createErrorEmbed("Este usuário não é dono de nenhuma família.")], ephemeral: true });
+        if (vipRoleManager) {
+          await vipRoleManager.ensurePersonalRole(user.id, { guildId: interaction.guildId }).catch(() => null);
+        }
+
+        return interaction.reply({ embeds: [createSuccessEmbed(`${user} recebeu VIP no tier **${tier.name}**${result.vip.expiresAt ? ` até <t:${Math.floor(result.vip.expiresAt / 1000)}:F>` : ""}.`)], ephemeral: true });
       }
 
-      const guild = interaction.guild;
+      if (sub === "remove") {
+        const user = interaction.options.getUser("usuario", true);
+        const removed = await vipService.removeVip(user.id);
+        if (!removed.removed) {
+          return interaction.reply({ embeds: [createErrorEmbed("Esse usuário não está na lista VIP.")], ephemeral: true });
+        }
 
-      if (family.textChannelId) {
-        const channel = await guild.channels.fetch(family.textChannelId).catch(() => null);
-        if (channel) await channel.delete().catch(() => {});
+        const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+        if (member) {
+          if (removed.vip?.tierId) {
+            await member.roles.remove(removed.vip.tierId).catch(() => null);
+          }
+          const guildConfig = vipService.getGuildConfig(interaction.guildId);
+          if (guildConfig?.vipRoleId) {
+            await member.roles.remove(guildConfig.vipRoleId).catch(() => null);
+          }
+        }
+
+        return interaction.reply({ embeds: [createSuccessEmbed(`VIP removido de ${user}.`)], ephemeral: true });
       }
-      if (family.voiceChannelId) {
-        const channel = await guild.channels.fetch(family.voiceChannelId).catch(() => null);
-        if (channel) await channel.delete().catch(() => {});
+
+      if (sub === "list") {
+        const tiers = await vipConfig.getGuildTiers(interaction.guildId);
+        const vipIds = vipService.listVipIds();
+        const activeVips = vipIds.map((id) => vipService.getVip(id)).filter(Boolean);
+
+        return interaction.reply({
+          embeds: [
+            createEmbed({
+              title: "📋 Painel VIP",
+              color: 0x9b59b6,
+              fields: [
+                {
+                  name: `Tiers Configurados (${Object.keys(tiers).length})`,
+                  value: Object.values(tiers).length
+                    ? Object.values(tiers)
+                        .map((tier) => `• **${tier.name}** (${tier.price} 🪙, ${tier.multiplicadorXp}x XP, +${tier.bonusDaily}% daily)`)
+                        .join("\n")
+                    : "Nenhum tier configurado.",
+                },
+                {
+                  name: `VIPs Ativos (${activeVips.length})`,
+                  value: activeVips.length
+                    ? activeVips
+                        .slice(0, 20)
+                        .map((entry) => `• <@${entry.userId}> - ${entry.tierId ? `<@&${entry.tierId}>` : "Sem tier"}${entry.expiresAt ? ` (expira <t:${Math.floor(entry.expiresAt / 1000)}:R>)` : ""}`)
+                        .join("\n")
+                    : "Nenhum VIP ativo.",
+                },
+              ],
+            }),
+          ],
+          ephemeral: true,
+        });
       }
-
-      if (family.roleId) {
-        const role = await guild.roles.fetch(family.roleId).catch(() => null);
-        if (role) await role.delete().catch(() => {});
-      }
-
-      const id = family.id;
-      delete families[id];
-      await familyStore.save(families);
-
-      return interaction.reply({ embeds: [createSuccessEmbed(`Família de ${owner} foi deletada forçadamente.`)], ephemeral: true });
+    } catch (error) {
+      console.error("[vipadmin] erro", error);
+      return interaction.reply({ embeds: [createErrorEmbed("Falha ao executar o comando vipadmin. Verifique logs do bot.")], ephemeral: true });
     }
   },
 };
