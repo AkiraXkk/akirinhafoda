@@ -10,7 +10,7 @@ module.exports = {
         for (const command of commands) {
             if (typeof command.handleButton === "function") {
                 try {
-                    await command.handleButton(interaction);
+                    await command.handleButton(interaction, client.services);
                     if (interaction.replied || interaction.deferred) return;
                 } catch (error) {
                     logger.error({ err: error, command: command.data.name }, "Erro ao processar botão");
@@ -26,7 +26,7 @@ module.exports = {
         for (const command of commands) {
             if (typeof command.handleModal === "function") {
                 try {
-                    await command.handleModal(interaction);
+                    await command.handleModal(interaction, client.services);
                     if (interaction.replied || interaction.deferred) return;
                 } catch (error) {
                     logger.error({ err: error, command: command.data.name }, "Erro ao processar modal");
@@ -42,7 +42,7 @@ module.exports = {
         for (const command of commands) {
             if (typeof command.handleSelectMenu === "function") {
                 try {
-                    await command.handleSelectMenu(interaction);
+                    await command.handleSelectMenu(interaction, client.services);
                     if (interaction.replied || interaction.deferred) return;
                 } catch (error) {
                     logger.error({ err: error, command: command.data.name }, "Erro ao processar menu de seleção");
@@ -70,7 +70,7 @@ module.exports = {
     if (!command) return;
 
     try {
-      await command.execute(interaction);
+      await command.execute(interaction, client.services);
     } catch (error) {
       logger.error({ err: error, command: interaction.commandName }, "Erro ao executar comando");
 

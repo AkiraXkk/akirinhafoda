@@ -15,34 +15,30 @@ module.exports = {
         vipRoleManager: client.services.vipRole,
         vipChannelManager: client.services.vipChannel,
       });
-
+      client.services.vipExpiryManager = expiry;
       expiry.start({ intervalMs: 5 * 60 * 1000 });
     }
 
-    // Voice XP Loop
-    // Movido do index.js para o evento ready
     setInterval(async () => {
-        const levelsCommand = client.commands.get("level");
-        const economyCommand = client.commands.get("economy");
-        if (!levelsCommand || !economyCommand) return;
-        
-        try {
-            for (const guild of client.guilds.cache.values()) {
-                for (const state of guild.voiceStates.cache.values()) {
-                    if (state.member.user.bot) continue;
-                    if (state.mute || state.deaf) continue;
-                    if (!state.channelId) continue;
-                    
-                    await levelsCommand.addXp(state.member.id, 60);
-                    
-                    if (economyCommand.addCoins) {
-                        await economyCommand.addCoins(state.member.id, 20);
-                    }
-                }
-            }
-        } catch (e) {
-            logger.error({ err: e }, "Erro no Voice XP");
+      const levelsService = client.services?.levels;
+      const economyService = client.services?.economy;
+      const vipConfig = client.services?.vipConfig;
+      if (!levelsService || !economyService) return;
+
+      try {
+        for (const guild of client.guilds.cache.values()) {
+          for (const state of guild.voiceStates.cache.values()) {
+            if (!state.member || state.member.user.bot) continue;
+            if (state.mute || state.deaf || !state.channelId) continue;
+
+            const vipTier = vipConfig ? await vipConfig.getMemberTier(state.member) : null;
+            await levelsService.addXp(state.member.id, 60, { vipTier });
+            await economyService.addCoins(state.member.id, 20);
+          }
         }
-    }, 60000); // 1 minuto
+      } catch (e) {
+        logger.error({ err: e }, "Erro no Voice XP");
+      }
+    }, 60000);
   },
 };
