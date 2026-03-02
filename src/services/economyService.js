@@ -31,6 +31,10 @@ function createEconomyService({ vipService, logger } = {}) {
     return success;
   }
 
+  async function spendCoins(userId, amount) {
+    return removeCoins(userId, amount);
+  }
+
   async function transfer(fromId, toId, amount) {
     const value = Number(amount || 0);
     if (value <= 0) return false;
@@ -76,7 +80,7 @@ function createEconomyService({ vipService, logger } = {}) {
     return { total, bonus: extra };
   }
 
-  return { getBalance, addCoins, removeCoins, transfer, work, daily };
+  return { getBalance, addCoins, removeCoins, spendCoins, transfer, work, daily };
 }
 
 module.exports = { createEconomyService };
