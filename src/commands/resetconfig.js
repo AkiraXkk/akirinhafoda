@@ -108,7 +108,7 @@ module.exports = {
     // 1) Apagar canais/cargos VIP salvos (settings) e VIP state
     try {
       if (vipService) {
-        const userIds = typeof vipService.listSettingsUserIds === "function" ? vipService.listSettingsUserIds() : [];
+        const userIds = typeof vipService.listSettingsUserIds === "function" ? vipService.listSettingsUserIds(interaction.guildId) : [];
 
         if (guild && vipChannelManager?.deleteVipChannels) {
           for (const userId of userIds) {

@@ -405,8 +405,8 @@ module.exports = {
     }
 
     const parts = interaction.customId.split("_");
-    const guildId = parts[4];
-    const tierId = parts.slice(5).join("_");
+    const guildId = parts[3];
+    const tierId = parts.slice(4).join("_");
     if (interaction.guildId !== guildId) {
       return interaction.reply({ embeds: [createErrorEmbed("Guild inválida para esta configuração.")], ephemeral: true });
     }
@@ -520,9 +520,9 @@ module.exports = {
     }
 
     const parts = interaction.customId.split("_");
-    const category = parts[4];
-    const guildId = parts[5];
-    const tierId = parts.slice(6).join("_");
+    const category = parts[3];
+    const guildId = parts[4];
+    const tierId = parts.slice(5).join("_");
     if (interaction.guildId !== guildId) {
       return interaction.reply({ embeds: [createErrorEmbed("Guild inválida para esta configuração.")], ephemeral: true });
     }
