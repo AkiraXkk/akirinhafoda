@@ -22,7 +22,7 @@ module.exports = {
 
       const entry = vip.getVip(newMember.id);
       if (entry) {
-        await vip.removeVip(newMember.id).catch(() => {});
+        await vip.removeVip(newMember.id, { guildId: newMember.guild.id }).catch(() => {});
       }
 
       if (entry?.tierId) {

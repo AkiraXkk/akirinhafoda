@@ -144,7 +144,7 @@ module.exports = {
           }
       }
 
-      const result = await vip.addVip(user.id, { days, tierId });
+      const result = await vip.addVip(user.id, { guildId: interaction.guildId, days, tierId });
       
       const ensured =
         interaction.guildId && vipRole
@@ -221,7 +221,7 @@ module.exports = {
 
     if (sub === "remove") {
       const user = interaction.options.getUser("usuario", true);
-      const result = await vip.removeVip(user.id);
+      const result = await vip.removeVip(user.id, { guildId: interaction.guildId });
       const settings = vip.getSettings ? vip.getSettings(user.id) : null;
       const vipChannel = interaction.client.services?.vipChannel;
 

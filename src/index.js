@@ -28,6 +28,7 @@ const { loadEvents } = require("./loadEvents");
 const { createLogService } = require("./services/logService");
 const { createEconomyService } = require("./services/economyService");
 const { createFamilyService } = require("./services/familyService");
+const { createLevelsService } = require("./services/levelsService");
 
 async function main() {
   const client = createClient();
@@ -37,9 +38,7 @@ async function main() {
   client.services = {};
   
   client.services.log = createLogService({ client });
-  client.services.economy = createEconomyService();
   client.services.family = createFamilyService();
-
 
   const vipStore = createVipStore({ filePath: config.vip.storePath });
   client.services.vip = createVipService({
@@ -57,7 +56,12 @@ async function main() {
     vipService: client.services.vip,
     logger,
   });
-  client.services.vipConfig = createVipConfigManager();
+  client.services.vipConfig = createVipConfigManager({ logger });
+  client.services.economy = createEconomyService({
+    vipService: client.services.vip,
+    logger,
+  });
+  client.services.levels = createLevelsService({ logger });
 
   // Carrega eventos (substitui os listeners manuais abaixo)
   loadEvents(client);

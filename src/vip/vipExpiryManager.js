@@ -1,64 +1,63 @@
 const { logger } = require("../logger");
 
 function createVipExpiryManager({ client, vipService, vipRoleManager, vipChannelManager }) {
-  async function cleanupVipUser(userId, vipEntry) {
-    const guilds = client.guilds.cache.values();
+  async function cleanupVipUser(guildId, userId, vipEntry) {
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return;
 
-    for (const guild of guilds) {
-      const guildId = guild.id;
+    if (vipRoleManager?.deletePersonalRole) {
+      await vipRoleManager.deletePersonalRole(userId, { guildId }).catch(() => {});
+    }
 
-      if (vipRoleManager?.deletePersonalRole) {
-        await vipRoleManager.deletePersonalRole(userId, { guildId }).catch(() => {});
+    if (vipChannelManager?.archiveVipChannels) {
+      await vipChannelManager.archiveVipChannels(userId, { guildId }).catch(() => {});
+    }
+
+    try {
+      const member = await guild.members.fetch(userId).catch(() => null);
+      if (!member) return;
+
+      const tiers = client.services?.vipConfig ? await client.services.vipConfig.getGuildTiers(guildId) : {};
+      const tierRoleId = tiers[vipEntry?.tierId]?.roleId;
+      if (tierRoleId) {
+        await member.roles.remove(tierRoleId).catch(() => {});
       }
 
-      if (vipChannelManager?.archiveVipChannels) {
-        await vipChannelManager.archiveVipChannels(userId, { guildId }).catch(() => {});
+      const guildConfig = vipService.getGuildConfig(guildId);
+      if (guildConfig?.vipRoleId) {
+        await member.roles.remove(guildConfig.vipRoleId).catch(() => {});
       }
-
-      try {
-        const member = await guild.members.fetch(userId).catch(() => null);
-        if (!member) continue;
-
-        const guildConfig = vipService.getGuildConfig(guildId);
-        const functionalVipRoleId = guildConfig?.vipRoleId;
-
-        if (functionalVipRoleId) {
-          await member.roles.remove(functionalVipRoleId).catch(() => {});
-        }
-
-        if (vipEntry?.tierId) {
-          await member.roles.remove(vipEntry.tierId).catch(() => {});
-        }
-      } catch (e) {
-        logger.error({ err: e, userId, guildId }, "Falha ao remover roles de VIP expirado");
-      }
+    } catch (e) {
+      logger.error({ err: e, userId, guildId }, "Falha ao limpar VIP expirado");
     }
   }
 
   async function runOnce() {
     const now = Date.now();
-    const ids = vipService.listVipIds();
     let expiredCount = 0;
 
-    for (const userId of ids) {
-      const entry = vipService.getVip(userId);
-      const expiresAt = entry?.expiresAt;
-      if (!expiresAt) continue;
-      if (expiresAt > now) continue;
+    for (const guild of client.guilds.cache.values()) {
+      const guildId = guild.id;
+      const entries = vipService.listVipEntries(guildId);
 
-      try {
-        const removed = await vipService.removeVip(userId);
-        if (!removed?.removed) continue;
+      for (const entry of entries) {
+        if (!entry?.expiresAt || entry.expiresAt > now) continue;
 
-        expiredCount += 1;
-        await cleanupVipUser(userId, removed.vip);
-      } catch (e) {
-        logger.error({ err: e, userId }, "Falha ao processar expiração de VIP");
+        try {
+          const removed = await vipService.removeVip(entry.userId, { guildId });
+          if (!removed?.removed) continue;
+          expiredCount += 1;
+
+          await cleanupVipUser(guildId, entry.userId, removed.vip);
+          logger.info({ guildId, userId: entry.userId, tierId: entry.tierId }, "VIP expirado removido e limpo");
+        } catch (e) {
+          logger.error({ err: e, guildId, userId: entry.userId }, "Erro ao processar expiração VIP");
+        }
       }
     }
 
     if (expiredCount > 0) {
-      logger.info({ expiredCount }, "VIPs expirados processados");
+      logger.info({ expiredCount }, "Varredura de expiração VIP concluída");
     }
   }
 
@@ -71,4 +70,3 @@ function createVipExpiryManager({ client, vipService, vipRoleManager, vipChannel
 }
 
 module.exports = { createVipExpiryManager };
-
