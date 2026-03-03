@@ -38,6 +38,11 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand((s) =>
       s
+        .setName("list")
+        .setDescription("Lista VIPs ativos deste servidor")
+    )
+    .addSubcommand((s) =>
+      s
         .setName("tier")
         .setDescription("Configura um Tier VIP por benefícios (interativo)")
         .addStringOption((o) => o.setName("id").setDescription("ID único (ex: gold)").setRequired(true))
@@ -116,6 +121,39 @@ module.exports = {
     const vipConfig = interaction.client.services.vipConfig;
     const logService = interaction.client.services.log;
     const sub = interaction.options.getSubcommand();
+
+    if (sub === "list") {
+      if (!interaction.inGuild()) {
+        return interaction.reply({ embeds: [createErrorEmbed("Use este comando em um servidor.")], ephemeral: true });
+      }
+
+      if (!vipService?.listVipIds || !vipService?.getVip) {
+        return interaction.reply({ embeds: [createErrorEmbed("Serviço VIP indisponível.")], ephemeral: true });
+      }
+
+      const guildId = interaction.guildId;
+      const ids = vipService.listVipIds(guildId);
+      if (!ids || ids.length === 0) {
+        return interaction.reply({ embeds: [createSuccessEmbed("Nenhum VIP ativo neste servidor.")], ephemeral: true });
+      }
+
+      const now = Date.now();
+      const lines = [];
+      for (const userId of ids.slice(0, 30)) {
+        const entry = vipService.getVip(guildId, userId);
+        const tierId = entry?.tierId || "-";
+        const expiresAt = entry?.expiresAt;
+        const remainingDays = typeof expiresAt === "number" ? Math.max(0, Math.ceil((expiresAt - now) / (24 * 60 * 60 * 1000))) : null;
+        const expiresText = remainingDays === null ? "Permanente" : `${remainingDays}d`;
+        lines.push(`<@${userId}> | tier: **${tierId}** | expira: **${expiresText}**`);
+      }
+
+      const extra = ids.length > 30 ? `\n\nMostrando 30 de ${ids.length}.` : `\n\nTotal: ${ids.length}.`;
+      return interaction.reply({
+        embeds: [createSuccessEmbed(lines.join("\n") + extra)],
+        ephemeral: true,
+      });
+    }
 
     if (sub === "tier") {
       const id = interaction.options.getString("id");
@@ -351,7 +389,7 @@ module.exports = {
       const alvo = interaction.options.getUser("usuario");
       const guildId = interaction.guildId;
       const member = await interaction.guild.members.fetch(alvo.id).catch(() => null);
-      const entry = vipService.getVip(alvo.id);
+      const entry = vipService.getVip(guildId, alvo.id);
 
       try {
         if (vipRoleManager) {
@@ -361,7 +399,7 @@ module.exports = {
           await vipChannelManager.deleteVipChannels(alvo.id, { guildId }).catch(() => {});
         }
         if (entry) {
-          await vipService.removeVip(alvo.id).catch(() => {});
+          await vipService.removeVip(guildId, alvo.id).catch(() => {});
         }
         if (member) {
           const vipConfig = vipService.getGuildConfig(guildId);
@@ -369,7 +407,12 @@ module.exports = {
             await member.roles.remove(vipConfig.vipRoleId).catch(() => {});
           }
           if (entry?.tierId) {
-            await member.roles.remove(entry.tierId).catch(() => {});
+            const tierConfig = await interaction.client.services.vipConfig
+              ?.getTierConfig(guildId, entry.tierId)
+              .catch(() => null);
+            if (tierConfig?.roleId) {
+              await member.roles.remove(tierConfig.roleId).catch(() => {});
+            }
           }
         }
         if (familyService) {
