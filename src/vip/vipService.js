@@ -8,13 +8,10 @@ function createVipService({ store, logger, configManager }) {
     if (!state.settings || typeof state.settings !== "object") state.settings = {};
     if (!state.guilds || typeof state.guilds !== "object") state.guilds = {};
 
-    // Migration: older versions stored vips/settings globally by userId.
-    // New format: vips[guildId][userId] and settings[guildId][userId]
     const looksLikeOldVipMap = Object.values(state.vips).some(
       (v) => v && typeof v === "object" && typeof v.userId === "string"
     );
     if (looksLikeOldVipMap) {
-      // We cannot infer guildId, so keep legacy data under a special key.
       state.vips = { __legacy__: state.vips };
     }
     const looksLikeOldSettingsMap = Object.values(state.settings).some(
@@ -116,6 +113,17 @@ function createVipService({ store, logger, configManager }) {
     return state.vips?.[gid]?.[id] || null;
   }
 
+  async function getFullVipReport(guildId) {
+    const gid = String(guildId || "").trim();
+    const tiers = await configManager?.getGuildTiers?.(gid) || state.guilds[gid]?.vips?.tiers || {};
+    const vipsInGuild = state.vips[gid] || {};
+    const activeVips = Object.values(vipsInGuild).filter(v => {
+      if (!v.expiresAt) return true;
+      return v.expiresAt > Date.now();
+    });
+    return { tiers, activeVips };
+  }
+
   function getSettings(guildId, userId) {
     const gid = String(guildId || "").trim();
     const id = normalizeUserId(userId);
@@ -183,17 +191,14 @@ function createVipService({ store, logger, configManager }) {
     const gid = guildId || member?.guild?.id;
     const id = normalizeUserId(userId) || normalizeUserId(member?.user?.id);
     if (!gid || !id) return null;
-
     const vipEntry = getVip(gid, id);
     if (vipEntry?.tierId) {
       const tier = await getTierConfig(gid, vipEntry.tierId);
       if (tier) return tier;
     }
-
     if (member && configManager?.getMemberTier) {
       return configManager.getMemberTier(member);
     }
-
     return null;
   }
 
@@ -204,17 +209,7 @@ function createVipService({ store, logger, configManager }) {
 
   async function updateTier(guildId, tierId, config) {
     if (!configManager) throw new Error("configManager não injetado");
-    await configManager.setGuildTier(guildId, tierId, {
-      name: config.name,
-      price: config.price,
-      roleId: config.roleId,
-      days: config.days,
-      maxDamas: config.maxDamas,
-      canFamily: config.canFamily,
-      hasSecondRole: config.hasSecondRole,
-      maxSecondRoleMembers: config.maxSecondRoleMembers,
-      maxFamilyMembers: config.maxFamilyMembers,
-    });
+    await configManager.setGuildTier(guildId, tierId, config);
   }
 
   async function resetGuildConfig(guildId) {
@@ -243,6 +238,7 @@ function createVipService({ store, logger, configManager }) {
     removeVip,
     listVipIds,
     getVip,
+    getFullVipReport,
     getSettings,
     setSettings,
     getGuildConfig,
