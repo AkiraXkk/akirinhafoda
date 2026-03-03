@@ -12,7 +12,9 @@ module.exports = {
       client.services.presence.applyPresence(readyClient).catch(() => {});
     }
 
-    if (client?.services?.vip && client?.services?.vipRole && client?.services?.vipChannel) {
+    if (client?.services?.vipExpiry?.start) {
+      client.services.vipExpiry.start({ intervalMs: 5 * 60 * 1000 });
+    } else if (client?.services?.vip && client?.services?.vipRole && client?.services?.vipChannel) {
       const expiry = createVipExpiryManager({
         client,
         vipService: client.services.vip,
@@ -42,7 +44,7 @@ module.exports = {
                       await levelsCommand.applyLevelRoles(member, nivelAnterior, novoNivel);
                     }
                     if (economyService?.addCoins) {
-                        await economyService.addCoins(member.id, 20);
+                        await economyService.addCoins(guild.id, member.id, 20);
                     }
                 }
             }

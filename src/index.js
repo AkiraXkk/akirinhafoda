@@ -29,6 +29,10 @@ const { createLogService } = require("./services/logService");
 const { createEconomyService } = require("./services/economyService");
 const { createFamilyService } = require("./services/familyService");
 const { createPresenceService } = require("./services/presenceService");
+const { createTagRoleService } = require("./services/tagRoleService");
+const { createTagRoleManager } = require("./services/tagRoleManager");
+const { createShopService } = require("./services/shopService");
+const { createShopExpiryManager } = require("./services/shopExpiryManager");
 
 async function main() {
   const client = createClient();
@@ -41,6 +45,17 @@ async function main() {
   client.services.economy = createEconomyService();
   client.services.family = createFamilyService();
   client.services.presence = createPresenceService();
+
+  client.services.tagRole = createTagRoleService({ logger });
+  client.services.tagRoleManager = createTagRoleManager({
+    client,
+    tagRoleService: client.services.tagRole,
+    targetGuildId: config.discord.guildId,
+    logger,
+  });
+
+  client.services.shop = createShopService({ logger });
+  client.services.shopExpiry = createShopExpiryManager({ client, shopService: client.services.shop, logger });
 
 
   const vipStore = createVipStore({ filePath: config.vip.storePath });
@@ -63,6 +78,9 @@ async function main() {
   });
 
   loadEvents(client);
+
+  await client.services.tagRoleManager.start().catch(() => {});
+  client.services.shopExpiry?.start?.();
 
   process.on("unhandledRejection", (reason) => {
     logger.error({ err: reason }, "UnhandledRejection");

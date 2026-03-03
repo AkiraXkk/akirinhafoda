@@ -66,6 +66,15 @@ function createVipConfigManager() {
     async getGuildTiers(guildId) {
       const configs = getConfigs();
       return configs[guildId] || {};
+    },
+
+    async removeGuildTier(guildId, tierId) {
+      const configs = getConfigs();
+      if (!configs[guildId]) return { ok: false, existed: false };
+      const existed = !!configs[guildId][tierId];
+      delete configs[guildId][tierId];
+      saveConfigs(configs);
+      return { ok: true, existed };
     }
   };
 }

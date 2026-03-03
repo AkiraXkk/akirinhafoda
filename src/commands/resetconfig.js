@@ -7,6 +7,7 @@ const {
 } = require("discord.js");
 const { createEmbed, createErrorEmbed, createSuccessEmbed } = require("../embeds");
 const { getGuildConfig, setGuildConfig } = require("../config/guildConfig");
+const { createDataStore } = require("../store/dataStore");
 
 const pending = new Map();
 
@@ -122,8 +123,8 @@ module.exports = {
           }
         }
 
-        if (vipService.resetAll) {
-          await vipService.resetAll();
+        if (typeof vipService.resetAll === "function") {
+          await vipService.resetAll({ guildId: interaction.guildId });
         }
       }
     } catch {

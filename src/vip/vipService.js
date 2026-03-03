@@ -75,10 +75,28 @@ function createVipService({ store, logger, configManager, client }) {
     };
   }
 
+  function listSettingsUserIds(guildId) {
+    return Object.keys(state.settings?.[guildId] || {});
+  }
+
+  async function resetAll({ guildId } = {}) {
+    if (guildId) {
+      if (state.vips?.[guildId]) delete state.vips[guildId];
+      if (state.settings?.[guildId]) delete state.settings[guildId];
+      if (state.guilds?.[guildId]) delete state.guilds[guildId];
+    } else {
+      state = { vips: {}, settings: {}, guilds: {} };
+    }
+    await store.save(state);
+    return { ok: true };
+  }
+
   return { 
     init, getMemberTier, addVip, addHook,
     getVip: (gid, uid) => state.vips?.[gid]?.[uid],
     getVipData,
+    listSettingsUserIds,
+    resetAll,
     listVipIds: (gid) => Object.keys(state.vips?.[gid] || {}),
     getTierConfig: (gid, tierId) => configManager.getTierConfig(gid, tierId),
     removeVip: async (gid, uid) => { 

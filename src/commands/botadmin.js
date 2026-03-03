@@ -34,6 +34,12 @@ module.exports = {
         .setName("setavatar")
         .setDescription("Altera o avatar do bot")
         .addAttachmentOption((opt) => opt.setName("imagem").setDescription("Nova imagem").setRequired(true))
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("setbanner")
+        .setDescription("Altera o banner do bot (se suportado)")
+        .addAttachmentOption((opt) => opt.setName("imagem").setDescription("Nova imagem").setRequired(true))
     ),
 
   async execute(interaction) {
@@ -71,6 +77,19 @@ module.exports = {
             await interaction.reply({ embeds: [createSuccessEmbed("Avatar atualizado com sucesso!")] });
         } catch (error) {
             await interaction.reply({ embeds: [createErrorEmbed(`Erro ao alterar avatar: ${error.message}`)] });
+        }
+    }
+
+    if (sub === "setbanner") {
+        const attachment = interaction.options.getAttachment("imagem");
+        try {
+            if (typeof client.user.setBanner !== "function") {
+              return interaction.reply({ embeds: [createErrorEmbed("Seu discord.js/API não suporta alterar banner do bot.")], ephemeral: true });
+            }
+            await client.user.setBanner(attachment.url);
+            await interaction.reply({ embeds: [createSuccessEmbed("Banner atualizado com sucesso!")] });
+        } catch (error) {
+            await interaction.reply({ embeds: [createErrorEmbed(`Erro ao alterar banner: ${error.message}`)] });
         }
     }
 

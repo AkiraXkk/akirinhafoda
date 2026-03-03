@@ -182,14 +182,143 @@ module.exports = {
       return interaction.reply({ content: "Este menu pertence a outro servidor.", ephemeral: true });
     }
 
-    if (section !== "shop") {
-      return interaction.reply({ content: "Esta seção ainda não foi implementada neste painel.", ephemeral: true });
-    }
-
     const vipConfig = interaction.client.services?.vipConfig;
     const tier = await vipConfig?.getTierConfig(guildId, tierId);
     if (!tier) {
       return interaction.reply({ content: `Tier \`${tierId}\` não encontrado.`, ephemeral: true });
+    }
+
+    if (section === "eco") {
+      const modal = new ModalBuilder()
+        .setCustomId(`vipadmin_modal_eco_${guildId}_${tierId}`)
+        .setTitle(`Economia: ${tier.name || tier.id}`);
+
+      const dailyExtraInput = new TextInputBuilder()
+        .setCustomId("valor_daily_extra")
+        .setLabel("Daily extra (moedas). Vazio=0")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(Number.isFinite(tier.valor_daily_extra) ? String(tier.valor_daily_extra) : "");
+
+      const bonusInicialInput = new TextInputBuilder()
+        .setCustomId("bonus_inicial")
+        .setLabel("Bônus inicial ao ganhar VIP. Vazio=0")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(Number.isFinite(tier.bonus_inicial) ? String(tier.bonus_inicial) : "");
+
+      const midasInput = new TextInputBuilder()
+        .setCustomId("midas")
+        .setLabel("Midas? (1=sim, 0=não)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(tier.midas === true ? "1" : (tier.midas === false ? "0" : ""));
+
+      const priceLegacyInput = new TextInputBuilder()
+        .setCustomId("preco_shop")
+        .setLabel("Preço legacy (preco_shop). Vazio=ignorar")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(Number.isFinite(tier.preco_shop) ? String(tier.preco_shop) : "");
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(dailyExtraInput),
+        new ActionRowBuilder().addComponents(bonusInicialInput),
+        new ActionRowBuilder().addComponents(midasInput),
+        new ActionRowBuilder().addComponents(priceLegacyInput)
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    if (section === "soc") {
+      const modal = new ModalBuilder()
+        .setCustomId(`vipadmin_modal_soc_${guildId}_${tierId}`)
+        .setTitle(`Social: ${tier.name || tier.id}`);
+
+      const vagasFamiliaInput = new TextInputBuilder()
+        .setCustomId("vagas_familia")
+        .setLabel("Vagas família (número). Vazio=0")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(Number.isFinite(tier.vagas_familia) ? String(tier.vagas_familia) : "");
+
+      const damasInput = new TextInputBuilder()
+        .setCustomId("primeiras_damas")
+        .setLabel("Cotas de damas (número). Vazio=0")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(Number.isFinite(tier.primeiras_damas) ? String(tier.primeiras_damas) : "");
+
+      const cotaRoleInput = new TextInputBuilder()
+        .setCustomId("cotaRoleId")
+        .setLabel("Cargo de cota (Role ID). Vazio=nenhum")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(typeof tier.cotaRoleId === "string" ? tier.cotaRoleId : "");
+
+      const presentearInput = new TextInputBuilder()
+        .setCustomId("pode_presentear")
+        .setLabel("Pode presentear? (1=sim, 0=não)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(tier.pode_presentear === true ? "1" : (tier.pode_presentear === false ? "0" : ""));
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(vagasFamiliaInput),
+        new ActionRowBuilder().addComponents(damasInput),
+        new ActionRowBuilder().addComponents(cotaRoleInput),
+        new ActionRowBuilder().addComponents(presentearInput)
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    if (section === "tec") {
+      const modal = new ModalBuilder()
+        .setCustomId(`vipadmin_modal_tec_${guildId}_${tierId}`)
+        .setTitle(`Técnico: ${tier.name || tier.id}`);
+
+      const canCallInput = new TextInputBuilder()
+        .setCustomId("canCall")
+        .setLabel("Call privada? (1=sim, 0=não)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(tier.canCall === true ? "1" : (tier.canCall === false ? "0" : ""));
+
+      const chatPrivInput = new TextInputBuilder()
+        .setCustomId("chat_privado")
+        .setLabel("Chat privado? (1=sim, 0=não)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(tier.chat_privado === true ? "1" : (tier.chat_privado === false ? "0" : ""));
+
+      const customRoleInput = new TextInputBuilder()
+        .setCustomId("hasCustomRole")
+        .setLabel("Cargo personalizado? (1=sim, 0=não)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(tier.hasCustomRole === true ? "1" : (tier.hasCustomRole === false ? "0" : ""));
+
+      const highQualityInput = new TextInputBuilder()
+        .setCustomId("high_quality_voice")
+        .setLabel("Áudio high quality? (1=sim, 0=não)")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setValue(tier.high_quality_voice === true ? "1" : (tier.high_quality_voice === false ? "0" : ""));
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(canCallInput),
+        new ActionRowBuilder().addComponents(chatPrivInput),
+        new ActionRowBuilder().addComponents(customRoleInput),
+        new ActionRowBuilder().addComponents(highQualityInput)
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    if (section !== "shop") {
+      return interaction.reply({ content: "Esta seção ainda não foi implementada neste painel.", ephemeral: true });
     }
 
     const modal = new ModalBuilder()
@@ -235,15 +364,96 @@ module.exports = {
   },
 
   async handleModal(interaction) {
-    if (!interaction.customId?.startsWith("vipadmin_modal_shop_")) return;
+    if (!interaction.customId?.startsWith("vipadmin_modal_")) return;
 
     const parts = interaction.customId.split("_");
+    const section = parts[2];
     const guildId = parts[3];
     const tierId = parts.slice(4).join("_");
 
     const vipConfig = interaction.client.services?.vipConfig;
     if (!vipConfig) {
       return interaction.reply({ content: "Serviço vipConfig indisponível.", ephemeral: true });
+    }
+
+    if (section === "eco") {
+      const dailyExtraRaw = (interaction.fields.getTextInputValue("valor_daily_extra") || "").trim();
+      const bonusInicialRaw = (interaction.fields.getTextInputValue("bonus_inicial") || "").trim();
+      const midasRaw = (interaction.fields.getTextInputValue("midas") || "").trim();
+      const precoShopRaw = (interaction.fields.getTextInputValue("preco_shop") || "").trim();
+
+      const valor_daily_extra = dailyExtraRaw === "" ? 0 : Number(dailyExtraRaw);
+      const bonus_inicial = bonusInicialRaw === "" ? 0 : Number(bonusInicialRaw);
+      const midas = midasRaw === "" ? null : (midasRaw === "1" || midasRaw.toLowerCase() === "sim" || midasRaw.toLowerCase() === "true");
+      const preco_shop = precoShopRaw === "" ? null : Number(precoShopRaw);
+
+      if (!Number.isFinite(valor_daily_extra) || valor_daily_extra < 0) {
+        return interaction.reply({ content: "Daily extra inválido.", ephemeral: true });
+      }
+      if (!Number.isFinite(bonus_inicial) || bonus_inicial < 0) {
+        return interaction.reply({ content: "Bônus inicial inválido.", ephemeral: true });
+      }
+      if (preco_shop !== null && (!Number.isFinite(preco_shop) || preco_shop < 0)) {
+        return interaction.reply({ content: "preco_shop inválido.", ephemeral: true });
+      }
+
+      await vipConfig.updateTier(guildId, tierId, "eco", {
+        valor_daily_extra,
+        bonus_inicial,
+        ...(midas === null ? {} : { midas }),
+        ...(preco_shop === null ? {} : { preco_shop }),
+      });
+
+      return interaction.reply({ content: `✅ Configuração de economia do tier \`${tierId}\` atualizada.`, ephemeral: true });
+    }
+
+    if (section === "soc") {
+      const vagasRaw = (interaction.fields.getTextInputValue("vagas_familia") || "").trim();
+      const damasRaw = (interaction.fields.getTextInputValue("primeiras_damas") || "").trim();
+      const cotaRoleRaw = (interaction.fields.getTextInputValue("cotaRoleId") || "").trim();
+      const presentearRaw = (interaction.fields.getTextInputValue("pode_presentear") || "").trim();
+
+      const vagas_familia = vagasRaw === "" ? 0 : Number(vagasRaw);
+      const primeiras_damas = damasRaw === "" ? 0 : Number(damasRaw);
+      const cotaRoleId = cotaRoleRaw === "" ? null : cotaRoleRaw;
+      const pode_presentear = presentearRaw === "" ? null : (presentearRaw === "1" || presentearRaw.toLowerCase() === "sim" || presentearRaw.toLowerCase() === "true");
+
+      if (!Number.isFinite(vagas_familia) || vagas_familia < 0) {
+        return interaction.reply({ content: "Vagas família inválido.", ephemeral: true });
+      }
+      if (!Number.isFinite(primeiras_damas) || primeiras_damas < 0) {
+        return interaction.reply({ content: "Primeiras damas inválido.", ephemeral: true });
+      }
+
+      await vipConfig.updateTier(guildId, tierId, "soc", {
+        vagas_familia,
+        primeiras_damas,
+        cotaRoleId,
+        ...(pode_presentear === null ? {} : { pode_presentear }),
+      });
+
+      return interaction.reply({ content: `✅ Configuração social do tier \`${tierId}\` atualizada.`, ephemeral: true });
+    }
+
+    if (section === "tec") {
+      const canCallRaw = (interaction.fields.getTextInputValue("canCall") || "").trim();
+      const chatPrivRaw = (interaction.fields.getTextInputValue("chat_privado") || "").trim();
+      const customRoleRaw = (interaction.fields.getTextInputValue("hasCustomRole") || "").trim();
+      const hqRaw = (interaction.fields.getTextInputValue("high_quality_voice") || "").trim();
+
+      const canCall = canCallRaw === "" ? null : (canCallRaw === "1" || canCallRaw.toLowerCase() === "sim" || canCallRaw.toLowerCase() === "true");
+      const chat_privado = chatPrivRaw === "" ? null : (chatPrivRaw === "1" || chatPrivRaw.toLowerCase() === "sim" || chatPrivRaw.toLowerCase() === "true");
+      const hasCustomRole = customRoleRaw === "" ? null : (customRoleRaw === "1" || customRoleRaw.toLowerCase() === "sim" || customRoleRaw.toLowerCase() === "true");
+      const high_quality_voice = hqRaw === "" ? null : (hqRaw === "1" || hqRaw.toLowerCase() === "sim" || hqRaw.toLowerCase() === "true");
+
+      await vipConfig.updateTier(guildId, tierId, "tec", {
+        ...(canCall === null ? {} : { canCall }),
+        ...(chat_privado === null ? {} : { chat_privado }),
+        ...(hasCustomRole === null ? {} : { hasCustomRole }),
+        ...(high_quality_voice === null ? {} : { high_quality_voice }),
+      });
+
+      return interaction.reply({ content: `✅ Configuração técnica do tier \`${tierId}\` atualizada.`, ephemeral: true });
     }
 
     const enabledRaw = (interaction.fields.getTextInputValue("shop_enabled") || "").trim();
