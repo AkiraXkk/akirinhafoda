@@ -54,16 +54,23 @@ async function addXp(userId, amount = 10) {
   let nivelAnterior = 1;
 
   await levelsStore.update(userId, (current) => {
-    const data = current || { xp: 0, level: 1 };
+    const data = current || { xp: 0, level: 1, totalXp: 0 };
     nivelAnterior = data.level;
-    data.xp += amount;
-    const xpNeeded = data.level * 100;
-
-    if (data.xp >= xpNeeded) {
-      data.level += 1;
-      data.xp = 0;
+    
+    // Adicionar ao XP total
+    data.totalXp = (data.totalXp || 0) + amount;
+    
+    // Calcular novo nível baseado no XP total
+    const novoNivelCalculado = Math.floor(data.totalXp / 100) + 1;
+    
+    // Calcular XP para o nível atual
+    data.xp = data.totalXp % 100;
+    data.level = novoNivelCalculado;
+    
+    // Verificar se subiu de nível
+    if (novoNivelCalculado > nivelAnterior) {
       subiuNivel = true;
-      novoNivel = data.level;
+      novoNivel = novoNivelCalculado;
     }
 
     return data;
@@ -159,7 +166,8 @@ module.exports = {
         .addUserOption((opt) => opt.setName("usuario").setDescription("Usuário (opcional)").setRequired(false))
     )
     .addSubcommand((sub) =>
-      sub.setName("leaderboard").setDescription("Mostra o top 10 usuários com mais XP")
+      sub.setName("leaderboard").setDescription("Mostra o ranking de usuários com mais XP")
+        .addIntegerOption((opt) => opt.setName("pagina").setDescription("Número da página").setMinValue(1).setRequired(false))
     )
     .addSubcommand((sub) =>
       sub
@@ -202,6 +210,7 @@ module.exports = {
   addXpForVoiceTick,
   getLevelConfig,
   setLevelConfig,
+  getLevelsStore: () => levelsStore,
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -260,7 +269,7 @@ module.exports = {
 
     if (sub === "view") {
       const user = interaction.options.getUser("usuario") || interaction.user;
-      const data = levels[user.id] || { xp: 0, level: 1 };
+      const data = levels[user.id] || { xp: 0, level: 1, totalXp: 0 };
       const xpNeeded = data.level * 100;
       const progress = Math.min(data.xp / xpNeeded, 1);
       const filled = Math.floor(progress * 10);
@@ -275,7 +284,7 @@ module.exports = {
             title: `🌟 Nível de ${user.username}`,
             fields: [
               { name: "Nível", value: `${data.level}`, inline: true },
-              { name: "XP Total", value: `${data.xp}`, inline: true },
+              { name: "XP Total", value: `${data.totalXp || 0}`, inline: true },
               { name: "Progresso", value: `${data.xp}/${xpNeeded} XP\n${bar}` },
               { name: "Mensagens", value: `${totalMensagens}`, inline: true },
               { name: "Tempo em call", value: `${totalMinutos} min`, inline: true },
@@ -288,24 +297,145 @@ module.exports = {
     }
 
     if (sub === "leaderboard") {
+      const page = Math.max(0, (interaction.options.getInteger("pagina") || 1) - 1);
+      const pageSize = 10;
+      
       const sorted = Object.entries(levels)
+        .filter(([id, data]) => (data.totalXp || 0) > 0) // Filtrar usuários com 0 XP
         .map(([id, data]) => ({ id, ...data }))
-        .sort((a, b) => b.level * 1000 + b.xp - (a.level * 1000 + a.xp))
-        .slice(0, 10);
+        .sort((a, b) => (b.totalXp || 0) - (a.totalXp || 0));
 
-      if (sorted.length === 0) {
+      const totalPages = Math.ceil(sorted.length / pageSize);
+      const startIndex = page * pageSize;
+      const endIndex = Math.min(startIndex + pageSize, sorted.length);
+      const pageData = sorted.slice(startIndex, endIndex);
+
+      if (pageData.length === 0) {
         return interaction.reply({
           embeds: [createEmbed({ description: "Ninguém ganhou XP ainda." })],
           ephemeral: true,
         });
       }
 
-      const linhas = sorted.map(
-        (entry, i) => `**${i + 1}.** <@${entry.id}> — Nível ${entry.level} (${entry.xp} XP)`
+      const linhas = pageData.map(
+        (entry, i) => `**${startIndex + i + 1}.** <@${entry.id}> — Nível ${entry.level} (${entry.totalXp || 0} XP total)`
       );
-      return interaction.reply({
-        embeds: [createEmbed({ title: "🏆 Top 10 Níveis", description: linhas.join("\n"), color: 0xf1c40f })],
+
+      const embed = createEmbed({ 
+        title: "🏆 Leaderboard de Níveis", 
+        description: linhas.join("\n"), 
+        color: 0xf1c40f,
+        footer: { text: `Página ${page + 1}/${totalPages} • Mostrando ${startIndex + 1}-${endIndex} de ${sorted.length} usuários` }
       });
+
+      // Adicionar botões de navegação se houver mais de uma página
+      const components = [];
+      if (totalPages > 1) {
+        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+        const row = new ActionRowBuilder();
+        
+        // Botão anterior
+        if (page > 0) {
+          row.addComponents(
+            new ButtonBuilder()
+              .setCustomId(`leaderboard_prev_${page}`)
+              .setLabel("⬅️ Anterior")
+              .setStyle(ButtonStyle.Secondary)
+          );
+        }
+        
+        // Botão próximo
+        if (page < totalPages - 1) {
+          row.addComponents(
+            new ButtonBuilder()
+              .setCustomId(`leaderboard_next_${page}`)
+              .setLabel("Próximo ➡️")
+              .setStyle(ButtonStyle.Secondary)
+          );
+        }
+        
+        components.push(row);
+      }
+
+      return interaction.reply({ embeds: [embed], components });
     }
   },
+
+  async handleInteraction(interaction) {
+    if (!interaction.customId?.startsWith("leaderboard_")) return;
+    
+    const parts = interaction.customId.split("_");
+    const action = parts[1];
+    const currentPage = parseInt(parts[2]);
+    
+    if (action === "prev") {
+      return this.executeLeaderboardPage(interaction, currentPage - 1);
+    } else if (action === "next") {
+      return this.executeLeaderboardPage(interaction, currentPage + 1);
+    }
+  },
+
+  async executeLeaderboardPage(interaction, page) {
+    const levels = await levelsStore.load();
+    const pageSize = 10;
+    
+    const sorted = Object.entries(levels)
+      .filter(([id, data]) => (data.totalXp || 0) > 0)
+      .map(([id, data]) => ({ id, ...data }))
+      .sort((a, b) => (b.totalXp || 0) - (a.totalXp || 0));
+
+    const totalPages = Math.ceil(sorted.length / pageSize);
+    const startIndex = page * pageSize;
+    const endIndex = Math.min(startIndex + pageSize, sorted.length);
+    const pageData = sorted.slice(startIndex, endIndex);
+
+    if (pageData.length === 0) {
+      return interaction.update({
+        embeds: [createEmbed({ description: "Ninguém ganhou XP ainda." })],
+        components: [],
+      });
+    }
+
+    const linhas = pageData.map(
+      (entry, i) => `**${startIndex + i + 1}.** <@${entry.id}> — Nível ${entry.level} (${entry.totalXp || 0} XP total)`
+    );
+
+    const embed = createEmbed({ 
+      title: "🏆 Leaderboard de Níveis", 
+      description: linhas.join("\n"), 
+      color: 0xf1c40f,
+      footer: { text: `Página ${page + 1}/${totalPages} • Mostrando ${startIndex + 1}-${endIndex} de ${sorted.length} usuários` }
+    });
+
+    // Adicionar botões de navegação
+    const components = [];
+    if (totalPages > 1) {
+      const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+      const row = new ActionRowBuilder();
+      
+      // Botão anterior
+      if (page > 0) {
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`leaderboard_prev_${page}`)
+            .setLabel("⬅️ Anterior")
+            .setStyle(ButtonStyle.Secondary)
+        );
+      }
+      
+      // Botão próximo
+      if (page < totalPages - 1) {
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`leaderboard_next_${page}`)
+            .setLabel("Próximo ➡️")
+            .setStyle(ButtonStyle.Secondary)
+        );
+      }
+      
+      components.push(row);
+    }
+
+    return interaction.update({ embeds: [embed], components });
+  }
 };
