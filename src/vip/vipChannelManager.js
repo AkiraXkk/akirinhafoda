@@ -5,101 +5,94 @@ function createVipChannelManager({ client, vipService, logger }) {
     return client.guilds.fetch(targetGuildId).catch(() => null);
   }
 
-  async function fetchMember(guild, userId) {
-    if (!guild) return null;
-    return guild.members.fetch(userId).catch(() => null);
-  }
-
   async function ensureVipChannels(userId, { guildId: targetGuildId } = {}) {
     const guild = await fetchGuild(targetGuildId);
-    const member = await fetchMember(guild, userId);
-    if (!guild || !member) return { ok: false, reason: "guild_or_member_unavailable" };
+    if (!guild) return { ok: false };
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member) return { ok: false };
 
     const tier = await vipService.getMemberTier(member);
-    if (!tier) return { ok: false, reason: "not_a_vip" };
+    if (!tier) return { ok: false };
 
-    const guildConfig = vipService.getGuildConfig(guild.id);
-    const catId = guildConfig?.vipCategoryId;
-    if (!catId) return { ok: false, reason: "no_category_configured" };
-
+    const gConfig = vipService.getGuildConfig(guild.id);
     const settings = vipService.getSettings(guild.id, userId) || {};
-    
-    // --- Lógica de Permissões ---
+
     const permissionOverwrites = [
       { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
       { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageChannels] },
       {
-        id: settings.roleId || member.id,
+        id: settings.roleId || userId,
         allow: [
-          PermissionFlagsBits.ViewChannel,
-          PermissionFlagsBits.SendMessages,
-          PermissionFlagsBits.Connect,
-          PermissionFlagsBits.Speak,
-          PermissionFlagsBits.Stream, // Host de Honra 1080p
-          PermissionFlagsBits.ManageChannels, // Para renomear
-          PermissionFlagsBits.ManageMessages, // Para fixar/apagar
-          PermissionFlagsBits.AttachFiles,
-          PermissionFlagsBits.EmbedLinks
-        ],
+          PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, 
+          PermissionFlagsBits.Speak, PermissionFlagsBits.Stream,
+          PermissionFlagsBits.ManageChannels, PermissionFlagsBits.ManageMessages,
+          PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles
+        ]
       }
     ];
 
-    // Cargo Fantasma: Vê quem está dentro, mas não consegue conectar
-    if (guildConfig?.cargoFantasmaId) {
+    // Lógica Fantasma: Vê a call mas não conecta
+    if (gConfig?.cargoFantasmaId) {
       permissionOverwrites.push({
-        id: guildConfig.cargoFantasmaId,
+        id: gConfig.cargoFantasmaId,
         allow: [PermissionFlagsBits.ViewChannel],
-        deny: [PermissionFlagsBits.Connect] 
+        deny: [PermissionFlagsBits.Connect]
       });
     }
 
-    const baseName = member.user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
+    let textId = settings.textChannelId;
+    let voiceId = settings.voiceChannelId;
 
-    // Criação/Atualização do Chat (se o Tier permitir)
-    let textChannel = settings.textChannelId ? await guild.channels.fetch(settings.textChannelId).catch(() => null) : null;
-    if (!textChannel && tier.chat_privado) {
-      textChannel = await guild.channels.create({
-        name: `💬-${baseName}`,
+    if (tier.chat_privado && !textId) {
+      const ch = await guild.channels.create({
+        name: `💬-${member.user.username}`,
         type: ChannelType.GuildText,
-        parent: catId,
-        permissionOverwrites,
+        parent: gConfig.vipCategoryId,
+        permissionOverwrites
       });
-    } else if (textChannel) {
-      await textChannel.edit({ permissionOverwrites }).catch(() => {});
+      textId = ch.id;
     }
 
-    // Criação/Atualização da Call (se o Tier permitir)
-    let voiceChannel = settings.voiceChannelId ? await guild.channels.fetch(settings.voiceChannelId).catch(() => null) : null;
-    if (!voiceChannel && tier.canCall) {
-      voiceChannel = await guild.channels.create({
+    if (tier.canCall && !voiceId) {
+      const ch = await guild.channels.create({
         name: `🔊 ${member.user.username}`,
         type: ChannelType.GuildVoice,
-        parent: catId,
+        parent: gConfig.vipCategoryId,
         permissionOverwrites,
-        bitrate: tier.high_quality_voice ? 96000 : 64000,
+        bitrate: tier.high_quality_voice ? 96000 : 64000
       });
-    } else if (voiceChannel) {
-      await voiceChannel.edit({ permissionOverwrites, bitrate: tier.high_quality_voice ? 96000 : 64000 }).catch(() => {});
+      voiceId = ch.id;
     }
 
-    if (textChannel?.id !== settings.textChannelId || voiceChannel?.id !== settings.voiceChannelId) {
-      await vipService.setSettings(guild.id, userId, {
-        textChannelId: textChannel?.id || settings.textChannelId,
-        voiceChannelId: voiceChannel?.id || settings.voiceChannelId,
-      });
-    }
-
-    return { ok: true, textChannel, voiceChannel };
+    await vipService.setSettings(guild.id, userId, { textChannelId: textId, voiceChannelId: voiceId });
+    return { ok: true };
   }
 
-  return { ensureVipChannels, updateChannelName: async (userId, newName, { guildId }) => {
-      // Simplificado para garantir funcionamento via comando /vip call/chat
-      const guild = await fetchGuild(guildId);
-      const settings = vipService.getSettings(guildId, userId);
-      const voice = settings.voiceChannelId ? await guild.channels.fetch(settings.voiceChannelId).catch(() => null) : null;
-      if (voice) await voice.setName(`🔊 ${newName}`).catch(() => {});
-      return { ok: true };
-  }};
+  async function deleteVipChannels(userId, { guildId }) {
+    const guild = await fetchGuild(guildId);
+    const settings = vipService.getSettings(guildId, userId);
+    if (settings?.textChannelId) await guild.channels.delete(settings.textChannelId).catch(() => {});
+    if (settings?.voiceChannelId) await guild.channels.delete(settings.voiceChannelId).catch(() => {});
+    return { ok: true };
+  }
+
+  async function updateChannelName(userId, newName, { guildId }) {
+    const settings = vipService.getSettings(guildId, userId);
+    const agora = Date.now();
+    
+    // Rate limit: 5 minutos
+    if (settings.lastRename && agora - settings.lastRename < 300000) return { ok: false, reason: "Aguarde 5 min." };
+
+    const guild = await fetchGuild(guildId);
+    if (settings.voiceChannelId) {
+      const ch = await guild.channels.fetch(settings.voiceChannelId).catch(() => null);
+      if (ch) await ch.setName(`🔊 ${newName}`);
+    }
+    await vipService.setSettings(guildId, userId, { lastRename: agora });
+    return { ok: true };
+  }
+
+  return { ensureVipChannels, deleteVipChannels, updateChannelName };
 }
 
 module.exports = { createVipChannelManager };
