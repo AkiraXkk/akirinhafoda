@@ -26,6 +26,15 @@ module.exports = {
             await command[handlerMethod](interaction);
             return true;
           } catch (error) {
+            // Ignorar erros de interação desconhecida (timeout/expired)
+            if (error.code === 10062 || error.message?.includes('Unknown interaction')) {
+              logger.debug({ 
+                customId, 
+                error: error.message 
+              }, "Interação expirada ou desconhecida - ignorando");
+              return true;
+            }
+            
             logger.error({ 
               err: error, 
               command: prefix, 
@@ -45,6 +54,15 @@ module.exports = {
             await command.handleInteraction(interaction);
             return true;
           } catch (error) {
+            // Ignorar erros de interação desconhecida (timeout/expired)
+            if (error.code === 10062 || error.message?.includes('Unknown interaction')) {
+              logger.debug({ 
+                customId, 
+                error: error.message 
+              }, "Interação expirada ou desconhecida - ignorando");
+              return true;
+            }
+            
             logger.error({ 
               err: error, 
               command: prefix, 
@@ -71,6 +89,15 @@ module.exports = {
               await command.handleButton(interaction);
               if (interaction.replied || interaction.deferred) break;
             } catch (error) {
+              // Ignorar erros de interação desconhecida (timeout/expired)
+              if (error.code === 10062 || error.message?.includes('Unknown interaction')) {
+                logger.debug({ 
+                  customId: interaction.customId,
+                  error: error.message 
+                }, "Interação de botão expirada ou desconhecida - ignorando");
+                continue;
+              }
+              
               logger.error({ 
                 err: error, 
                 command: commandName, 
@@ -95,6 +122,15 @@ module.exports = {
               await command.handleModal(interaction);
               if (interaction.replied || interaction.deferred) break;
             } catch (error) {
+              // Ignorar erros de interação desconhecida (timeout/expired)
+              if (error.code === 10062 || error.message?.includes('Unknown interaction')) {
+                logger.debug({ 
+                  customId: interaction.customId,
+                  error: error.message 
+                }, "Interação de modal expirada ou desconhecida - ignorando");
+                continue;
+              }
+              
               logger.error({ 
                 err: error, 
                 command: commandName, 
@@ -119,6 +155,15 @@ module.exports = {
               await command.handleSelectMenu(interaction);
               if (interaction.replied || interaction.deferred) break;
             } catch (error) {
+              // Ignorar erros de interação desconhecida (timeout/expired)
+              if (error.code === 10062 || error.message?.includes('Unknown interaction')) {
+                logger.debug({ 
+                  customId: interaction.customId,
+                  error: error.message 
+                }, "Interação de menu expirada ou desconhecida - ignorando");
+                continue;
+              }
+              
               logger.error({ 
                 err: error, 
                 command: commandName, 
@@ -184,6 +229,16 @@ module.exports = {
 
       await command.execute(interaction);
     } catch (error) {
+      // Ignorar erros de interação desconhecida (timeout/expired)
+      if (error.code === 10062 || error.message?.includes('Unknown interaction')) {
+        logger.debug({ 
+          commandName: interaction.commandName,
+          customId: interaction.customId,
+          error: error.message 
+        }, "Interação desconhecida - ignorando");
+        return;
+      }
+      
       logger.error({ err: error, command: interaction.commandName }, "Erro ao executar comando");
 
       const payload = { content: "Ocorreu um erro ao executar esse comando.", ephemeral: true };
