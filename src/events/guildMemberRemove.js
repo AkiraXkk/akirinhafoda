@@ -8,69 +8,62 @@ module.exports = {
       const userId = member.id;
       const guildId = member.guild.id;
 
-      // Cleanup VIP assets when member leaves
-      if (client.services?.vip) {
-        const vipService = client.services.vip;
-        const vipRoleManager = client.services.vipRole;
-        const vipChannelManager = client.services.vipChannel;
+      // 🛡️ Cleanup VIP
+      if (client.services && client.services.vip) {
+        const { vip: vipService, vipRole: vipRoleManager, vipChannel: vipChannelManager } = client.services;
 
-        // Check if user was VIP
-        if (vipService.isVip({ guildId, userId })) {
+        // Tenta obter os dados do VIP. Se retornar algo, ele era VIP.
+        const vipData = await vipService.getVipData(guildId, userId);
+        
+        if (vipData && vipData.tierId) {
           logger.info({ userId, guildId, userTag: member.user.tag }, "VIP deixou o servidor - iniciando cleanup");
 
-          // Remove VIP role
+          // Remove Cargo Personalizado
           if (vipRoleManager) {
-            await vipRoleManager.deletePersonalRole(userId, { guildId }).catch((error) => {
-              logger.error({ err: error, userId }, "Erro ao remover cargo VIP do usuário que saiu");
-            });
+            await vipRoleManager.deletePersonalRole(userId, { guildId }).catch((err) => 
+              logger.error({ err, userId }, "Erro: Remover cargo VIP no logout")
+            );
           }
 
-          // Remove VIP channels
+          // Remove Canais VIP
           if (vipChannelManager) {
-            await vipChannelManager.deleteVipChannels(userId, { guildId }).catch((error) => {
-              logger.error({ err: error, userId }, "Erro ao remover canais VIP do usuário que saiu");
-            });
+            await vipChannelManager.deleteVipChannels(userId, { guildId }).catch((err) => 
+              logger.error({ err, userId }, "Erro: Remover canais VIP no logout")
+            );
           }
 
-          // Remove VIP from service
-          await vipService.removeVip(guildId, userId).catch((error) => {
-            logger.error({ err: error, userId }, "Erro ao remover VIP do serviço");
-          });
+          // Remove do Banco de Dados
+          await vipService.removeVip(guildId, userId).catch((err) => 
+            logger.error({ err, userId }, "Erro: Remover registro VIP")
+          );
         }
       }
 
-      // Cleanup Family assets when member leaves
-      if (client.services?.family) {
+      // 🏠 Cleanup Família
+      if (client.services && client.services.family) {
         const familyService = client.services.family;
         
-        try {
-          // Check if user owns a family
-          const family = await familyService.getFamilyByOwner(userId);
-          if (family) {
-            logger.info({ userId, guildId, familyId: family.id, userTag: member.user.tag }, "Dono de família deixou o servidor - removendo família");
-            
-            // Delete family and all associated assets
-            await familyService.deleteFamily(member.guild, userId).catch((error) => {
-              logger.error({ err: error, userId, familyId: family.id }, "Erro ao deletar família do usuário que saiu");
-            });
-          }
+        // Se for dono de família, deleta a família inteira
+        const familyAsOwner = await familyService.getFamilyByOwner(userId);
+        if (familyAsOwner) {
+          logger.info({ userId, familyId: familyAsOwner.id }, "Dono de família saiu - deletando clã");
+          await familyService.deleteFamily(member.guild, userId).catch((err) => 
+            logger.error({ err, userId }, "Erro: Deletar família no logout")
+          );
+        }
 
-          // Remove user from any family they were a member of
-          const memberFamily = await familyService.getFamilyByMember(userId);
-          if (memberFamily) {
-            logger.info({ userId, guildId, familyId: memberFamily.id, userTag: member.user.tag }, "Membro de família deixou o servidor - removendo da família");
-            
-            await familyService.removeMember(member.guild, memberFamily.id, userId).catch((error) => {
-              logger.error({ err: error, userId, familyId: memberFamily.id }, "Erro ao remover usuário da família");
-            });
-          }
-        } catch (error) {
-          logger.error({ err: error, userId }, "Erro no cleanup de família do usuário que saiu");
+        // Se for apenas membro, remove da lista de membros
+        const familyAsMember = await familyService.getFamilyByMember(userId);
+        if (familyAsMember) {
+          logger.info({ userId, familyId: familyAsMember.id }, "Membro de família saiu - removendo da lista");
+          await familyService.removeMember(member.guild, familyAsMember.id, userId).catch((err) => 
+            logger.error({ err, userId }, "Erro: Remover membro da família no logout")
+          );
         }
       }
 
     } catch (error) {
-      logger.error({ err: error, userId: member.id, guildId: member.guild.id }, "Erro no cleanup de membro que saiu do servidor");
+      logger.error({ err: error, userId: member.id }, "Erro crítico no GuildMemberRemove");
     }
   },
 };
