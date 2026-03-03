@@ -1,63 +1,62 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, UserSelectMenuBuilder } = require("discord.js");
-const { createEmbed, createErrorEmbed, createSuccessEmbed } = require("../embeds");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("vip")
-    .setDescription("Painel e ferramentas VIP")
-    .addSubcommand(s => s.setName("painel").setDescription("Abre o painel VIP"))
-    .addSubcommand(s => s.setName("customizar").setDescription("Muda nome/cor do seu cargo")
-        .addStringOption(o => o.setName("nome").setDescription("Novo nome"))
-        .addStringOption(o => o.setName("cor").setDescription("Cor HEX (ex: #FF0000)")))
-    .addSubcommand(s => s.setName("status").setDescription("Tempo restante")),
+    .setDescription("Gerencie seus benefícios VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver seus benefícios e validade"))
+    .addSubcommand(s => s.setName("call").setDescription("Renomeia sua Call VIP").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dá um VIP da sua cota para alguém (Dama)").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Edita seu cargo exclusivo").addStringOption(o => o.setName("nome").setDescription("Nome")).addStringOption(o => o.setName("cor").setDescription("Cor HEX (Ex: #FF0000)"))),
 
   async execute(interaction) {
-    const { vip: vipService, vipRole } = interaction.client.services;
-    const sub = interaction.options.getSubcommand();
-    const entry = vipService.getVip(interaction.guildId, interaction.user.id);
-
-    if (!entry) return interaction.reply({ embeds: [createErrorEmbed("Você não possui um VIP ativo.")], ephemeral: true });
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
     const tier = await vipService.getMemberTier(interaction.member);
 
-    if (sub === "painel") {
-      const embed = createEmbed({
-        title: "💎 Seu Status VIP",
-        description: `Plano: **${tier?.name || "VIP"}**\nFamília: \`${tier?.limite_familia || 0}\` vagas\nCotas: \`${tier?.vips_para_dar || 0}\` vips`,
-        color: 0x9b59b6
-      });
+    if (!tier) return interaction.reply({ content: "❌ Você não possui um VIP ativo.", ephemeral: true });
 
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("vip_manage_role").setLabel("Meu Cargo").setStyle(ButtonStyle.Primary).setDisabled(!tier?.hasSecondRole),
-        new ButtonBuilder().setCustomId("vip_manage_family").setLabel("Família").setStyle(ButtonStyle.Success).setDisabled(!(tier?.limite_familia > 0))
-      );
+    const sub = interaction.options.getSubcommand();
 
-      return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle(`💎 Seu VIP: ${tier.name}`).setColor("Gold")
+        .addFields(
+            { name: "⏳ Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+            { name: "👨‍👩‍👧 Cotas de VIP", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas}`, inline: true },
+            { name: "💰 Bônus Daily", value: `+${tier.daily_bonus} moedas`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu VIP não permite call privada.");
+      await interaction.deferReply({ ephemeral: true });
+      await vipChannel.ensureVipChannels(interaction.user.id, { guildId: interaction.guildId });
+      await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply("✅ Nome da call atualizado!");
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id);
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= tier.primeiras_damas) return interaction.reply("❌ Você já atingiu seu limite de cotas.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Erro: Cargo de cota não configurado pela Staff.");
+
+      await target.roles.add(tier.cotaRoleId).catch(() => {});
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu um VIP para ${target}!`);
     }
 
     if (sub === "customizar") {
-      if (!tier?.hasSecondRole) return interaction.reply({ embeds: [createErrorEmbed("Seu VIP não permite cargo personalizado.")], ephemeral: true });
       await interaction.deferReply({ ephemeral: true });
       const res = await vipRole.updatePersonalRole(interaction.user.id, { 
         roleName: interaction.options.getString("nome"), 
         roleColor: interaction.options.getString("cor") 
       }, { guildId: interaction.guildId });
-      return interaction.editReply(res.ok ? { embeds: [createSuccessEmbed("🎨 Cargo atualizado!")] } : { embeds: [createErrorEmbed(`Erro: ${res.reason}`)] });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Benefício não disponível.");
     }
-
-    if (sub === "status") {
-      const remaining = entry.expiresAt ? Math.max(0, Math.ceil((entry.expiresAt - Date.now()) / 86400000)) : "Permanente";
-      return interaction.reply({ content: `⏳ Dias restantes: **${remaining}**`, ephemeral: true });
-    }
-  },
-
-  async handleButton(interaction) {
-    const { vip: vipService } = interaction.client.services;
-    const tier = await vipService.getMemberTier(interaction.member);
-
-    if (interaction.customId === "vip_manage_role") {
-        const select = new UserSelectMenuBuilder().setCustomId("vip_sel_role").setPlaceholder("Convidar para seu cargo").setMaxValues(5);
-        return interaction.reply({ content: "Selecione membros para compartilhar seu cargo:", components: [new ActionRowBuilder().addComponents(select)], ephemeral: true });
-    }
-    // Outros handlers de botão (família, etc) seguem a mesma lógica...
   }
 };
