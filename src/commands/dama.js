@@ -5,32 +5,8 @@ const {
   ButtonBuilder,
   ButtonStyle,
 } = require("discord.js");
-const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
-const { getGuildConfig } = require("../config/guildConfig");
-
-async function limiteDamasDoTier(member, guildId, client) {
-  const vipService = client.services.vip;
-  const entrada = vipService.getVip(member.id);
-  if (!entrada) return 0;
-  const tier = await vipService.getTierConfig(guildId, entrada.tierId);
-  return tier?.maxDamas ?? 1;
-}
-
-async function buildPanelEmbed(guildId) {
-  const config = await getGuildConfig(guildId);
-  const damaRoleId = config?.damaRoleId;
-  const damaPermRoleId = config?.damaPermRoleId;
-  return createEmbed({
-    title: "⚙️ Painel Admin — Sistema de Damas",
-    description: [
-      `**Cargo de Dama:** ${damaRoleId ? `<@&${damaRoleId}>` : "❌ Não definido"}`,
-      `**Cargo base (permissão):** ${damaPermRoleId ? `<@&${damaPermRoleId}>` : "❌ Não definido"}`,
-      "",
-      "O limite de damas é lido do **Tier VIP** do usuário (/vipadmin tier).",
-    ].join("\n"),
-    color: 0x5865f2,
-  });
-}
+// Nota: Certifique-se que esses helpers de embed existem no seu projeto
+// Se não existirem, o bot vai dar erro de 'module not found'.
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -45,92 +21,69 @@ module.exports = {
     .addSubcommand((sub) =>
       sub
         .setName("remove")
-        .setDescription("Remove uma dama específica ou todas")
-        .addUserOption((opt) => opt.setName("usuario").setDescription("Dama específica"))
-    )
-    .addSubcommand((sub) =>
-      sub.setName("config").setDescription("Painel de configuração (Admin)")
+        .setDescription("Remove uma dama específica")
+        .addUserOption((opt) => opt.setName("usuario").setDescription("Dama específica").setRequired(true))
     ),
 
   async execute(interaction) {
+    const { vip: vipService } = interaction.client.services;
     const sub = interaction.options.getSubcommand();
-    const { guildId, user, client, member } = interaction;
-    const vipService = client.services.vip;
+    const user = interaction.user;
+    const guildId = interaction.guildId;
 
-    if (sub === "config") {
-      if (!member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Sem permissão.")], ephemeral: true });
-      }
-      return interaction.reply({
-        embeds: [await buildPanelEmbed(guildId)],
-        components: [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId("dama_cfg:set_roles").setLabel("Configurar Cargos").setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId("dama_cfg:close").setLabel("Fechar").setStyle(ButtonStyle.Secondary)
-          ),
-        ],
-        ephemeral: true,
-      });
+    // Pega o Tier do usuário para saber o limite
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) {
+      return interaction.reply({ content: "❌ Apenas membros VIP podem ter damas.", ephemeral: true });
     }
 
+    const maxDamas = tier.primeiras_damas || 0;
+
     if (sub === "set") {
-      const alvo = interaction.options.getUser("usuario");
-      const maxDamas = await limiteDamasDoTier(member, guildId, client);
+      const alvo = interaction.options.getMember("usuario");
+      const settings = await vipService.getSettings(guildId, user.id) || {};
+      const damasAtuais = settings.vipsDados || [];
 
-      if (maxDamas === 0) {
-        return interaction.reply({
-          embeds: [createErrorEmbed("Apenas VIPs podem definir damas. Seu plano não possui limite de damas.")],
-          ephemeral: true,
-        });
+      if (maxDamas <= 0) {
+        return interaction.reply({ content: "❌ Seu plano VIP não inclui cotas de damas.", ephemeral: true });
       }
 
-      const atual = vipService.getDamasCount(guildId, user.id);
-      if (atual >= maxDamas) {
-        return interaction.reply({
-          embeds: [createErrorEmbed(`Limite de **${maxDamas}** dama(s) atingido. Melhore seu VIP para aumentar.`)],
-          ephemeral: true,
-        });
+      if (damasAtuais.length >= maxDamas) {
+        return interaction.reply({ content: `❌ Limite de **${maxDamas}** damas atingido.`, ephemeral: true });
       }
 
-      if (alvo.id === user.id) {
-        return interaction.reply({ embeds: [createErrorEmbed("Não pode ser sua própria dama.")], ephemeral: true });
-      }
-      if (alvo.bot) {
-        return interaction.reply({ embeds: [createErrorEmbed("Bots não podem ser damas.")], ephemeral: true });
+      if (alvo.id === user.id) return interaction.reply({ content: "❌ Você não pode ser sua própria dama.", ephemeral: true });
+      if (alvo.user.bot) return interaction.reply({ content: "❌ Bots não podem ser damas.", ephemeral: true });
+
+      // Adiciona o cargo de cota definido no Tier
+      if (tier.cotaRoleId) {
+        await alvo.roles.add(tier.cotaRoleId).catch(() => {});
       }
 
-      try {
-        await vipService.addDama(user.id, alvo.id);
-        return interaction.reply({
-          embeds: [createSuccessEmbed(`${alvo} agora é sua dama! (${atual + 1}/${maxDamas})`)],
-          ephemeral: true,
-        });
-      } catch (err) {
-        return interaction.reply({ embeds: [createErrorEmbed("Falha ao registrar dama.")], ephemeral: true });
-      }
+      damasAtuais.push(alvo.id);
+      await vipService.setSettings(guildId, user.id, { vipsDados: damasAtuais });
+
+      return interaction.reply({ content: `✅ ${alvo} agora é sua dama! (${damasAtuais.length}/${maxDamas})`, ephemeral: true });
     }
 
     if (sub === "remove") {
-      const alvo = interaction.options.getUser("usuario");
-      try {
-        await vipService.removeDama(user.id, alvo?.id);
-        return interaction.reply({ embeds: [createSuccessEmbed("Dama(s) removida(s) com sucesso.")], ephemeral: true });
-      } catch (err) {
-        return interaction.reply({ embeds: [createErrorEmbed("Falha ao remover.")], ephemeral: true });
+      const alvo = interaction.options.getMember("usuario");
+      const settings = await vipService.getSettings(guildId, user.id) || {};
+      let damasAtuais = settings.vipsDados || [];
+
+      if (!damasAtuais.includes(alvo.id)) {
+        return interaction.reply({ content: "❌ Este usuário não está na sua lista de damas.", ephemeral: true });
       }
-    }
-  },
 
-  async handleButton(interaction) {
-    const id = interaction.customId;
-    if (!id.startsWith("dama_cfg:")) return;
+      // Remove o cargo
+      if (tier.cotaRoleId) {
+        await alvo.roles.remove(tier.cotaRoleId).catch(() => {});
+      }
 
-    if (id === "dama_cfg:close") {
-      return interaction.update({ components: [], embeds: [createSuccessEmbed("Painel fechado.")] });
-    }
+      damasAtuais = damasAtuais.filter(id => id !== alvo.id);
+      await vipService.setSettings(guildId, user.id, { vipsDados: damasAtuais });
 
-    if (id === "dama_cfg:set_roles") {
-      return interaction.reply({ embeds: [createErrorEmbed("Configuração de cargos ainda não implementada.")], ephemeral: true });
+      return interaction.reply({ content: `✅ ${alvo} removida da sua lista.`, ephemeral: true });
     }
-  },
+  }
 };
