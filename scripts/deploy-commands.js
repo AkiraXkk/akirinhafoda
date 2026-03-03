@@ -1,30 +1,48 @@
-const { REST, Routes } = require("discord.js");
-const { config } = require("../src/config");
-const { logger } = require("../src/logger");
-const { loadCommands } = require("../src/loadCommands");
+const { REST, Routes } = require('discord.js');
+const fs = require('node:fs');
+const path = require('node:path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
-async function deploy() {
-  const { commandsJson } = loadCommands({ logger });
+const token = process.env.DISCORD_TOKEN;
+const clientId = process.env.CLIENT_ID;
+const guildId = process.env.GUILD_ID;
 
-  const rest = new REST({ version: "10" }).setToken(config.discord.token);
+const commands = [];
+const commandsPath = path.resolve(__dirname, '../src/commands');
 
-  const route = config.discord.guildId
-    ? Routes.applicationGuildCommands(config.discord.clientId, config.discord.guildId)
-    : Routes.applicationCommands(config.discord.clientId);
+console.log(`🔍 Buscando comandos em: ${commandsPath}`);
 
-  if (!config.discord.guildId) {
-    logger.warn("Registrando comandos GLOBALMENTE. Isso pode levar até 1 hora para atualizar no Discord.");
-  }
+// Lógica de leitura para arquivos diretos ou pastas
+const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.js'));
 
-  const scope = config.discord.guildId ? { guildId: config.discord.guildId } : { global: true };
-  logger.info({ ...scope, count: commandsJson.length }, "Registrando comandos");
-
-  await rest.put(route, { body: commandsJson });
-
-  logger.info({ ...scope, count: commandsJson.length }, "Comandos registrados");
+for (const file of commandFiles) {
+    const filePath = path.join(commandsPath, file);
+    try {
+        const command = require(filePath);
+        if ('data' in command && 'execute' in command) {
+            commands.push(command.data.toJSON());
+            console.log(`✅ Comando carregado: ${file}`);
+        } else {
+            console.log(`⚠️  [AVISO] O comando em ${file} está faltando "data" ou "execute".`);
+        }
+    } catch (error) {
+        console.error(`❌ Erro ao ler o arquivo ${file}:`, error.message);
+    }
 }
 
-deploy().catch((error) => {
-  logger.fatal({ err: error }, "Falha ao registrar comandos");
-  process.exitCode = 1;
-});
+const rest = new REST({ version: '10' }).setToken(token);
+
+(async () => {
+    try {
+        console.log(`🚀 Iniciando atualização de ${commands.length} comandos (/)`);
+
+        const data = await rest.put(
+            Routes.applicationGuildCommands(clientId, guildId),
+            { body: commands },
+        );
+
+        console.log(`✨ Sucesso! ${data.length} comandos registrados.`);
+    } catch (error) {
+        console.error('💥 Erro fatal no deploy:', error);
+    }
+})();

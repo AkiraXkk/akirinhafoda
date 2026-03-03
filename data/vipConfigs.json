@@ -1,1 +1,71 @@
-{}
+{
+  "722253176283070506": {
+    "black": {
+      "roleId": "1475867067680030926",
+      "name": "VIP BLACK",
+      "daily_bonus": 0,
+      "midas": false,
+      "vagas_familia": 0,
+      "primeiras_damas": 0,
+      "cotaRoleId": null,
+      "canCall": false,
+      "chat_privado": false,
+      "hasCustomRole": false,
+      "high_quality_voice": false
+    },
+    "imperial": {
+      "id": "imperial",
+      "roleId": "1475866847688786003",
+      "name": "VIP IMPERIAL",
+      "daily_bonus": 0,
+      "midas": false,
+      "vagas_familia": 0,
+      "primeiras_damas": 0,
+      "cotaRoleId": null,
+      "canCall": false,
+      "chat_privado": false,
+      "hasCustomRole": false,
+      "high_quality_voice": false,
+      "shop_enabled": null,
+      "shop_price_per_day": null,
+      "shop_fixed_price": null,
+      "shop_default_days": null
+    },
+    "gold": {
+      "id": "gold",
+      "roleId": "1475544546845659239",
+      "name": "VIP OURO",
+      "daily_bonus": 0,
+      "midas": false,
+      "vagas_familia": 0,
+      "primeiras_damas": 0,
+      "cotaRoleId": null,
+      "canCall": false,
+      "chat_privado": false,
+      "hasCustomRole": false,
+      "high_quality_voice": false,
+      "shop_enabled": null,
+      "shop_price_per_day": null,
+      "shop_fixed_price": null,
+      "shop_default_days": null
+    },
+    "esmeralda": {
+      "id": "esmeralda",
+      "roleId": "1475865627179749622",
+      "name": "VIP ESMERALDA",
+      "daily_bonus": 0,
+      "midas": false,
+      "vagas_familia": 0,
+      "primeiras_damas": 0,
+      "cotaRoleId": null,
+      "canCall": false,
+      "chat_privado": false,
+      "hasCustomRole": false,
+      "high_quality_voice": false,
+      "shop_enabled": null,
+      "shop_price_per_day": null,
+      "shop_fixed_price": null,
+      "shop_default_days": null
+    }
+  }
+}
