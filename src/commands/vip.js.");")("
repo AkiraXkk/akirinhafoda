@@ -1,0 +1,1158 @@
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};
+	=
+{
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};
+	
+.("")
+
+	
+.
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};
+
+(const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};
+
+=>
+
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};.("	
+.{
+  "name": "discord-bot-basico",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bot de Discord básico com comandos slash e embeds",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "deploy-commands": "node scripts/deploy-commands.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "discord.js": "^14.22.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mongoose": "^9.2.2",
+    "pino": "^9.5.0",
+    "pino-pretty": "^13.1.1"
+  }
+}
+
+
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};
+
+(const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};
+
+=>
+
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+")
+};.("
+.
+	
+")
+
+.
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};
+
+(const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};
+
+=>
+
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};.("
+.
+.
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};
+
+	
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};
+
+(const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};
+
+=>
+
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};.("const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+
+module.exports = {
+  data: new SlashCommandBuilder()
+    .setName("vip")
+    .setDescription("Gerencie suas vantagens VIP")
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
+    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
+    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome")).addStringOption(o => o.setName("cor"))),
+
+  async execute(interaction) {
+    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const tier = await vipService.getMemberTier(interaction.member);
+    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === "info") {
+      const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
+      const embed = new EmbedBuilder().setTitle("💎 Seus Status VIP").setColor("Gold")
+        .addFields(
+          { name: "Expiração", value: `<t:${Math.floor(data.expiresAt/1000)}:R>`, inline: true },
+          { name: "Cotas Usadas", value: `${(data.vipsDados || []).length}/${tier.primeiras_damas || 0}`, inline: true }
+        );
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "call") {
+      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
+    }
+
+    if (sub === "dar") {
+      const target = interaction.options.getMember("membro");
+      const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const dados = settings.vipsDados || [];
+
+      if (dados.length >= (tier.primeiras_damas || 0)) return interaction.reply("❌ Cota esgotada.");
+      if (!tier.cotaRoleId) return interaction.reply("❌ Cargo de cota não configurado.");
+
+      await target.roles.add(tier.cotaRoleId);
+      dados.push(target.id);
+      await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
+      return interaction.reply(`✅ Você deu VIP para ${target}!`);
+    }
+
+    if (sub === "customizar") {
+      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
+      await interaction.deferReply({ ephemeral: true });
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
+        roleName: interaction.options.getString("nome"), 
+        roleColor: interaction.options.getString("cor") 
+      }, { guildId: interaction.guildId });
+      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
+    }
+  }
+};
+
+	
+.
+("
+")
+
+.# Bot de Discord (básico)
+
+Base pronta para evoluir com comandos, embeds e clean code.
+
+## Requisitos
+
+- Node.js 18+
+- Um app criado no Discord Developer Portal com um bot
+
+## Configuração
+
+1. Instale as dependências:
+
+```bash
+npm install
+```
+
+2. Crie seu `.env`:
+
+```bash
+copy .env.example .env
+```
+
+3. Preencha no `.env`:
+
+- `DISCORD_TOKEN`: token do bot
+- `CLIENT_ID`: client id do app
+- `GUILD_ID` (opcional): id do servidor para registrar comandos só nele (recomendado para desenvolvimento)
+
+Importante: nunca compartilhe seu token. Se ele vazar, regenere no Discord Developer Portal.
+
+## Convidar o bot
+
+Abra (substitua `CLIENT_ID`):
+
+`https://discord.com/oauth2/authorize?client_id=CLIENT_ID&scope=bot%20applications.commands&permissions=0`
+
+## Registrar comandos
+
+```bash
+npm run deploy-commands
+```
+
+## Rodar
+
+```bash
+npm start
+```
+
+Ou em modo watch:
+
+```bash
+npm run dev
+```
+
+## Comandos
+
+- `/ping`
+- `/ajuda`
+- `/vipsetup config [cargo_vip] [categoria_vip]` (Admin: configura o sistema VIP no servidor)
+- `/vipsetup info` (Mostra a configuração atual)
+- `/vip status [usuario]`
+- `/vip add usuario`
+- `/vip remove usuario`
+- `/vip list`
+- `/myvip role create [nome] [cor]` (Cria/Edita cargo personalizado)
+- `/myvip role delete` (Deleta cargo personalizado)
+- `/myvip room create` (Cria canais de texto/voz privados)
+- `/myvip room delete` (Deleta canais privados)
+
+### VIP
+
+- O bot considera VIP quando o usuário está no arquivo `VIP_STORE_PATH` ou tem o cargo VIP configurado via `/vipsetup`.
+- Para gerenciar VIPs e configurações, o usuário precisa de permissão `Gerenciar servidor`.
+
