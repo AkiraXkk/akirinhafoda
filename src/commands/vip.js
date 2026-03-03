@@ -194,14 +194,23 @@ module.exports = {
           return interaction.reply({ content: "Você ainda não deu VIP da cota para ninguém.", ephemeral: true });
         }
 
+        // Fetch user information for better display
+        const userOptions = await Promise.all(
+          dados.slice(0, 25).map(async (uid) => {
+            try {
+              const user = await interaction.client.users.fetch(uid).catch(() => null);
+              const label = user ? `${user.username} (${uid})` : uid;
+              return new StringSelectMenuOptionBuilder().setLabel(label).setValue(uid);
+            } catch {
+              return new StringSelectMenuOptionBuilder().setLabel(uid).setValue(uid);
+            }
+          })
+        );
+
         const menu = new StringSelectMenuBuilder()
           .setCustomId(`vip_quota_remove_${interaction.guildId}_${interaction.user.id}`)
           .setPlaceholder("Selecione quem remover da sua cota")
-          .addOptions(
-            dados.slice(0, 25).map((uid) =>
-              new StringSelectMenuOptionBuilder().setLabel(uid).setValue(uid)
-            )
-          );
+          .addOptions(userOptions);
 
         return interaction.reply({
           content: "Remover alguém da sua lista de cotas (isso remove o cargo de cota se configurado):",
@@ -262,8 +271,8 @@ module.exports = {
 
     if (interaction.customId.startsWith("vip_quota_remove_")) {
       const parts = parseCustomId(interaction.customId);
-      const guildId = parts[3];
-      const ownerId = parts[4];
+      const guildId = parts[2];
+      const ownerId = parts[3];
       if (interaction.guildId !== guildId) {
         return interaction.reply({ content: "Este menu pertence a outro servidor.", ephemeral: true });
       }

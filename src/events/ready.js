@@ -2,6 +2,16 @@ const { Events } = require("discord.js");
 const { logger } = require("../logger");
 const { createVipExpiryManager } = require("../vip/vipExpiryManager");
 
+let voiceXpTimer = null;
+
+function stopVoiceXpTimer() {
+  if (voiceXpTimer) {
+    clearInterval(voiceXpTimer);
+    voiceXpTimer = null;
+    logger.info("Voice XP timer stopped");
+  }
+}
+
 module.exports = {
   name: Events.ClientReady,
   once: true,
@@ -26,7 +36,8 @@ module.exports = {
       expiry.start({ intervalMs: 5 * 60 * 1000 });
     }
 
-    setInterval(async () => {
+    stopVoiceXpTimer();
+    voiceXpTimer = setInterval(async () => {
         const levelsCommand = client.commands.get("rank");
         const economyService = client.services?.economy;
         if (!levelsCommand || !economyService) return;
@@ -52,5 +63,9 @@ module.exports = {
             logger.error({ err: e }, "Erro no Voice XP");
         }
     }, 60000);
+    
+    logger.info("Voice XP timer started");
   },
+  
+  cleanup: stopVoiceXpTimer
 };

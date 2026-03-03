@@ -52,12 +52,16 @@ function createTagRoleManager({ client, tagRoleService, targetGuildId, logger } 
       const shouldHave = memberMatches(member, member.user, cfg);
 
       if (shouldHave && !hasRole) {
-        await member.roles.add(cfg.roleId).catch(() => {});
+        await member.roles.add(cfg.roleId).catch((err) => {
+          log.warn({ guildId, userId: member.id, roleId: cfg.roleId, err: err?.message }, "Failed to add role in TagRole scan");
+        });
         added += 1;
       }
 
       if (!shouldHave && hasRole && cfg.removeMissing !== false) {
-        await member.roles.remove(cfg.roleId).catch(() => {});
+        await member.roles.remove(cfg.roleId).catch((err) => {
+          log.warn({ guildId, userId: member.id, roleId: cfg.roleId, err: err?.message }, "Failed to remove role in TagRole scan");
+        });
         removed += 1;
       }
     }
@@ -75,9 +79,10 @@ function createTagRoleManager({ client, tagRoleService, targetGuildId, logger } 
     const intervalMs = Math.max(1, intervalHours) * 60 * 60 * 1000;
 
     if (timer) clearInterval(timer);
-    timer = setInterval(() => applyOnce().catch(() => {}), intervalMs);
-
+    
     applyOnce().catch(() => {});
+    timer = setInterval(() => applyOnce().catch(() => {}), intervalMs);
+    
     log.info({ guildId, intervalHours }, "TagRole manager started");
   }
 
