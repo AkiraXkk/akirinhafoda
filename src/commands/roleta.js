@@ -1,11 +1,5 @@
-const {
-  SlashCommandBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ComponentType,
-} = require("discord.js");
-const { createEmbed, createErrorEmbed } = require("../embeds");
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require("discord.js");
+const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
 const CHAMBERS = 6;
 const QUICK_BETS = [100, 500, 1000];
@@ -37,6 +31,7 @@ module.exports = {
       description:
         "Teste sua coragem! O revólver tem **6 câmaras** e **1 bala**.\nA cada rodada você puxa o gatilho. Quanto mais sobreviver, maior o prêmio!",
       color: 0xe74c3c,
+      footer: { text: "WDA - Todos os direitos reservados" },
       fields: [
         {
           name: "💸 Premiação",
@@ -156,7 +151,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
             `Você perdeu **${originalBet}** 🪙`,
           ].join("\n"),
           color: 0xe74c3c,
-          footer: "Melhor sorte na próxima!",
+          footer: { text: "WDA - Todos os direitos reservados" },
         });
       }
 
@@ -169,12 +164,10 @@ async function runGame(interaction, bet, eco, guildId, userId) {
           description: [
             getChamberDisplay(round, true),
             "",
-            `Sobreviveu **${round}** rodada${round !== 1 ? "s" : ""}!`,
-            `Multiplicador: **${currentMultiplier}x**`,
-            `Ganhou: **${prize}** 🪙 (lucro: **${prize - originalBet}** 🪙)`,
+            `Você ganhou **${prize}** 🪙`,
           ].join("\n"),
           color: 0x2ecc71,
-          footer: "Bela jogada!",
+          footer: { text: "WDA - Todos os direitos reservados" },
         });
       }
 
@@ -195,7 +188,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
           "Puxar o gatilho ou retirar-se com o prêmio?",
         ].join("\n"),
         color: 0xf39c12,
-        footer: `Aposta: ${originalBet} 🪙 • Chance de sobreviver: ${Math.round(((CHAMBERS - round - 1) / (CHAMBERS - round)) * 100)}%`,
+        footer: `Aposta: ${originalBet} 🪙 • Chance de sobreviver: ${Math.round(((CHAMBERS - round - 1) / (CHAMBERS - round)) * 100)}% • WDA - Todos os direitos reservados`,
       });
     };
 

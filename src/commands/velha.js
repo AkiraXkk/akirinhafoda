@@ -1,11 +1,5 @@
-const {
-  SlashCommandBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ComponentType,
-} = require("discord.js");
-const { createEmbed } = require("../embeds");
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require("discord.js");
+const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
 const EMPTY = "⬜";
 const X_EMOJI = "❌";
@@ -287,8 +281,9 @@ async function runPvPGame(interaction, challenger, opponent) {
   // Send challenge
   const challengeEmbed = createEmbed({
     title: "🎮 Desafio — Jogo da Velha!",
-    description: `${challenger} desafiou ${opponent} para um Jogo da Velha!\n\n${opponent.username}, você aceita?`,
+    description: `${challenger} desafiou ${opponent} para um Jogo da Velha!\n\n${opponent.username}, você Aceita?`,
     color: 0x3498db,
+    footer: { text: "WDA - Todos os direitos reservados" },
     thumbnail: challenger.displayAvatarURL({ dynamic: true }),
   });
 

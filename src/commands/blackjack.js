@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ComponentType } = require("discord.js");
-const { createEmbed, createErrorEmbed } = require("../embeds");
+const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
 const SUITS = ["♠", "♥", "♦", "♣"];
 const VALUES = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
@@ -73,7 +73,7 @@ module.exports = {
                 { name: "💸 Pagamentos", value: "Vitória: **2x**\nBlackjack natural: **2.5x**\nEmpate: **aposta devolvida**", inline: true },
                 { name: "🎮 Como jogar", value: "Use aposta rápida, aposta personalizada ou `/blackjack aposta:valor`", inline: true }
             ],
-            footer: "Escolha um valor para começar"
+            footer: { text: "WDA - Todos os direitos reservados" }
         });
 
         const rowMain = new ActionRowBuilder().addComponents(
@@ -210,7 +210,8 @@ async function runGame(interaction, bet, eco, guildId, userId) {
                             { name: "Mão do Dealer", value: formatHand(dealerHand), inline: true }
                         ],
                         color: 0xf1c40f,
-                        thumbnail: "https://cdn-icons-png.flaticon.com/512/6556/6556073.png"
+                        thumbnail: "https://cdn-icons-png.flaticon.com/512/6556/6556073.png",
+                        footer: { text: "WDA - Todos os direitos reservados" }
                     })],
                     components: []
                 });
@@ -227,7 +228,8 @@ async function runGame(interaction, bet, eco, guildId, userId) {
                     { name: "Lucro", value: `+${Math.ceil(bet * 1.5)} 🪙`, inline: true }
                 ],
                 color: 0xf1c40f,
-                thumbnail: "https://cdn-icons-png.flaticon.com/512/6556/6556073.png"
+                thumbnail: "https://cdn-icons-png.flaticon.com/512/6556/6556073.png",
+                footer: { text: "WDA - Todos os direitos reservados" }
             });
 
             return interaction.editReply({ content: null, embeds: [embedBJ], components: [] });
@@ -266,7 +268,8 @@ async function runGame(interaction, bet, eco, guildId, userId) {
                 }
             ],
             thumbnail: isGameOver ? "https://media1.tenor.com/m/Xf7Lp9-3uKAAAAAC/kakegurui-yumeko-jabami.gif" : "https://cdn-icons-png.flaticon.com/512/10603/10603460.png",
-            footer: isGameOver ? { text: "Jogo encerrado" } : { text: "Sua vez! Escolha uma ação:" }
+            footer: isGameOver ? { text: "Jogo encerrado" } : { text: "Sua vez! Escolha uma ação:" },
+            footer: { text: "WDA - Todos os direitos reservados" }
         });
         return embed;
     };
