@@ -43,22 +43,24 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    // Verificar se é o dono (config.ownerId não existe ainda, vamos usar uma lista hardcoded ou env)
-    // Para simplificar, vamos deixar livre para quem tiver permissão de admin do servidor
-    // MAS CUIDADO: Isso altera o bot GLOBALMENTE.
-    // Melhor verificar ID específico.
-    
-    // Vamos assumir que quem tem permissão de Administrator pode, ou adicionar uma verificação de ID hardcoded.
-    // const OWNER_ID = "SEU_ID_AQUI"; 
-    // if (interaction.user.id !== OWNER_ID) ...
-    
-    // Por segurança, vamos usar permissão de Administrador do servidor onde o comando é executado.
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores podem usar isso.")], ephemeral: true });
     }
 
     const sub = interaction.options.getSubcommand();
     const client = interaction.client;
+
+    // Subcomandos que alteram o bot globalmente exigem ser o dono
+    const globalSubs = ["setname", "setavatar", "setbanner"];
+    if (globalSubs.includes(sub)) {
+        const ownerId = process.env.OWNER_ID;
+        if (!ownerId) {
+            return interaction.reply({ embeds: [createErrorEmbed("OWNER_ID não configurado no .env. Operações globais do bot requerem essa variável.")], ephemeral: true });
+        }
+        if (interaction.user.id !== ownerId) {
+            return interaction.reply({ embeds: [createErrorEmbed("Apenas o dono do bot pode alterar nome, avatar ou banner globalmente.")], ephemeral: true });
+        }
+    }
 
     if (sub === "setname") {
         const name = interaction.options.getString("nome");

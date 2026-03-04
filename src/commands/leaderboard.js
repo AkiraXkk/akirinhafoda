@@ -22,7 +22,7 @@ function formatarTempoCall(voice_time) {
 
 // Função principal para gerar imagem do leaderboard
 async function gerarImagemLeaderboard(interaction, page = 1) {
-  const canvas = createCanvas(934, 800); // Largura 934px, altura calculada
+  const canvas = createCanvas(934, 800);
   const ctx = canvas.getContext("2d");
   
   // Carregar dados do banco
@@ -43,26 +43,62 @@ async function gerarImagemLeaderboard(interaction, page = 1) {
     return null;
   }
   
-  // Fundo principal
-  ctx.fillStyle = "#1a1a1a";
+  // Fundo principal com gradiente
+  const gradient = ctx.createLinearGradient(0, 0, 0, 800);
+  gradient.addColorStop(0, "#1a1a1a");
+  gradient.addColorStop(1, "#2c2f33");
+  ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 934, 800);
   
   // Cabeçalho
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 24px Arial";
+  ctx.font = "bold 36px Arial";
   ctx.textAlign = "center";
+  ctx.fillText("🏆 LEADERBOARD", 467, 60);
   
-  const headerText = `✨ ${interaction.guild.name}`;
-  ctx.fillText(headerText, 934 / 2, 40);
+  ctx.font = "18px Arial";
+  ctx.fillStyle = "#95a5a6";
+  ctx.fillText(`Página ${page}`, 467, 90);
   
-  // Ícone do servidor ao lado do texto
-  try {
-    const guildIcon = await loadImage(interaction.guild.iconURL({ size: 64 }));
-    ctx.drawImage(guildIcon, (934 / 2) + 120, 15, 30, 30);
-  } catch (error) {
-    console.log("Não foi possível carregar ícone do servidor:", error.message);
-  }
+  // Lista de usuários
+  let yPos = 140;
+  usuariosPagina.forEach((usuario, index) => {
+    const posicao = skip + index + 1;
+    
+    // Fundo do item
+    ctx.fillStyle = index % 2 === 0 ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)";
+    ctx.fillRect(50, yPos - 5, 834, 70);
+    
+    // Posição
+    ctx.fillStyle = posicao <= 3 ? "#ffd700" : posicao <= 10 ? "#c0c0c0" : "#95a5a6";
+    ctx.font = "bold 24px Arial";
+    ctx.textAlign = "left";
+    ctx.fillText(`#${posicao}`, 70, yPos + 25);
+    
+    // Avatar placeholder
+    ctx.fillStyle = "#4a5568";
+    ctx.fillRect(140, yPos + 5, 40, 40);
+    
+    // Nome do usuário
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "20px Arial";
+    ctx.textAlign = "left";
+    const nomeTruncado = usuario.id.length > 15 ? `<@${usuario.id.substring(0, 12)}...>` : `<@${usuario.id}>`;
+    ctx.fillText(nomeTruncado, 200, yPos + 25);
+    
+    // Nível e XP
+    ctx.font = "18px Arial";
+    ctx.fillStyle = "#95a5a6";
+    ctx.fillText(`Nível ${usuario.level || 1}`, 200, yPos + 45);
+    
+    ctx.fillStyle = "#7289da";
+    ctx.fillText(`${usuario.totalXp || 0} XP`, 450, yPos + 45);
+    
+    yPos += 90;
+  });
   
+  // Rodapé
+  ctx.fillStyle = "#95a5a6";
   // Carregar banners e avatares simultaneamente
   const usuariosComAssets = await Promise.all(
     usuariosPagina.map(async (usuario, index) => {
@@ -175,31 +211,32 @@ async function gerarImagemLeaderboard(interaction, page = 1) {
     ctx.fillText(`Tempo em Call: ${tempoFormatado}`, 140, linhaY + 125);
   }
   
+  // Rodapé
+  ctx.fillStyle = "#95a5a6";
+  ctx.font = "14px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(`Total: ${usuariosValidos.length} usuários • Mostrando ${Math.min(5, usuariosValidos.length - skip)}`, 467, 760);
+  
   return canvas.toBuffer("image/png");
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("leaderboard")
-    .setDescription("Mostra o ranking de usuários com mais XP")
-    .addIntegerOption((opt) => 
-      opt.setName("page")
-        .setDescription("Número da página")
-        .setMinValue(1)
-        .setRequired(false)
-    ),
+    .setDescription("Mostra o ranking dos usuários com mais XP")
+    .addIntegerOption((opt) => opt.setName("pagina").setDescription("Número da página").setMinValue(1).setRequired(false)),
 
   async execute(interaction) {
-    await interaction.deferReply(); // Defer para evitar timeout
+    const page = interaction.options.getInteger("pagina") || 1;
     
-    const page = interaction.options.getInteger("page") || 1;
+    await interaction.deferReply();
     
     try {
       const imagemBuffer = await gerarImagemLeaderboard(interaction, page);
       
       if (!imagemBuffer) {
         return interaction.editReply({
-          content: "Esta página não contém usuários com XP suficiente.",
+          embeds: [createEmbed("Nenhum usuário encontrado nesta página.")],
           ephemeral: true
         });
       }

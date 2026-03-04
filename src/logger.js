@@ -2,7 +2,7 @@ const pino = require("pino");
 const { config } = require("./config");
 
 const logger = pino({
-  level: config.logLevel,
+  level: config?.logLevel || "info",
   transport:
     process.env.NODE_ENV === "production"
       ? undefined

@@ -40,8 +40,8 @@ module.exports = {
 
         const result = await eco.daily(guildId, userId, total); 
         
-        if (!result.success) {
-            const nextDate = Math.floor(result.nextDaily / 1000);
+        if (!result || !result.success) {
+            const nextDate = result?.nextDaily ? Math.floor(result.nextDaily / 1000) : Math.floor(Date.now() / 1000) + 86400;
             return interaction.reply({ 
                 embeds: [createErrorEmbed(`Você já resgatou seu daily hoje!\n⏳ Tente novamente <t:${nextDate}:R> (<t:${nextDate}:f>)`)], 
                 ephemeral: true 

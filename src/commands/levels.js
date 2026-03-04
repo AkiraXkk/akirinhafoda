@@ -349,32 +349,45 @@ async function addXpForMessage(member) {
     return { subiuNivel: false, novoNivel: 1, nivelAnterior: 1 };
   }
 
-  // XP aleatório entre 1 e 12
-  const xpAleatorio = Math.floor(Math.random() * 12) + 1; // 1-12
-  
-  // Aplicar multiplicador baseado em vezes (ex: 2x, 3x)
+  // Calcular multiplicador
   let multiplicador = 1;
-  for (const [roleId, vezes] of Object.entries(config.multiplierRoles)) {
+  for (const [roleId, mult] of Object.entries(config.multiplierRoles)) {
     if (member.roles.cache.has(roleId)) {
-      multiplicador = Math.max(multiplicador, Number(vezes) || 1);
+      multiplicador *= mult;
+      break;
     }
   }
-  
-  const quantidade = Math.min(xpAleatorio * multiplicador, 50); // Limite máximo de 50 XP por mensagem
-  
+
+  // XP base aleatório entre 1 e o configurado
+  const xpBase = Math.floor(Math.random() * (config.xpPerMessage - 1)) + 1;
+  const xpTotal = Math.floor(xpBase * multiplicador);
+
   // Atualizar cooldown
   xpCooldowns.set(member.id, now);
-  
-  const resultado = await addXp(member.id, quantidade);
 
-  // Incrementar contador de mensagens
+  // Adicionar XP e atualizar contador de mensagens
+  let subiuNivel = false;
+  let novoNivel = 1;
+  let nivelAnterior = 1;
+
   await levelsStore.update(member.id, (current) => {
-    const dados = current || { xp: 0, level: 1, totalXp: 0, messages_count: 0, voice_time: 0 };
-    dados.messages_count = (dados.messages_count || 0) + 1;
-    return dados;
+    const data = current || { xp: 0, level: 1, totalXp: 0, messages_count: 0, voice_time: 0 };
+    nivelAnterior = data.level;
+    
+    data.totalXp = (data.totalXp || 0) + xpTotal;
+    data.xp = data.totalXp % 1000;
+    data.level = Math.floor(data.totalXp / 1000);
+    data.messages_count = (data.messages_count || 0) + 1; // Atualizar contador em tempo real
+    
+    if (data.level > nivelAnterior) {
+      subiuNivel = true;
+      novoNivel = data.level;
+    }
+
+    return data;
   });
 
-  return resultado;
+  return { subiuNivel, novoNivel, nivelAnterior };
 }
 
 async function addXpForVoiceTick(member, minutos = 1) {
