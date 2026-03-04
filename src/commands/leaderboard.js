@@ -1,9 +1,19 @@
-const { SlashCommandBuilder, AttachmentBuilder } = require("discord.js");
-const { createCanvas, loadImage } = require("canvas");
-const { createEmbed } = require("../embeds");
+const { SlashCommandBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { createCanvas, loadImage, registerFont } = require("canvas");
+const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
 
 const levelsStore = createDataStore("levels.json");
+const userCardsStore = createDataStore("userCards.json");
+
+// Configurações de cards para compra
+const CARDS_CONFIG = {
+  default: { name: "Padrão", price: 0, color: "#4a5568" },
+  premium: { name: "Premium", price: 5000, color: "#f1c40f" },
+  gold: { name: "Gold", price: 10000, color: "#f39c12" },
+  neon: { name: "Neon", price: 15000, color: "#e74c3c" },
+  ocean: { name: "Ocean", price: 20000, color: "#3498db" }
+};
 
 // Função para formatar tempo em call
 function formatarTempoCall(voice_time) {
@@ -20,13 +30,27 @@ function formatarTempoCall(voice_time) {
   }
 }
 
+// Função para obter cards do usuário
+async function getUserCards(userId) {
+  const cards = await userCardsStore.load();
+  return cards[userId] || { selected: "default", owned: ["default"] };
+}
+
+// Função para salvar cards do usuário
+async function saveUserCards(userId, cards) {
+  await userCardsStore.update(userId, cards);
+}
+
 // Função principal para gerar imagem do leaderboard
 async function gerarImagemLeaderboard(interaction, page = 1) {
-  const canvas = createCanvas(934, 800);
+  console.log(`🔍 Iniciando geração do leaderboard - Página: ${page}`);
+  
+  const canvas = createCanvas(1000, 900);
   const ctx = canvas.getContext("2d");
   
   // Carregar dados do banco
   const levels = await levelsStore.load();
+  console.log(`📊 Total de usuários no banco: ${Object.keys(levels).length}`);
   
   // Filtrar usuários com XP >= 10 e ordenar
   const usuariosValidos = Object.entries(levels)
@@ -34,199 +58,376 @@ async function gerarImagemLeaderboard(interaction, page = 1) {
     .map(([id, data]) => ({ id, ...data }))
     .sort((a, b) => (b.totalXp || 0) - (a.totalXp || 0));
   
+  console.log(`✅ Usuários qualificados: ${usuariosValidos.length}`);
+  
   // Calcular skip e limit
   const skip = (page - 1) * 5;
   const usuariosPagina = usuariosValidos.slice(skip, skip + 5);
   
+  console.log(`📄 Usuários nesta página: ${usuariosPagina.length}`);
+  
   // Verificar se há usuários na página
   if (usuariosPagina.length === 0) {
+    console.log(`❌ Nenhum usuário na página ${page}`);
     return null;
   }
   
   // Fundo principal com gradiente
-  const gradient = ctx.createLinearGradient(0, 0, 0, 800);
-  gradient.addColorStop(0, "#1a1a1a");
-  gradient.addColorStop(1, "#2c2f33");
+  const gradient = ctx.createLinearGradient(0, 0, 0, 900);
+  gradient.addColorStop(0, "#1a1a2e");
+  gradient.addColorStop(1, "#16213e");
   ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 934, 800);
+  ctx.fillRect(0, 0, 1000, 900);
   
   // Cabeçalho
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 36px Arial";
+  ctx.font = "bold 42px Arial";
   ctx.textAlign = "center";
-  ctx.fillText("🏆 LEADERBOARD", 467, 60);
+  ctx.fillText("🏆 LEADERBOARD XP", 500, 60);
   
-  ctx.font = "18px Arial";
+  ctx.font = "20px Arial";
   ctx.fillStyle = "#95a5a6";
-  ctx.fillText(`Página ${page}`, 467, 90);
+  ctx.fillText(`Página ${page} de ${Math.ceil(usuariosValidos.length / 5)}`, 500, 95);
   
-  // Lista de usuários
-  let yPos = 140;
-  usuariosPagina.forEach((usuario, index) => {
-    const posicao = skip + index + 1;
-    
-    // Fundo do item
-    ctx.fillStyle = index % 2 === 0 ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)";
-    ctx.fillRect(50, yPos - 5, 834, 70);
-    
-    // Posição
-    ctx.fillStyle = posicao <= 3 ? "#ffd700" : posicao <= 10 ? "#c0c0c0" : "#95a5a6";
-    ctx.font = "bold 24px Arial";
-    ctx.textAlign = "left";
-    ctx.fillText(`#${posicao}`, 70, yPos + 25);
-    
-    // Avatar placeholder
-    ctx.fillStyle = "#4a5568";
-    ctx.fillRect(140, yPos + 5, 40, 40);
-    
-    // Nome do usuário
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "20px Arial";
-    ctx.textAlign = "left";
-    const nomeTruncado = usuario.id.length > 15 ? `<@${usuario.id.substring(0, 12)}...>` : `<@${usuario.id}>`;
-    ctx.fillText(nomeTruncado, 200, yPos + 25);
-    
-    // Nível e XP
-    ctx.font = "18px Arial";
-    ctx.fillStyle = "#95a5a6";
-    ctx.fillText(`Nível ${usuario.level || 1}`, 200, yPos + 45);
-    
-    ctx.fillStyle = "#7289da";
-    ctx.fillText(`${usuario.totalXp || 0} XP`, 450, yPos + 45);
-    
-    yPos += 90;
-  });
+  // Carregar avatares dos usuários
+  console.log(`🔍 Iniciando carregamento de avatares para ${usuariosPagina.length} usuários`);
   
-  // Rodapé
-  ctx.fillStyle = "#95a5a6";
-  // Carregar banners e avatares simultaneamente
-  const usuariosComAssets = await Promise.all(
+  const usuariosComAvatares = await Promise.all(
     usuariosPagina.map(async (usuario, index) => {
+      console.log(`👤 Processando usuário ${usuario.id} (índice ${index})`);
+      
       try {
-        // Carregar avatar
-        let avatar;
-        try {
-          avatar = await loadImage(
-            interaction.client.users.cache.get(usuario.id)?.displayAvatarURL({ size: 128, extension: "png" }) || 
-            `https://cdn.discordapp.com/embed/avatars/${usuario.id}/${usuario.avatar}.png?size=128`
-          );
-        } catch (error) {
-          console.log(`Erro ao carregar avatar do usuário ${usuario.id}:`, error.message);
-          avatar = null;
-        }
+        // Tentar obter usuário do cache
+        let user = interaction.client.users.cache.get(usuario.id);
+        console.log(`📦 Usuário ${usuario.id} no cache: ${!!user}`);
         
-        // Carregar banner (se existir)
-        let banner;
-        if (usuario.banner_atual) {
+        // Se não estiver no cache, tentar buscar
+        if (!user) {
           try {
-            banner = await loadImage(usuario.banner_atual);
+            console.log(`🔎 Buscando usuário ${usuario.id} na API...`);
+            user = await interaction.client.users.fetch(usuario.id, { force: true });
+            console.log(`✅ Usuário ${usuario.id} encontrado: ${user.username}`);
           } catch (error) {
-            console.log(`Banner inválido para usuário ${usuario.id}, usando fallback:`, error.message);
-            banner = null;
+            console.log(`❌ Não foi possível obter usuário ${usuario.id}:`, error.message);
           }
         }
         
-        return {
+        // Carregar avatar com múltiplas tentativas
+        let avatar = null;
+        let avatarUrl = null;
+        
+        if (user) {
+          const avatarUrls = [
+            user.displayAvatarURL({ size: 128, extension: "png", forceStatic: true }),
+            user.displayAvatarURL({ size: 128 }),
+            user.avatarURL({ size: 128, extension: "png", forceStatic: true }),
+            user.avatarURL({ size: 128 }),
+            `https://cdn.discordapp.com/avatars/${usuario.id}/${user.avatar}.png?size=128`,
+            `https://cdn.discordapp.com/embed/avatars/${usuario.id}.png?size=128`
+          ];
+          
+          for (let i = 0; i < avatarUrls.length; i++) {
+            const url = avatarUrls[i];
+            if (url) {
+              try {
+                console.log(`🖼️ Tentativa ${i + 1} para usuário ${usuario.id}: ${url}`);
+                avatar = await loadImage(url);
+                avatarUrl = url;
+                console.log(`✅ Avatar carregado para usuário ${usuario.id} (tentativa ${i + 1})`);
+                break; // Para no primeiro sucesso
+              } catch (error) {
+                console.log(`❌ Tentativa ${i + 1} falhou para ${usuario.id} (${url}):`, error.message);
+                continue; // Tenta próxima URL
+              }
+            }
+          }
+        }
+        
+        const result = {
           ...usuario,
-          index,
+          index: skip + index + 1,
           avatar,
-          banner,
-          y: 80 + (index * 140) // Posição Y de cada linha
+          avatarUrl,
+          username: user?.username || `Usuário${usuario.id}`,
+          displayName: user?.displayName || user?.username || `Usuário${usuario.id}`,
+          hasAvatar: !!avatar
         };
+        
+        console.log(`📋 Resultado para usuário ${usuario.id}:`, {
+          hasAvatar: result.hasAvatar,
+          username: result.username,
+          displayName: result.displayName,
+          avatarUrl: result.avatarUrl
+        });
+        
+        return result;
       } catch (error) {
-        console.log(`Erro ao processar usuário ${usuario.id}:`, error.message);
+        console.log(`💥 Erro ao processar usuário ${usuario.id}:`, error.message);
         return {
           ...usuario,
-          index,
+          index: skip + index + 1,
           avatar: null,
-          banner: null,
-          y: 80 + (index * 140)
+          avatarUrl: null,
+          username: `Usuário${usuario.id}`,
+          displayName: `Usuário${usuario.id}`,
+          hasAvatar: false
         };
       }
     })
   );
   
-  // Desenhar cada linha do usuário
-  for (const { id, totalXp, level, voice_time, index, avatar, banner, y } of usuariosComAssets) {
-    // Área da linha (130px altura)
-    const linhaY = y;
-    const linhaAltura = 130;
+  console.log(`🎯 Carregamento concluído. Avatares carregados: ${usuariosComAvatares.filter(u => u.hasAvatar).length}/${usuariosComAvatares.length}`);
+  
+  // Desenhar cada usuário
+  let yPos = 140;
+  usuariosComAvatares.forEach((usuario) => {
+    const posicao = usuario.index;
     
-    // Fundo da linha (banner ou cor sólida)
-    if (banner) {
-      // Desenhar banner esticado
-      ctx.drawImage(banner, 0, linhaY, 934, linhaAltura);
+    // Fundo do item com gradiente sutil
+    const itemGradient = ctx.createLinearGradient(50, yPos - 10, 950, yPos + 80);
+    if (posicao <= 3) {
+      // Top 3 - gradiente dourado
+      itemGradient.addColorStop(0, "rgba(255, 215, 0, 0.1)");
+      itemGradient.addColorStop(1, "rgba(255, 215, 0, 0.05)");
+    } else if (posicao <= 10) {
+      // Top 10 - gradiente prateado
+      itemGradient.addColorStop(0, "rgba(192, 192, 192, 0.1)");
+      itemGradient.addColorStop(1, "rgba(192, 192, 192, 0.05)");
     } else {
-      // Fundo sólido como fallback
-      ctx.fillStyle = "#2c2f33";
-      ctx.fillRect(0, linhaY, 934, linhaAltura);
+      // Demais - gradiente padrão
+      itemGradient.addColorStop(0, "rgba(255, 255, 255, 0.05)");
+      itemGradient.addColorStop(1, "rgba(255, 255, 255, 0.02)");
     }
     
-    // Overlay escuro para legibilidade (50% opacidade)
-    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-    ctx.fillRect(0, linhaY, 934, linhaAltura);
+    ctx.fillStyle = itemGradient;
+    ctx.fillRect(50, yPos - 10, 900, 90);
     
-    // Avatar circular
-    if (avatar) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(80, linhaY + 65, 40, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.clip();
-      ctx.drawImage(avatar, 40, linhaY + 25, 80, 80);
-      ctx.restore();
+    // Borda sutil
+    ctx.strokeStyle = posicao <= 3 ? "rgba(255, 215, 0, 0.3)" : "rgba(255, 255, 255, 0.1)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(50, yPos - 10, 900, 90);
+    
+    // Posição com medalha para top 3
+    if (posicao <= 3) {
+      const medals = ["🥇", "🥈", "🥉"];
+      ctx.font = "bold 36px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(medals[posicao - 1], 100, yPos + 35);
+    } else {
+      // Posição normal
+      ctx.fillStyle = posicao <= 10 ? "#c0c0c0" : "#95a5a6";
+      ctx.font = "bold 28px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText(`#${posicao}`, 100, yPos + 35);
+    }
+    
+    // Avatar circular com tratamento robusto
+    if (usuario.avatar && usuario.hasAvatar) {
+      try {
+        ctx.save();
+        
+        // Criar caminho circular
+        ctx.beginPath();
+        ctx.arc(200, yPos + 35, 30, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+        
+        // Desenhar avatar
+        ctx.drawImage(usuario.avatar, 170, yPos + 5, 60, 60);
+        
+        ctx.restore();
+        
+        // Borda do avatar
+        ctx.strokeStyle = posicao <= 3 ? "#ffd700" : "#4a5568";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(200, yPos + 35, 30, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        console.log(`Avatar desenhado com sucesso para usuário ${usuario.id}`);
+      } catch (error) {
+        console.log(`Erro ao desenhar avatar do usuário ${usuario.id}:`, error.message);
+        // Fallback para placeholder se falhar o desenho
+        drawAvatarPlaceholder(ctx, yPos, posicao);
+      }
     } else {
       // Placeholder para avatar
-      ctx.fillStyle = "#4a5568";
-      ctx.beginPath();
-      ctx.arc(80, linhaY + 65, 40, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 20px Roboto-Bold";
-      ctx.textAlign = "center";
-      ctx.fillText("?", 80, linhaY + 72);
+      drawAvatarPlaceholder(ctx, yPos, posicao);
+      console.log(`Usando placeholder para usuário ${usuario.id} (sem avatar)`);
     }
     
-    // Informações textuais
+    // Função auxiliar para desenhar placeholder
+    function drawAvatarPlaceholder(context, y, pos) {
+      // Fundo do placeholder
+      context.fillStyle = "#4a5568";
+      context.beginPath();
+      context.arc(200, y + 35, 30, 0, Math.PI * 2);
+      context.fill();
+      
+      // Borda do placeholder
+      context.strokeStyle = pos <= 3 ? "#ffd700" : "#4a5568";
+      context.lineWidth = 2;
+      context.beginPath();
+      context.arc(200, y + 35, 30, 0, Math.PI * 2);
+      context.stroke();
+      
+      // Ícone de usuário
+      context.fillStyle = "#ffffff";
+      context.font = "bold 16px Arial";
+      context.textAlign = "center";
+      context.fillText("👤", 200, y + 42);
+    }
+    
+    // Nome do usuário
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 18px Arial";
+    ctx.font = "bold 20px Arial";
     ctx.textAlign = "left";
+    const nomeTruncado = usuario.displayName.length > 20 ? 
+      usuario.displayName.substring(0, 17) + "..." : 
+      usuario.displayName;
+    ctx.fillText(nomeTruncado, 260, yPos + 25);
     
-    // Posição e Nickname
-    const user = interaction.client.users.cache.get(id);
-    const nickname = user?.displayName || `Usuário${id}`;
-    ctx.fillText(`#${index + 1} ${nickname}`, 140, linhaY + 30);
-    
+    // Stats
     ctx.font = "16px Arial";
     ctx.fillStyle = "#b8bfc7";
-    ctx.fillText(`ID: ${id}`, 140, linhaY + 55);
+    ctx.fillText(`Nível ${usuario.level || 1}`, 260, yPos + 50);
     
-    // XP Total e Nível
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(`XP Total: ${totalXp || 0}`, 140, linhaY + 80);
-    ctx.fillText(`Nível: ${level || 1}`, 140, linhaY + 105);
+    ctx.fillStyle = "#7289da";
+    ctx.font = "bold 18px Arial";
+    ctx.fillText(`${usuario.totalXp || 0} XP`, 260, yPos + 70);
     
-    // Tempo em Call
-    const tempoFormatado = formatarTempoCall(voice_time);
-    ctx.fillText(`Tempo em Call: ${tempoFormatado}`, 140, linhaY + 125);
-  }
+    // Mensagens e tempo em call
+    ctx.font = "14px Arial";
+    ctx.fillStyle = "#95a5a6";
+    ctx.fillText(`💬 ${usuario.messages_count || 0} msgs`, 500, yPos + 35);
+    ctx.fillText(`🎙️ ${formatarTempoCall(usuario.voice_time || 0)}`, 500, yPos + 55);
+    
+    // Barra de progresso de XP
+    const progress = Math.min((usuario.xp || 0) / 1000, 1);
+    const barWidth = 200;
+    const barHeight = 6;
+    const barX = 500;
+    const barY = yPos + 70;
+    
+    // Fundo da barra
+    ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+    
+    // Preenchimento da barra
+    const barGradient = ctx.createLinearGradient(barX, barY, barX + barWidth, barY);
+    barGradient.addColorStop(0, "#7289da");
+    barGradient.addColorStop(1, "#99aab5");
+    ctx.fillStyle = barGradient;
+    ctx.fillRect(barX, barY, Math.floor(barWidth * progress), barHeight);
+    
+    yPos += 110;
+  });
   
   // Rodapé
   ctx.fillStyle = "#95a5a6";
-  ctx.font = "14px Arial";
+  ctx.font = "16px Arial";
   ctx.textAlign = "center";
-  ctx.fillText(`Total: ${usuariosValidos.length} usuários • Mostrando ${Math.min(5, usuariosValidos.length - skip)}`, 467, 760);
+  ctx.fillText(`Total: ${usuariosValidos.length} usuários qualificados • Mostrando ${Math.min(5, usuariosValidos.length - skip)} desta página`, 500, 860);
   
   return canvas.toBuffer("image/png");
+}
+
+// Função para criar embed de compra de cards
+function createShopEmbed() {
+  const fields = Object.entries(CARDS_CONFIG).map(([key, card]) => ({
+    name: `${card.name} ${card.price === 0 ? "🆓" : `💰 ${card.price} moedas`}`,
+    value: `ID: \`${key}\`\nCor: ${card.color}`,
+    inline: true
+  }));
+
+  return createEmbed({
+    title: "🛍️ Loja de Cards de Perfil",
+    description: "Escolha um card para personalizar seu perfil no comando `/rank`!",
+    color: 0x7289da,
+    fields,
+    footer: { text: "Use /leaderboard comprar <id> para comprar um card" }
+  });
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("leaderboard")
     .setDescription("Mostra o ranking dos usuários com mais XP")
-    .addIntegerOption((opt) => opt.setName("pagina").setDescription("Número da página").setMinValue(1).setRequired(false)),
+    .addIntegerOption((opt) => opt.setName("pagina").setDescription("Número da página").setMinValue(1).setRequired(false))
+    .addSubcommand((sub) =>
+      sub
+        .setName("comprar")
+        .setDescription("Compre um card para personalizar seu perfil")
+        .addStringOption((opt) =>
+          opt
+            .setName("card")
+            .setDescription("Card que deseja comprar")
+            .setRequired(true)
+            .addChoices(
+              ...Object.entries(CARDS_CONFIG).map(([key, card]) => ({
+                name: `${card.name} ${card.price === 0 ? "(Grátis)" : `(${card.price} moedas)`}`,
+                value: key
+              }))
+            )
+        )
+    ),
 
   async execute(interaction) {
+    const sub = interaction.options.getSubcommand();
+    
+    if (sub === "comprar") {
+      const cardId = interaction.options.getString("card");
+      const userId = interaction.user.id;
+      const { economy: eco } = interaction.client.services;
+      
+      if (!eco) {
+        return interaction.reply({ 
+          embeds: [createErrorEmbed("Serviço de economia não disponível!")],
+          ephemeral: true 
+        });
+      }
+      
+      const card = CARDS_CONFIG[cardId];
+      const userCards = await getUserCards(userId);
+      
+      // Verificar se já possui o card
+      if (userCards.owned.includes(cardId)) {
+        return interaction.reply({ 
+          embeds: [createErrorEmbed("Você já possui este card!")],
+          ephemeral: true 
+        });
+      }
+      
+      // Verificar se tem moedas suficientes
+      if (card.price > 0) {
+        const balance = await eco.getBalance(interaction.guildId, userId);
+        if (balance.coins < card.price) {
+          return interaction.reply({ 
+            embeds: [createErrorEmbed(`Você precisa de **${card.price} moedas** para comprar este card!\nSaldo atual: **${balance.coins} moedas**`)],
+            ephemeral: true 
+          });
+        }
+        
+        // Remover moedas
+        await eco.removeCoins(interaction.guildId, userId, card.price);
+      }
+      
+      // Adicionar card aos cards do usuário
+      userCards.owned.push(cardId);
+      userCards.selected = cardId;
+      await saveUserCards(userId, userCards);
+      
+      return interaction.reply({ 
+        embeds: [createSuccessEmbed(
+          `Você comprou o card **${card.name}** com sucesso!\n` +
+          `${card.price > 0 ? `💸 Foram debitadas ${card.price} moedas.` : '🆓 Card gratuito adquirido!'}\n\n` +
+          `Use \`/rank view\` para ver seu novo card!`
+        )],
+        ephemeral: true 
+      });
+    }
+    
+    // Comando principal do leaderboard
     const page = interaction.options.getInteger("pagina") || 1;
     
     await interaction.deferReply();
@@ -236,15 +437,51 @@ module.exports = {
       
       if (!imagemBuffer) {
         return interaction.editReply({
-          embeds: [createEmbed("Nenhum usuário encontrado nesta página.")],
+          embeds: [createErrorEmbed("Nenhum usuário encontrado nesta página.")],
           ephemeral: true
         });
       }
       
+      // Criar botões de navegação
+      const totalPages = Math.ceil(
+        Object.entries(await levelsStore.load())
+          .filter(([id, data]) => (data.totalXp || 0) >= 10)
+          .length / 5
+      );
+      
+      const row = new ActionRowBuilder();
+      
+      // Botão anterior
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`leaderboard_prev_${page}`)
+          .setLabel("⬅️ Anterior")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(page <= 1)
+      );
+      
+      // Botão de shop
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId("leaderboard_shop")
+          .setLabel("🛍️ Cards")
+          .setStyle(ButtonStyle.Primary)
+      );
+      
+      // Botão próximo
+      row.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`leaderboard_next_${page}`)
+          .setLabel("Próximo ➡️")
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(page >= totalPages)
+      );
+      
       const attachment = new AttachmentBuilder(imagemBuffer, "leaderboard.png");
       
       return interaction.editReply({
-        files: [attachment]
+        files: [attachment],
+        components: [row]
       });
       
     } catch (error) {
@@ -253,6 +490,143 @@ module.exports = {
         content: "Ocorreu um erro ao gerar o leaderboard. Tente novamente.",
         ephemeral: true
       });
+    }
+  },
+
+  // Handler para interações de botões
+  async handleButton(interaction) {
+    const customId = interaction.customId;
+    
+    if (customId === "leaderboard_shop") {
+      return interaction.reply({ 
+        embeds: [createShopEmbed()],
+        ephemeral: true 
+      });
+    }
+    
+    if (customId.startsWith("leaderboard_prev_")) {
+      const page = parseInt(customId.split("_")[2]) - 1;
+      if (page < 1) return;
+      
+      await interaction.update({ content: "Carregando página anterior...", components: [] });
+      
+      try {
+        const imagemBuffer = await gerarImagemLeaderboard(interaction, page);
+        
+        if (!imagemBuffer) {
+          return interaction.editReply({
+            embeds: [createErrorEmbed("Nenhum usuário encontrado nesta página.")],
+            ephemeral: true
+          });
+        }
+        
+        // Criar botões de navegação
+        const totalPages = Math.ceil(
+          Object.entries(await levelsStore.load())
+            .filter(([id, data]) => (data.totalXp || 0) >= 10)
+            .length / 5
+        );
+        
+        const row = new ActionRowBuilder();
+        
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`leaderboard_prev_${page}`)
+            .setLabel("⬅️ Anterior")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page <= 1)
+        );
+        
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId("leaderboard_shop")
+            .setLabel("🛍️ Cards")
+            .setStyle(ButtonStyle.Primary)
+        );
+        
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`leaderboard_next_${page}`)
+            .setLabel("Próximo ➡️")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page >= totalPages)
+        );
+        
+        const attachment = new AttachmentBuilder(imagemBuffer, "leaderboard.png");
+        
+        return interaction.editReply({
+          files: [attachment],
+          components: [row]
+        });
+      } catch (error) {
+        console.error("Erro ao navegar para página anterior:", error);
+        return interaction.editReply({
+          content: "Erro ao carregar página. Tente novamente.",
+          ephemeral: true
+        });
+      }
+    }
+    
+    if (customId.startsWith("leaderboard_next_")) {
+      const page = parseInt(customId.split("_")[2]) + 1;
+      
+      await interaction.update({ content: "Carregando próxima página...", components: [] });
+      
+      try {
+        const imagemBuffer = await gerarImagemLeaderboard(interaction, page);
+        
+        if (!imagemBuffer) {
+          return interaction.editReply({
+            embeds: [createErrorEmbed("Nenhum usuário encontrado nesta página.")],
+            ephemeral: true
+          });
+        }
+        
+        // Criar botões de navegação
+        const totalPages = Math.ceil(
+          Object.entries(await levelsStore.load())
+            .filter(([id, data]) => (data.totalXp || 0) >= 10)
+            .length / 5
+        );
+        
+        const row = new ActionRowBuilder();
+        
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`leaderboard_prev_${page}`)
+            .setLabel("⬅️ Anterior")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page <= 1)
+        );
+        
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId("leaderboard_shop")
+            .setLabel("🛍️ Cards")
+            .setStyle(ButtonStyle.Primary)
+        );
+        
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`leaderboard_next_${page}`)
+            .setLabel("Próximo ➡️")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page >= totalPages)
+        );
+        
+        const attachment = new AttachmentBuilder(imagemBuffer, "leaderboard.png");
+        
+        return interaction.editReply({
+          files: [attachment],
+          components: [row]
+        });
+      } catch (error) {
+        console.error("Erro ao navegar para próxima página:", error);
+        return interaction.editReply({
+          content: "Erro ao carregar página. Tente novamente.",
+          ephemeral: true
+        });
+      }
     }
   }
 };
