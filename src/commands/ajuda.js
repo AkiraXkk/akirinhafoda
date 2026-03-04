@@ -8,7 +8,8 @@ const categoryMapping = {
   "VIP": ["vip", "vipbuy", "vipservice"],
   "Social": ["social", "family"],
   "Níveis": ["levels", "leaderboard"],
-  "Utilidade": ["utility", "ping", "ticket", "ajuda"]
+  "Parcerias": ["partnership", "boost", "verify"],
+  "Utilidade": ["utility", "ping", "ticket", "ajuda", "welcome"]
 };
 
 function getCategoryName(commandName) {
@@ -272,6 +273,7 @@ function getCategoryEmoji(category) {
     "Níveis": "⭐",
     "Diversão": "🎉",
     "Social": "👥",
+    "Parcerias": "🤝",
     "Utilidade": "🛠️",
     "Outros": "📂"
   };
@@ -286,6 +288,7 @@ function getCategoryColor(category) {
     "Níveis": 0xff9900,
     "Diversão": 0xff66cc,
     "Social": 0x00ccff,
+    "Parcerias": 0x00ff88,
     "Utilidade": 0x666666,
     "Outros": 0x999999
   };
