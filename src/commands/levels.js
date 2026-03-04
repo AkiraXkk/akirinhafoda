@@ -103,7 +103,7 @@ function getCardConfig(cardId) {
 }
 
 // Função para gerar card visual de rank
-async function gerarCardRank(user, data, interaction) {
+async function gerarCardRank(user, data, levels, interaction) {
   const canvas = createCanvas(934, 282);
   const ctx = canvas.getContext("2d");
   
@@ -575,7 +575,7 @@ module.exports = {
       const data = levels[user.id] || { xp: 0, level: 1, totalXp: 0, messages_count: 0, voice_time: 0 };
       
       try {
-        const imagemBuffer = await gerarCardRank(user, data, interaction);
+        const imagemBuffer = await gerarCardRank(user, data, levels, interaction);
         
         const attachment = new AttachmentBuilder(imagemBuffer, "rank.png");
         

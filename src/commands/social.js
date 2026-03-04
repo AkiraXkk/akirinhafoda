@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ComponentType } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
 module.exports = {
@@ -54,16 +54,32 @@ module.exports = {
         const caption = interaction.options.getString("legenda");
         const photo = interaction.options.getAttachment("foto");
 
-        await interaction.reply({
-            embeds: [createEmbed({
-                author: { name: interaction.user.username, iconURL: interaction.user.displayAvatarURL() },
-                title: "Instagram",
-                description: caption,
-                image: photo.url,
-                color: 0xC13584, // Instagram Gradient-ish (Magenta)
-                footer: { text: "Instagram", iconURL: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Instagram_logo_2016.svg/2048px-Instagram_logo_2016.svg.png" }
-            })]
+        const instaEmbed = createEmbed({
+            author: { name: interaction.user.username, iconURL: interaction.user.displayAvatarURL() },
+            description: caption,
+            image: photo.url,
+            color: 0xC13584,
+            footer: { text: "Instagram • ❤️ 0 curtidas", iconURL: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Instagram_logo_2016.svg/2048px-Instagram_logo_2016.svg.png" }
         });
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('social_insta_like')
+                .setEmoji('❤️')
+                .setLabel('Curtir')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId(`social_insta_comment_${interaction.user.id}`)
+                .setEmoji('💬')
+                .setLabel('Comentar')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+        await interaction.reply({
+            embeds: [instaEmbed],
+            components: [row]
+        });
+        // Sem collector aqui - handled globalmente
     }
 
     // MATCH (Tinder)
@@ -108,4 +124,97 @@ module.exports = {
         await msg.react("👎");
     }
   },
+
+  // Handler GLOBAL para Botões
+  async handleButton(interaction) {
+    const customId = interaction.customId;
+
+    // Suporte para IDs novos ('social_insta_like') e antigos ('insta_like')
+    if (customId === 'social_insta_like' || customId === 'insta_like') {
+        const message = interaction.message;
+        const embed = message.embeds[0];
+        
+        // Parse current likes from footer
+        // Footer text: "Instagram • ❤️ 0 curtidas"
+        let currentLikes = 0;
+        if (embed.footer && embed.footer.text) {
+            const match = embed.footer.text.match(/❤️ (\d+) curtidas/);
+            if (match) {
+                currentLikes = parseInt(match[1]);
+            }
+        }
+
+        // Increment (stateless - just adds 1)
+        currentLikes++;
+
+        const newEmbed = createEmbed({
+            author: embed.author,
+            description: embed.description,
+            image: embed.image?.url,
+            color: embed.color,
+            footer: { text: `Instagram • ❤️ ${currentLikes} curtidas`, iconURL: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Instagram_logo_2016.svg/2048px-Instagram_logo_2016.svg.png" }
+        });
+
+        await interaction.update({ embeds: [newEmbed] });
+    }
+
+    // Suporte para IDs novos e antigos de comentário
+    if (customId.startsWith('social_insta_comment_') || customId === 'insta_comment') {
+        let postOwnerId = 'LEGACY';
+        
+        if (customId.startsWith('social_insta_comment_')) {
+             postOwnerId = customId.split('_')[3]; // social_insta_comment_ID
+        }
+
+        const modal = new ModalBuilder()
+            .setCustomId(`social_insta_modal_${postOwnerId}`)
+            .setTitle('Comentar na foto');
+
+        const commentInput = new TextInputBuilder()
+            .setCustomId('comment_text')
+            .setLabel("Seu comentário")
+            .setStyle(TextInputStyle.Paragraph)
+            .setMaxLength(200)
+            .setRequired(true);
+
+        const modalRow = new ActionRowBuilder().addComponents(commentInput);
+        modal.addComponents(modalRow);
+
+        await interaction.showModal(modal);
+    }
+  },
+
+  // Handler GLOBAL para Modais
+  async handleModal(interaction) {
+      const customId = interaction.customId;
+
+      if (customId.startsWith('social_insta_modal_')) {
+          const postOwnerId = customId.split('_')[3]; // social_insta_modal_ID
+          const comment = interaction.fields.getTextInputValue('comment_text');
+
+          // Se for post antigo (LEGACY), não temos o ID do dono para mandar DM
+          if (postOwnerId === 'LEGACY') {
+              await interaction.reply({ content: "Comentário registrado! 📨 (Post antigo, autor não notificado)", ephemeral: true });
+              return;
+          }
+
+          try {
+              // Tenta buscar o dono do post
+              const postOwner = await interaction.client.users.fetch(postOwnerId);
+              
+              const dmEmbed = createEmbed({
+                  title: "💬 Novo comentário no seu post!",
+                  description: `**${interaction.user.username}** comentou:\n\n"${comment}"`,
+                  color: 0xC13584,
+                  footer: { text: `Enviado do servidor: ${interaction.guild.name}` }
+              });
+
+              await postOwner.send({ embeds: [dmEmbed] });
+              await interaction.reply({ content: "Comentário enviado com sucesso! 📨", ephemeral: true });
+          } catch (error) {
+              console.error("Erro ao enviar DM de comentário:", error);
+              await interaction.reply({ content: "Comentário registrado, mas não consegui enviar DM para o autor (DM fechada ou usuário não encontrado).", ephemeral: true });
+          }
+      }
+  }
 };

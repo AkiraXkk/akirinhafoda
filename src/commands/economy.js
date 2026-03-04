@@ -38,8 +38,15 @@ module.exports = {
         const mult = tier?.mao_de_midas ? 2 : 1;
         const total = base + (extra * mult);
 
-        const success = await eco.daily(guildId, userId, total); // Assume que sua service lida com cooldown
-        if (!success) return interaction.reply({ embeds: [createErrorEmbed("Você já resgatou seu daily hoje!")], ephemeral: true });
+        const result = await eco.daily(guildId, userId, total); 
+        
+        if (!result.success) {
+            const nextDate = Math.floor(result.nextDaily / 1000);
+            return interaction.reply({ 
+                embeds: [createErrorEmbed(`Você já resgatou seu daily hoje!\n⏳ Tente novamente <t:${nextDate}:R> (<t:${nextDate}:f>)`)], 
+                ephemeral: true 
+            });
+        }
 
         let msg = `Você recebeu **${total} 🪙**!`;
         if (tier?.mao_de_midas) msg += "\n✨ **Mão de Midas:** Seu bônus VIP foi dobrado!";

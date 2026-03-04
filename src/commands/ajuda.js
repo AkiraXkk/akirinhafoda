@@ -1,65 +1,134 @@
-const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require("discord.js");
 const { createEmbed } = require("../embeds");
-const fs = require('fs');
-const path = require('path');
+
+const categoryMapping = {
+  "Administração": ["botadmin", "moderation", "leveladmin", "shopadmin", "tagroleadmin", "resetconfig", "logs", "presence", "vipadmin", "sejawda"],
+  "Diversão": ["fun", "bicho", "blackjack"],
+  "Economia": ["economy", "shop"],
+  "VIP": ["vip", "vipbuy", "vipservice"],
+  "Social": ["social", "family"],
+  "Níveis": ["levels"],
+  "Utilidade": ["utility", "ping", "ticket", "ajuda"]
+};
+
+function getCategoryName(commandName) {
+  for (const [category, list] of Object.entries(categoryMapping)) {
+    if (list.includes(commandName)) return category;
+  }
+  return "Outros";
+}
+
+function formatUsage(base, options = []) {
+  if (!options?.length) return base;
+  const parts = options
+    .filter((opt) => opt.type !== 1)
+    .map((opt) => (opt.required ? `<${opt.name}>` : `[${opt.name}]`));
+  return parts.length ? `${base} ${parts.join(" ")}` : base;
+}
+
+function formatPermission(defaultPermissions) {
+  if (!defaultPermissions) return "Todos os membros";
+  try {
+    const bits = new PermissionsBitField(BigInt(defaultPermissions));
+    const names = bits.toArray().map((name) =>
+      name.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase()
+    );
+    return names.length ? names.join("\n") : "Todos os membros";
+  } catch {
+    return "Todos os membros";
+  }
+}
+
+function getDecorEmoji(interaction, emojiName, fallback) {
+  const found = interaction.guild?.emojis?.cache?.find((e) => e.name === emojiName);
+  if (!found) return fallback;
+  return found.animated ? `<a:${found.name}:${found.id}>` : `<:${found.name}:${found.id}>`;
+}
+
+function buildHelpEntries(commands) {
+  const entries = [];
+  for (const command of commands) {
+    const json = command.data.toJSON();
+    const name = json.name;
+    const category = getCategoryName(name);
+    const permission = formatPermission(json.default_member_permissions);
+    const subcommands = (json.options || []).filter((opt) => opt.type === 1);
+    if (subcommands.length > 0) {
+      for (const sub of subcommands) {
+        const base = `/${name} ${sub.name}`;
+        entries.push({
+          key: base,
+          usage: formatUsage(base, sub.options || []),
+          description: sub.description || "Sem descrição",
+          permission,
+          category
+        });
+      }
+    } else {
+      const base = `/${name}`;
+      entries.push({
+        key: base,
+        usage: formatUsage(base, json.options || []),
+        description: json.description || "Sem descrição",
+        permission,
+        category
+      });
+    }
+  }
+  return entries;
+}
+
+function chunkCommands(commands, limit = 3500) {
+  const lines = commands.map((command) => `• \`${command.key}\`\n> ${command.description}\n> Uso: \`${command.usage}\``);
+  const pages = [];
+  let current = "";
+  for (const line of lines) {
+    const block = current ? `\n\n${line}` : line;
+    if ((current + block).length > limit) {
+      pages.push(current);
+      current = line;
+    } else {
+      current += block;
+    }
+  }
+  if (current) pages.push(current);
+  return pages.length ? pages : ["Nenhum comando encontrado nesta categoria."];
+}
 
 module.exports = {
-  data: new SlashCommandBuilder().setName("ajuda").setDescription("Mostra o painel de ajuda interativo"),
+  data: new SlashCommandBuilder()
+    .setName("ajuda")
+    .setDescription("Mostra o painel de ajuda interativo"),
   async execute(interaction) {
     const commands = [...interaction.client.commands.values()];
-    
-    // Sistema inteligente de categorias baseado nos nomes dos arquivos/comandos
-    const categoryMapping = {
-      "VIP": ["vip", "vipadmin", "vipbuy"],
-      "Economia": ["economy", "shop"],
-      "Níveis": ["rank", "leveladmin"],
-      "Moderação": ["moderation", "botadmin"],
-      "Diversão": ["fun", "dama"],
-      "Social": ["social", "family"],
-      "Utilidade": ["utility", "ping", "ajuda", "ticket"]
-    };
-    
-    // Mapeia comandos para categorias automaticamente
+    const entries = buildHelpEntries(commands);
+    const mascot = getDecorEmoji(interaction, "yfgg", "🟣");
+    const pin = getDecorEmoji(interaction, "ufixado", "📌");
     const commandsByCategory = {};
-    
-    // Inicializa categorias
-    for (const category of Object.keys(categoryMapping)) {
-      commandsByCategory[category] = [];
+    for (const entry of entries) {
+      if (!commandsByCategory[entry.category]) {
+        commandsByCategory[entry.category] = [];
+      }
+      commandsByCategory[entry.category].push(entry);
     }
-    
-    // Distribui comandos nas categorias
-    for (const command of commands) {
-      const commandName = command.data.name;
-      let categorized = false;
-      
-      // Verifica em qual categoria o comando se encaixa
-      for (const [category, keywords] of Object.entries(categoryMapping)) {
-        if (keywords.some(keyword => commandName.includes(keyword))) {
-          commandsByCategory[category].push(command);
-          categorized = true;
-          break;
-        }
-      }
-      
-      // Se não encaixou em nenhuma categoria, adiciona em "Outros"
-      if (!categorized) {
-        if (!commandsByCategory["Outros"]) {
-          commandsByCategory["Outros"] = [];
-        }
-        commandsByCategory["Outros"].push(command);
-      }
-    }
-    
-    // Remove categorias vazias
-    Object.keys(commandsByCategory).forEach(category => {
-      if (commandsByCategory[category].length === 0) {
-        delete commandsByCategory[category];
-      }
+
+    Object.keys(commandsByCategory).forEach((category) => {
+      if (commandsByCategory[category].length === 0) delete commandsByCategory[category];
     });
 
-    // Função para criar o menu de seleção
+    const orderedCategories = Object.keys(commandsByCategory).sort((a, b) => {
+      if (a === "Outros") return 1;
+      if (b === "Outros") return -1;
+      return a.localeCompare(b, "pt-BR");
+    });
+    const categorySummary = orderedCategories
+      .map((category) => [category, commandsByCategory[category]])
+      .map(([category, list]) => `${getCategoryEmoji(category)} ${category}: **${list.length}**`)
+      .join("\n");
+    const totalCommands = Object.values(commandsByCategory).reduce((sum, list) => sum + list.length, 0);
+
     function createCategoryMenu() {
-      const options = Object.keys(commandsByCategory).map(cat => 
+      const options = orderedCategories.map(cat => 
         new StringSelectMenuOptionBuilder()
           .setLabel(cat)
           .setValue(cat)
@@ -75,116 +144,132 @@ module.exports = {
       return new ActionRowBuilder().addComponents(select);
     }
 
-    // Função para criar botão de voltar
     function createBackButton() {
       return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId("help_back")
-          .setLabel("🔙 Voltar ao Menu")
+          .setLabel("📓 Voltar ao Menu")
           .setStyle(ButtonStyle.Secondary)
       );
     }
 
-    // Embed principal
     const mainEmbed = createEmbed({
-      title: "🤖 Central de Ajuda",
-      description: "Selecione uma categoria no menu abaixo para ver todos os comandos disponíveis.",
+      title: `${mascot} Menu de Ajuda `,
+      description: "Escolha uma categoria para ver todos os comandos disponíveis no servidor.",
       thumbnail: interaction.client.user.displayAvatarURL(),
       fields: [
-        { name: "📚 Total de Comandos", value: `${commands.length}`, inline: true },
+        { name: "<:y_oclin:856592277525626930> Total de Comandos", value: `${totalCommands}`, inline: true },
         { name: "📂 Categorias", value: `${Object.keys(commandsByCategory).length}`, inline: true },
-        { name: "💡 Dica", value: "Use os menus abaixo para navegar entre as categorias!", inline: false }
+        { name: "💡 Como usar", value: "Use os menus abaixo para navegar entre as categorias!", inline: true },
+        { name: "🗂️ Quantidade por Categoria", value: categorySummary, inline: false },
+        { name: `${pin} Dica`, value: "Abra uma categoria para ver descrição, uso e permissões dos comandos.", inline: false }
       ],
-      color: 0x0099ff,
+      color: 0x8e44ad,
       footer: { text: `Solicitado por ${interaction.user.username}` }
     });
 
-    const response = await interaction.reply({ 
+    await interaction.reply({ 
       embeds: [mainEmbed], 
       components: [createCategoryMenu()], 
       ephemeral: true 
     });
+    const response = await interaction.fetchReply();
+    let currentCategory = null;
+    let currentPages = [];
+    let currentPage = 0;
 
-    const collector = response.createMessageComponentCollector({ 
-      componentType: ComponentType.StringSelect, 
-      time: 60000 
-    });
-
-    // Collector para botões
-    const buttonCollector = response.createMessageComponentCollector({ 
-      componentType: ComponentType.Button, 
-      time: 60000 
+    const collector = response.createMessageComponentCollector({
+      time: 180000
     });
 
     collector.on('collect', async i => {
       if (i.user.id !== interaction.user.id) {
         return i.reply({ content: "Este menu não é para você!", ephemeral: true });
       }
-      
-      const selectedCategory = i.values[0];
-      const categoryCommands = commandsByCategory[selectedCategory];
-      
-      // Formata a lista de comandos da categoria
-      const commandList = categoryCommands.map(command => {
-        const subcommands = command.data.options?.filter(opt => 
-          opt.toJSON().type === 1 // SUBCOMMAND
+
+      if (i.isStringSelectMenu() && i.customId === "help_category_menu") {
+        currentCategory = i.values[0];
+        const categoryCommands = [...commandsByCategory[currentCategory]].sort((a, b) =>
+          a.key.localeCompare(b.key, "pt-BR")
         );
-        
-        if (subcommands && subcommands.length > 0) {
-          const subList = subcommands.map(sub => 
-            `> \`/${command.data.name} ${sub.name}\`\n${sub.description}`
-          ).join('\n');
-          
-          return `**${command.data.description}**\n${subList}`;
-        } else {
-          return `**\`/${command.data.name}\`**\n${command.data.description}`;
-        }
-      }).join('\n\n');
+        currentPages = chunkCommands(categoryCommands);
+        currentPage = 0;
 
-      const categoryEmbed = createEmbed({
-        title: `${getCategoryEmoji(selectedCategory)} ${selectedCategory}`,
-        description: commandList || "Nenhum comando encontrado nesta categoria.",
-        fields: [
-          { name: "📊 Comandos", value: `${categoryCommands.length}`, inline: true },
-          { name: "🔍 Navegação", value: "Use o botão abaixo para voltar", inline: true }
-        ],
-        color: getCategoryColor(selectedCategory),
-        footer: { text: `Categoria: ${selectedCategory}` }
-      });
+        const navRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId("help_prev").setLabel("⬅️").setStyle(ButtonStyle.Secondary).setDisabled(true),
+          new ButtonBuilder().setCustomId("help_back").setLabel("📓 Voltar ao Menu").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId("help_next").setLabel("➡️").setStyle(ButtonStyle.Secondary).setDisabled(currentPages.length <= 1)
+        );
 
-      await i.update({ 
-        embeds: [categoryEmbed], 
-        components: [createBackButton()] 
-      });
-    });
+        const categoryEmbed = createEmbed({
+          title: `${mascot} ${getCategoryEmoji(currentCategory)} ${currentCategory}`,
+          description: currentPages[currentPage],
+          fields: [
+            { name: "📊 Comandos", value: `${categoryCommands.length}`, inline: true },
+            { name: `${pin} Navegação`, value: `Página ${currentPage + 1}/${currentPages.length}`, inline: true }
+          ],
+          color: getCategoryColor(currentCategory),
+          footer: { text: `Categoria: ${currentCategory}` }
+        });
 
-    buttonCollector.on('collect', async i => {
-      if (i.user.id !== interaction.user.id) {
-        return i.reply({ content: "Este botão não é para você!", ephemeral: true });
-      }
-      
-      if (i.customId === "help_back") {
-        await i.update({ 
-          embeds: [mainEmbed], 
-          components: [createCategoryMenu()] 
+        return i.update({
+          embeds: [categoryEmbed],
+          components: [navRow]
         });
       }
+
+      if (i.isButton() && i.customId === "help_back") {
+        currentCategory = null;
+        currentPages = [];
+        currentPage = 0;
+        return i.update({
+          embeds: [mainEmbed],
+          components: [createCategoryMenu()]
+        });
+      }
+
+      if (i.isButton() && (i.customId === "help_prev" || i.customId === "help_next")) {
+        if (!currentCategory || currentPages.length === 0) {
+          return i.reply({ content: "Selecione uma categoria primeiro.", ephemeral: true });
+        }
+        if (i.customId === "help_prev") currentPage = Math.max(0, currentPage - 1);
+        if (i.customId === "help_next") currentPage = Math.min(currentPages.length - 1, currentPage + 1);
+
+        const navRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId("help_prev").setLabel("⬅️").setStyle(ButtonStyle.Secondary).setDisabled(currentPage === 0),
+          new ButtonBuilder().setCustomId("help_back").setLabel("📓 Voltar ao Menu").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId("help_next").setLabel("➡️").setStyle(ButtonStyle.Secondary).setDisabled(currentPage >= currentPages.length - 1)
+        );
+
+        const categoryEmbed = createEmbed({
+          title: `${mascot} ${getCategoryEmoji(currentCategory)} ${currentCategory}`,
+          description: currentPages[currentPage],
+          fields: [
+            { name: "📊 Comandos", value: `${commandsByCategory[currentCategory].length}`, inline: true },
+            { name: `${pin} Navegação`, value: `Página ${currentPage + 1}/${currentPages.length}`, inline: true }
+          ],
+          color: getCategoryColor(currentCategory),
+          footer: { text: `Categoria: ${currentCategory}` }
+        });
+
+        return i.update({ embeds: [categoryEmbed], components: [navRow] });
+      }
     });
 
-    // Limpa collectors após o tempo
-    setTimeout(() => {
-      collector.stop();
-      buttonCollector.stop();
-    }, 60000);
+    collector.on("end", async () => {
+      try {
+        await interaction.editReply({ components: [] });
+      } catch {}
+    });
   },
 };
 
 function getCategoryEmoji(category) {
   const emojis = {
+    "Administração": "🛡️",
     "VIP": "💎",
     "Economia": "💰",
     "Níveis": "⭐",
-    "Moderação": "🛡️",
     "Diversão": "🎉",
     "Social": "👥",
     "Utilidade": "🛠️",
@@ -195,10 +280,10 @@ function getCategoryEmoji(category) {
 
 function getCategoryColor(category) {
   const colors = {
+    "Administração": 0xff3333,
     "VIP": 0x9966ff,
     "Economia": 0x33cc33,
     "Níveis": 0xff9900,
-    "Moderação": 0xff3333,
     "Diversão": 0xff66cc,
     "Social": 0x00ccff,
     "Utilidade": 0x666666,
