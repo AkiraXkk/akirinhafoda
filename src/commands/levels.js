@@ -779,7 +779,7 @@ module.exports = {
         title: "🔧 XP Modificado",
         fields: fields,
         color: action === "remove" || action === "reset" ? 0xe74c3c : 0x2ecc71,
-        footer: { text: `Executado por ${interaction.user.username}` }
+        footer: { text: `Executado por ${interaction.user.username} • WDA - Todos os direitos reservados` }
       });
 
       return interaction.reply({ embeds: [embed] });
@@ -814,7 +814,7 @@ module.exports = {
         title: "🏆 Leaderboard de Níveis", 
         description: linhas.join("\n"), 
         color: 0xf1c40f,
-        footer: { text: `Página ${page + 1}/${totalPages} • Mostrando ${startIndex + 1}-${endIndex} de ${sorted.length} usuários` }
+        footer: { text: `Página ${page + 1}/${totalPages} • Mostrando ${startIndex + 1}-${endIndex} de ${sorted.length} usuários • WDA - Todos os direitos reservados` }
       });
 
       // Adicionar botões de navegação se houver mais de uma página
@@ -893,7 +893,7 @@ module.exports = {
       title: "🏆 Leaderboard de Níveis", 
       description: linhas.join("\n"), 
       color: 0xf1c40f,
-      footer: { text: `Página ${page + 1}/${totalPages} • Mostrando ${startIndex + 1}-${endIndex} de ${sorted.length} usuários` }
+      footer: { text: `Página ${page + 1}/${totalPages} • Mostrando ${startIndex + 1}-${endIndex} de ${sorted.length} usuários • WDA - Todos os direitos reservados` }
     });
 
     // Adicionar botões de navegação

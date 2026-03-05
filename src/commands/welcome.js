@@ -125,7 +125,7 @@ module.exports = {
         thumbnail: interaction.user.displayAvatarURL({ dynamic: true, size: 256 }),
         color: parseInt(config.welcomeColor || "3498db", 16),
         footer: { 
-          text: config.welcomeFooter || `Membro #${interaction.guild.memberCount} • Esta mensagem será excluída em ${config.welcomeDeleteTime || 30} segundos` 
+          text: `${config.welcomeFooter || `Membro #${interaction.guild.memberCount} • Esta mensagem será excluída em ${config.welcomeDeleteTime || 30} segundos`} • WDA - Todos os direitos reservados` 
         },
         timestamp: new Date()
       });
@@ -188,7 +188,7 @@ module.exports = {
         thumbnail: interaction.user.displayAvatarURL({ dynamic: true, size: 256 }),
         color: parseInt(config.welcomeColor || "3498db", 16),
         footer: { 
-          text: `Mensagem de teste • Esta mensagem será excluída em ${config.welcomeDeleteTime || 30} segundos` 
+          text: `Mensagem de teste • Esta mensagem será excluída em ${config.welcomeDeleteTime || 30} segundos • WDA - Todos os direitos reservados` 
         },
         timestamp: new Date()
       });

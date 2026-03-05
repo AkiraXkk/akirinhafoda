@@ -32,7 +32,7 @@ async function renderCatalogPage({ interaction, shopService, guildId, page = 0 }
     title: "🛒 Catálogo da Loja",
     description: slice.slice(0, 10).map(formatCatalogLine).join("\n"),
     color: 0x9b59b6,
-    footer: { text: `Página ${safePage + 1}/${totalPages}` },
+    footer: { text: `Página ${safePage + 1}/${totalPages} • WDA - Todos os direitos reservados` },
     user: interaction.user,
   });
 
@@ -199,7 +199,7 @@ module.exports = {
           description: "Selecione no menu abaixo para comprar.",
           fields,
           color: 0x9b59b6,
-          footer: { text: "Compra via /shop vip" }
+          footer: { text: "Compra via /shop vip • WDA - Todos os direitos reservados" }
         })],
         components: [row],
         ephemeral: true,
