@@ -2,7 +2,7 @@ const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSe
 const { createEmbed } = require("../embeds");
 
 const categoryMapping = {
-  "Administração": ["botadmin", "moderation", "leveladmin", "shopadmin", "tagroleadmin", "resetconfig", "logs", "presence", "vipadmin", "sejawda"],
+  "Administração": ["botadmin", "moderation", "leveladmin", "shopadmin", "tagroleadmin", "resetconfig", "logs", "presence", "vipadmin", "sejawda", "config"],
   "Diversão": ["fun", "dama", "enquete", "blackjack", "roleta", "velha", "bicho"],
   "Economia": ["economy", "shop", "setupcards"],
   "VIP": ["vip", "vipbuy", "vipservice"],

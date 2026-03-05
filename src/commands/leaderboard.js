@@ -12,7 +12,10 @@ const CARDS_CONFIG = {
   premium: { name: "Premium", price: 5000, color: "#f1c40f" },
   gold: { name: "Gold", price: 10000, color: "#f39c12" },
   neon: { name: "Neon", price: 15000, color: "#e74c3c" },
-  ocean: { name: "Ocean", price: 20000, color: "#3498db" }
+  ocean: { name: "Ocean", price: 20000, color: "#3498db" },
+  legendary: { name: "Lendário", price: 50000, color: "#9b59b6" },
+  cosmic: { name: "Cósmico", price: 75000, color: "#2c3e50" },
+  dragon: { name: "Dragão", price: 100000, color: "#e67e22" }
 };
 
 // Função para formatar tempo em call
@@ -345,7 +348,7 @@ function createShopEmbed() {
     description: "Escolha um card para personalizar seu perfil no comando `/rank`!",
     color: 0x7289da,
     fields,
-    footer: { text: "Use /leaderboard comprar <id> para comprar um card" }
+    footer: { text: "Use /leaderboard comprar <id> para comprar um card • WDA - Todos os direitos reservados" }
   });
 }
 

@@ -48,7 +48,7 @@ module.exports = {
           thumbnail: member.user.displayAvatarURL({ dynamic: true, size: 256 }),
           color: parseInt(guildConfig.welcomeColor || "3498db", 16),
           footer: { 
-            text: guildConfig.welcomeFooter || `Membro #${member.guild.memberCount} • Esta mensagem será excluída em ${guildConfig.welcomeDeleteTime || 30} segundos` 
+            text: `${guildConfig.welcomeFooter || `Membro #${member.guild.memberCount} • Esta mensagem será excluída em ${guildConfig.welcomeDeleteTime || 30} segundos`} • WDA - Todos os direitos reservados` 
           },
           timestamp: new Date()
         });

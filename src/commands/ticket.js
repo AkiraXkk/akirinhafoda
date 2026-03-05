@@ -1,10 +1,41 @@
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { getGuildConfig, setGuildConfig } = require("../config/guildConfig");
+const fs = require("fs");
+const path = require("path");
 
 const { createDataStore } = require("../store/dataStore");
 
 const ticketStore = createDataStore("tickets.json");
+
+// Carregar configurações de categorias
+function loadTicketCategories() {
+  try {
+    const configPath = path.join(__dirname, "../data/ticketCategories.json");
+    return JSON.parse(fs.readFileSync(configPath, "utf8"));
+  } catch (error) {
+    console.error("Erro ao carregar ticketCategories.json:", error);
+    return null;
+  }
+}
+
+// Gerar nome de ticket com contador
+async function generateTicketName(guild, categoryPrefix, username) {
+  const categoryChannels = guild.channels.cache.filter(c => 
+    c.name.startsWith(categoryPrefix) && c.type === ChannelType.GuildText
+  );
+  
+  const count = categoryChannels.size + 1;
+  const paddedCount = String(count).padStart(3, "0");
+  const cleanUsername = username.toLowerCase().replace(/\s+/g, "-");
+  
+  return `${categoryPrefix}-${cleanUsername}-${paddedCount}`;
+}
+
+// Verificar se usuário tem permissão de staff
+function isStaff(member, staffRoles) {
+  return staffRoles.allowed.some(roleId => member.roles.cache.has(roleId));
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -15,6 +46,18 @@ module.exports = {
       sub
         .setName("setup")
         .setDescription("Envia o painel de tickets para o canal atual")
+        .addStringOption((opt) =>
+          opt
+            .setName("tipo")
+            .setDescription("Tipo de painel")
+            .setRequired(true)
+            .addChoices(
+              { name: "Suporte", value: "suporte" },
+              { name: "Parceria", value: "parceria" },
+              { name: "Denúncia", value: "denuncia" },
+              { name: "Sugestão", value: "sugestao" }
+            )
+        )
     )
     .addSubcommand((sub) =>
       sub
@@ -30,8 +73,26 @@ module.exports = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const logService = interaction.client.services.log;
+    const ticketConfig = loadTicketCategories();
+
+    if (!ticketConfig) {
+      return interaction.reply({ 
+        embeds: [createErrorEmbed("Configuração de tickets não encontrada.")], 
+        ephemeral: true 
+      });
+    }
 
     if (sub === "setup") {
+      const tipo = interaction.options.getString("tipo");
+      const categoryConfig = ticketConfig.categories[tipo];
+      
+      if (!categoryConfig) {
+        return interaction.reply({ 
+          embeds: [createErrorEmbed("Tipo de ticket inválido.")], 
+          ephemeral: true 
+        });
+      }
+
       const guildConfig = await getGuildConfig(interaction.guildId);
       const categoryId = guildConfig.ticketCategoryId;
       
@@ -43,18 +104,18 @@ module.exports = {
       }
 
       const embed = createEmbed({
-        title: "🎫 Central de Ajuda",
-        description: "Clique no botão abaixo para abrir um ticket de suporte.\nNossa equipe irá atendê-lo em breve.",
-        color: 0x3498db,
-        footer: "Suporte VIP e Geral • WDA - Todos os direitos reservados"
+        title: categoryConfig.title,
+        description: categoryConfig.description,
+        color: categoryConfig.color,
+        footer: categoryConfig.footer
       });
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId("open_ticket")
-          .setLabel("Abrir Ticket")
+          .setCustomId(`open_ticket_${tipo}`)
+          .setLabel(categoryConfig.buttonLabel)
           .setStyle(ButtonStyle.Primary)
-          .setEmoji("📩")
+          .setEmoji(categoryConfig.buttonEmoji)
       );
 
       await interaction.channel.send({ embeds: [embed], components: [row] });
@@ -62,7 +123,6 @@ module.exports = {
     }
 
     if (sub === "close") {
-      // Validação melhorada - verifica se é ticket pelo banco de dados
       const tickets = await ticketStore.load();
       const ticketInfo = tickets[interaction.channelId];
       
@@ -73,7 +133,6 @@ module.exports = {
         });
       }
 
-      // Log do fechamento
       if (logService) {
         await logService.log(interaction.guild, {
           title: "🔒 Ticket Fechado",
@@ -88,12 +147,11 @@ module.exports = {
         });
       }
 
-      // Remove do banco de dados
       delete tickets[interaction.channelId];
       await ticketStore.save(tickets);
 
       await interaction.reply({ 
-        embeds: [createEmbed({ description: "🔒 Ticket será fechado em 5 segundos...", color: 0xF1C40F })] 
+        embeds: [createEmbed({ description: "🔒 Ticket será fechado em 5 segundos...", color: 0xF1C40F, footer: { text: "WDA - Todos os direitos reservados" } })] 
       });
       
       setTimeout(() => {
@@ -112,7 +170,8 @@ module.exports = {
           embeds: [createEmbed({
             title: "📋 Tickets Abertos",
             description: "Não há tickets abertos no momento.",
-            color: 0x3498db
+            color: 0x3498db,
+            footer: { text: "WDA - Todos os direitos reservados" }
           })],
           ephemeral: true
         });
@@ -129,18 +188,37 @@ module.exports = {
           title: "📋 Tickets Abertos",
           description: `Mostrando ${Math.min(openTickets.length, 10)} tickets mais recentes.`,
           fields,
-          color: 0x3498db
+          color: 0x3498db,
+          footer: { text: "WDA - Todos os direitos reservados" }
         })],
         ephemeral: true
       });
     }
   },
 
-  // Handler para o botão (chamado no index.js)
   async handleButton(interaction) {
     const logService = interaction.client.services.log;
+    const ticketConfig = loadTicketCategories();
 
-    if (interaction.customId === "open_ticket") {
+    if (!ticketConfig) {
+      return interaction.reply({ 
+        content: "Sistema de tickets não configurado.", 
+        ephemeral: true 
+      });
+    }
+
+    // Handler para abrir ticket
+    if (interaction.customId.startsWith("open_ticket_")) {
+      const ticketType = interaction.customId.replace("open_ticket_", "");
+      const categoryConfig = ticketConfig.categories[ticketType];
+      
+      if (!categoryConfig) {
+        return interaction.reply({ 
+          content: "Tipo de ticket inválido.", 
+          ephemeral: true 
+        });
+      }
+
       const guildConfig = await getGuildConfig(interaction.guildId);
       const categoryId = guildConfig.ticketCategoryId;
       
@@ -164,9 +242,12 @@ module.exports = {
         });
       }
 
+      // Gera nome personalizado
+      const ticketName = await generateTicketName(interaction.guild, categoryConfig.prefix, interaction.user.username);
+
       // Cria o canal
       const channel = await interaction.guild.channels.create({
-        name: `ticket-${interaction.user.username.toLowerCase().replace(/\s+/g, '-')}`,
+        name: ticketName,
         type: ChannelType.GuildText,
         parent: categoryId,
         permissionOverwrites: [
@@ -176,11 +257,24 @@ module.exports = {
         ]
       });
 
+      // Adiciona permissões para staff
+      ticketConfig.staffRoles.allowed.forEach(roleId => {
+        const role = interaction.guild.roles.cache.get(roleId);
+        if (role) {
+          channel.permissionOverwrites.create(role, {
+            ViewChannel: true,
+            SendMessages: true,
+            AttachFiles: true
+          });
+        }
+      });
+
       // Salva no banco de dados
       tickets[channel.id] = {
         userId: interaction.user.id,
         channelName: channel.name,
         channelId: channel.id,
+        ticketType: ticketType,
         openedAt: Date.now(),
         closedAt: null
       };
@@ -190,7 +284,7 @@ module.exports = {
       if (logService) {
         await logService.log(interaction.guild, {
           title: "🎫 Ticket Criado",
-          description: `**${interaction.user.tag}** abriu um novo ticket.`,
+          description: `**${interaction.user.tag}** abriu um novo ticket do tipo **${ticketType}**.`,
           color: 0x2ecc71,
           fields: [
             { name: "👤 Usuário", value: interaction.user.tag, inline: true },
@@ -201,11 +295,31 @@ module.exports = {
         });
       }
 
+      // Notificação para staff
+      if (ticketConfig.settings.enableNotifications && ticketConfig.settings.enableMentions) {
+        const staffMentions = ticketConfig.staffRoles.priority.map(roleId => `<@&${roleId}>`).join(" ");
+        
+        const notificationEmbed = createEmbed({
+          title: categoryConfig.notificationMessage,
+          description: `**${interaction.user.tag}** abriu um ticket e precisa de atendimento.\n\nCanal: ${channel}`,
+          color: categoryConfig.color,
+          footer: { text: "WDA - Todos os direitos reservados" }
+        });
+
+        const logChannel = interaction.guild.channels.cache.get(guildConfig.logChannelId);
+        if (logChannel) {
+          await logChannel.send({ 
+            content: staffMentions, 
+            embeds: [notificationEmbed] 
+          });
+        }
+      }
+
       const embed = createEmbed({
         title: `Ticket de ${interaction.user.tag}`,
         description: "Descreva seu problema aqui. A equipe de suporte chegará em breve.",
         color: 0x2ecc71,
-        footer: "Use /ticket close para fechar"
+        footer: "Use /ticket close para fechar • WDA - Todos os direitos reservados"
       });
 
       const row = new ActionRowBuilder().addComponents(
@@ -220,14 +334,23 @@ module.exports = {
       await interaction.reply({ content: `Ticket criado: ${channel}`, ephemeral: true });
     }
 
+    // Handler para fechar ticket
     if (interaction.customId === "close_ticket_btn") {
-      // Validação pelo banco de dados
       const tickets = await ticketStore.load();
       const ticketInfo = tickets[interaction.channelId];
       
       if (!ticketInfo) {
         return interaction.reply({ 
           embeds: [createErrorEmbed("Este não é um ticket válido.")], 
+          ephemeral: true 
+        });
+      }
+
+      // Verificação de staff
+      const member = await interaction.guild.members.fetch(interaction.user.id);
+      if (!isStaff(member, ticketConfig.staffRoles) && ticketInfo.userId !== interaction.user.id) {
+        return interaction.reply({ 
+          embeds: [createErrorEmbed("Apenas staff ou o criador do ticket pode fechá-lo.")], 
           ephemeral: true 
         });
       }
@@ -247,12 +370,11 @@ module.exports = {
         });
       }
 
-      // Remove do banco de dados
       delete tickets[interaction.channelId];
       await ticketStore.save(tickets);
 
       await interaction.reply({ 
-        embeds: [createEmbed({ description: "🔒 Ticket será fechado em 5 segundos...", color: 0xF1C40F })] 
+        embeds: [createEmbed({ description: "🔒 Ticket será fechado em 5 segundos...", color: 0xF1C40F, footer: { text: "WDA - Todos os direitos reservados" } })] 
       });
       
       setTimeout(() => {

@@ -96,6 +96,30 @@ function getCardConfig(cardId) {
       textColor: "#ffffff",
       levelColor: "#0077be",
       barColor: "#0077be"
+    },
+    "legendary": {
+      name: "Lendário",
+      background: "#1a1a1a",
+      gradient: ["#9b59b6", "#8e44ad"],
+      textColor: "#ffffff",
+      levelColor: "#9b59b6",
+      barColor: "#9b59b6"
+    },
+    "cosmic": {
+      name: "Cósmico",
+      background: "#1a1a1a",
+      gradient: ["#2c3e50", "#34495e"],
+      textColor: "#ffffff",
+      levelColor: "#3498db",
+      barColor: "#3498db"
+    },
+    "dragon": {
+      name: "Dragão",
+      background: "#1a1a1a",
+      gradient: ["#e67e22", "#d35400"],
+      textColor: "#ffffff",
+      levelColor: "#e67e22",
+      barColor: "#e67e22"
     }
   };
   
@@ -623,7 +647,7 @@ module.exports = {
         });
         
         // Cards disponíveis
-        const availableCards = ["default", "premium", "gold", "neon", "ocean"];
+        const availableCards = ["default", "premium", "gold", "neon", "ocean", "legendary", "cosmic", "dragon"];
         const ownedCards = availableCards.filter(card => 
           userCards.owned.includes(card) || card === "default"
         );
@@ -665,7 +689,8 @@ module.exports = {
             title: "🎴 Seus Cards de Rank",
             description: "Gerencie seus cards personalizados para o comando `/rank view`",
             fields: fields,
-            color: 0x9b59b6
+            color: 0x9b59b6,
+            footer: { text: "WDA - Todos os direitos reservados" }
           })],
           ephemeral: true
         });
