@@ -23,7 +23,7 @@ module.exports = {
             description: `Parabéns ${message.author}! Você subiu para o nível **${novoNivel}**!`,
             color: 0x00ff00,
             thumbnail: message.author.displayAvatarURL({ dynamic: true }),
-            footer: { text: "Esta mensagem será excluída em 15 segundos" }
+            footer: { text: "Esta mensagem será excluída em 15 segundos • WDA - Todos os direitos reservados" }
           }]
         });
         

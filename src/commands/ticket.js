@@ -46,7 +46,7 @@ module.exports = {
         title: "🎫 Central de Ajuda",
         description: "Clique no botão abaixo para abrir um ticket de suporte.\nNossa equipe irá atendê-lo em breve.",
         color: 0x3498db,
-        footer: "Suporte VIP e Geral"
+        footer: "Suporte VIP e Geral • WDA - Todos os direitos reservados"
       });
 
       const row = new ActionRowBuilder().addComponents(
