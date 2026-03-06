@@ -50,7 +50,6 @@ module.exports = {
       sub
         .setName("aceitar")
         .setDescription("Aceite uma solicitação de parceria")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .addStringOption((opt) =>
           opt.setName("id")
             .setDescription("ID exclusivo da solicitação")
@@ -68,7 +67,6 @@ module.exports = {
       sub
         .setName("recusar")
         .setDescription("Recuse uma solicitação de parceria")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .addStringOption((opt) =>
           opt.setName("id")
             .setDescription("ID exclusivo da solicitação")
@@ -86,7 +84,6 @@ module.exports = {
       sub
         .setName("remover")
         .setDescription("Remova uma parceria ativa")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .addStringOption((opt) =>
           opt.setName("id")
             .setDescription("ID exclusivo da parceria")
@@ -99,7 +96,6 @@ module.exports = {
       sub
         .setName("pendentes")
         .setDescription("Lista todas as solicitações pendentes")
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     )
     
     // Configurar permissões (Admin)
@@ -107,7 +103,6 @@ module.exports = {
       sub
         .setName("config")
         .setDescription("Configure quem pode usar o sistema de parcerias")
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         .addRoleOption((opt) =>
           opt.setName("cargo")
             .setDescription("Cargo que pode usar comandos de parceria")
@@ -118,7 +113,8 @@ module.exports = {
             .setDescription("Sistema de parcerias ativo para todos?")
             .setRequired(false)
         )
-    ),
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
@@ -275,132 +271,14 @@ module.exports = {
       return interaction.reply({ embeds: [embed] });
     }
 
-    if (sub === "aceitar") {
-      const requestId = interaction.options.getString("id");
-      const channelId = interaction.options.getString("canal");
-      
-      const partnership = Object.values(partners).find(p => p.id === requestId || p.requestId === requestId);
-      
-      if (!partnership) {
-        return interaction.reply({
-          embeds: [createErrorEmbed("Solicitação de parceria não encontrada! Verifique o ID.")],
-          ephemeral: true
-        });
-      }
-
-      if (partnership.status !== "pending") {
-        return interaction.reply({
-          embeds: [createErrorEmbed("Esta solicitação já foi processada!")],
-          ephemeral: true
-        });
-      }
-
-      // Atualizar status
-      await partnersStore.update(requestId, (current) => ({
-        ...current,
-        status: "accepted",
-        acceptedAt: new Date().toISOString(),
-        acceptedBy: userId,
-        partnerChannelId: channelId
-      }));
-
-      // Enviar confirmação
-      const embed = createSuccessEmbed(
-        `✅ **Parceria Aceita!**\n\n` +
-        `**ID:** \`${requestId}\`\n` +
-        `**Servidor:** ${partnership.serverName}\n` +
-        `**Aceita por:** ${interaction.user.username}\n` +
-        `**Canal de parceria:** <#${channelId}>\n\n` +
-        `A parceria está ativa!`
-      );
-
-      return interaction.reply({ embeds: [embed] });
-    }
-
-    if (sub === "recusar") {
-      const requestId = interaction.options.getString("id");
-      const reason = interaction.options.getString("motivo") || "Sem motivo especificado";
-      
-      const partnership = Object.values(partners).find(p => p.id === requestId || p.requestId === requestId);
-      
-      if (!partnership) {
-        return interaction.reply({
-          embeds: [createErrorEmbed("Solicitação de parceria não encontrada! Verifique o ID.")],
-          ephemeral: true
-        });
-      }
-
-      if (partnership.status !== "pending") {
-        return interaction.reply({
-          embeds: [createErrorEmbed("Esta solicitação já foi processada!")],
-          ephemeral: true
-        });
-      }
-
-      // Atualizar status
-      await partnersStore.update(requestId, (current) => ({
-        ...current,
-        status: "rejected",
-        rejectedAt: new Date().toISOString(),
-        rejectedBy: userId,
-        rejectionReason: reason
-      }));
-
-      // Enviar confirmação
-      const embed = createEmbed({
-        title: "❌ Parceria Recusada",
-        description: `**ID:** \`${requestId}\`\n\n` +
-        `**Servidor:** ${partnership.serverName}\n` +
-        `**Recusada por:** ${interaction.user.username}\n` +
-        `**Motivo:** ${reason}`,
-        color: 0xff0000,
-        footer: { text: "WDA - Todos os direitos reservados" }
-      });
-
-      return interaction.reply({ embeds: [embed] });
-    }
-
-    if (sub === "remover") {
-      const requestId = interaction.options.getString("id");
-      
-      const partnership = Object.values(partners).find(p => p.id === requestId || p.requestId === requestId);
-      
-      if (!partnership) {
-        return interaction.reply({
-          embeds: [createErrorEmbed("Parceria não encontrada! Verifique o ID.")],
-          ephemeral: true
-        });
-      }
-
-      if (partnership.status !== "accepted") {
-        return interaction.reply({
-          embeds: [createErrorEmbed("Apenas parcerias ativas podem ser removidas!")],
-          ephemeral: true
-        });
-      }
-
-      // Atualizar status
-      await partnersStore.update(requestId, (current) => ({
-        ...current,
-        status: "removed",
-        removedAt: new Date().toISOString(),
-        removedBy: userId
-      }));
-
-      // Enviar confirmação
-      const embed = createEmbed({
-        title: "🚫 Parceria Removida",
-        description: `**ID:** \`${requestId}\`\n\n` +
-        `**Servidor:** ${partnership.serverName}\n` +
-        `**Removida por:** ${interaction.user.username}`,
-        color: 0xff6600,
-        footer: { text: "WDA - Todos os direitos reservados" }
-      });
-
-      return interaction.reply({ embeds: [embed] });
-    }
-
     if (sub === "config") {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Apenas administradores podem configurar o sistema de parcerias!")],
+          ephemeral: true
+        });
+      }
+
       const role = interaction.options.getRole("cargo");
       const enabledForAll = interaction.options.getBoolean("ativo") ?? false;
 
