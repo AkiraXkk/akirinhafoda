@@ -14,7 +14,6 @@ module.exports = {
     .setName("partnership")
     .setDescription("Sistema completo de parcerias")
 
-    // --- PÚBLICO ---
     .addSubcommand(sub =>
       sub.setName("solicitar")
         .setDescription("Solicite uma parceria (Mínimo 350 membros)")
@@ -25,19 +24,17 @@ module.exports = {
         .addStringOption(o => o.setName("banner").setDescription("Link da imagem/banner (opcional)"))
     )
 
-    // --- STAFF: CONSULTA E VERIFICAÇÃO ---
     .addSubcommand(sub =>
       sub.setName("consultar")
-        .setDescription("Consulta os detalhes de uma parceria específica pelo ID")
-        .addStringOption(o => o.setName("id").setDescription("ID da parceria (ex: PARC12345)").setRequired(true))
+        .setDescription("Consulta os detalhes de uma parceria pelo ID")
+        .addStringOption(o => o.setName("id").setDescription("ID da parceria").setRequired(true))
     )
 
     .addSubcommand(sub =>
       sub.setName("listar")
-        .setDescription("Lista todas as parcerias ativas no servidor")
+        .setDescription("Lista todas as parcerias ativas")
     )
 
-    // --- STAFF: CONFIG E GESTÃO ---
     .addSubcommand(sub =>
       sub.setName("config")
         .setDescription("Configurar canais e cargos de staff")
@@ -57,20 +54,32 @@ module.exports = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const { guildId, user, member, guild } = interaction;
+    
     const partners = await partnersStore.load();
     const guildConfig = await getGuildConfig(guildId) || {};
-    const pConfig = guildConfig.partnership || { staffRoles: [], enabledForAll: false };
+    
+    // Inicialização segura das configurações para evitar o erro de 'undefined'
+    const pConfig = guildConfig.partnership || { staffRoles: [], enabledForAll: false, logChannelId: null, ranks: {} };
+    const staffRoles = pConfig.staffRoles || [];
+    const isEnabledForAll = pConfig.enabledForAll ?? false;
 
     // Verificação de Staff/Admin
-    const isStaff = member.roles.cache.some(role => pConfig.staffRoles.includes(role.id)) || member.permissions.has(PermissionFlagsBits.ManageGuild);
+    const isStaff = member.roles.cache.some(role => staffRoles.includes(role.id)) || member.permissions.has(PermissionFlagsBits.ManageGuild);
 
-    // --- COMANDO: SOLICITAR ---
+    // --- LOGICA DE ACESSO ---
     if (sub === "solicitar") {
-      if (!pConfig.enabledForAll && !isStaff) return interaction.reply({ embeds: [createErrorEmbed("Sistema desativado.")], ephemeral: true });
-      if (!pConfig.logChannelId) return interaction.reply({ embeds: [createErrorEmbed("Canal de logs não configurado.")], ephemeral: true });
+      // Se não for staff e o sistema não estiver ativo para todos
+      if (!isStaff && !isEnabledForAll) {
+        return interaction.reply({ embeds: [createErrorEmbed("O sistema de parcerias está desativado para o público no momento.")], ephemeral: true });
+      }
+      
+      // Verifica se o canal de logs existe antes de prosseguir
+      if (!pConfig.logChannelId) {
+        return interaction.reply({ embeds: [createErrorEmbed("O sistema ainda não foi totalmente configurado pela Staff (falta o canal de logs).")], ephemeral: true });
+      }
 
       let desc = interaction.options.getString("descricao");
-      desc = desc.replace(/(https?:\/\/[^\s]+)/gi, "`[LINK]`").replace(/@/g, "(at)").replace(/\n\s*\n\s*\n/g, '\n\n');
+      desc = desc.replace(/(https?:\/\/[^\s]+)/gi, "`[LINK REMOVIDO]`").replace(/@/g, "(at)").replace(/\n\s*\n\s*\n/g, '\n\n');
 
       const data = {
         id: `PARC${Math.floor(Math.random() * 90000) + 10000}`,
@@ -87,6 +96,8 @@ module.exports = {
       await partnersStore.update(data.id, () => data);
 
       const logChan = guild.channels.cache.get(pConfig.logChannelId);
+      if (!logChan) return interaction.reply({ content: "Erro: Canal de logs não encontrado.", ephemeral: true });
+
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`approve_${data.id}`).setLabel("Aprovar").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId(`reject_${data.id}`).setLabel("Recusar").setStyle(ButtonStyle.Danger)
@@ -99,57 +110,49 @@ module.exports = {
             { name: "ID", value: `\`${data.id}\``, inline: true },
             { name: "Servidor", value: data.serverName, inline: true },
             { name: "Membros", value: `${data.memberCount}`, inline: true },
-            { name: "Representante", value: `<@${user.id}>` }
-        );
+            { name: "Representante", value: `<@${user.id}>` },
+            { name: "Convite Original", value: data.inviteLink }
+        )
+        .setDescription(`**Descrição Enviada:**\n${data.description}`);
+
       if (data.banner) embed.setImage(data.banner);
 
-      await logChan.send({ content: pConfig.staffRoles.map(id => `<@&${id}>`).join(" "), embeds: [embed], components: [row] });
-      return interaction.reply({ content: "✅ Solicitação enviada!", ephemeral: true });
+      const pings = staffRoles.length > 0 ? staffRoles.map(id => `<@&${id}>`).join(" ") : "Sem cargos de staff configurados.";
+      await logChan.send({ content: pings, embeds: [embed], components: [row] });
+
+      return interaction.reply({ embeds: [createSuccessEmbed(`✅ Sua solicitação para **${data.serverName}** foi enviada com sucesso!`)], ephemeral: true });
     }
 
-    // --- COMANDO: CONSULTAR (NOVO) ---
+    // --- COMANDOS RESTRITOS (STAFF) ---
+    if (!isStaff) {
+      return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para usar este subcomando.")], ephemeral: true });
+    }
+
     if (sub === "consultar") {
-      if (!isStaff) return interaction.reply({ embeds: [createErrorEmbed("Acesso negado.")], ephemeral: true });
-      
       const id = interaction.options.getString("id").toUpperCase();
       const data = partners[id];
-
-      if (!data) return interaction.reply({ content: "❌ Parceria não encontrada com esse ID.", ephemeral: true });
+      if (!data) return interaction.reply({ content: "❌ ID não encontrado.", ephemeral: true });
 
       const embed = new EmbedBuilder()
-        .setTitle(`🔍 Detalhes: ${data.id}`)
+        .setTitle(`🔍 Consulta: ${data.id}`)
         .setColor(data.status === "accepted" ? 0x00FF00 : 0xFFFF00)
         .addFields(
           { name: "Servidor", value: data.serverName, inline: true },
           { name: "Status", value: data.status.toUpperCase(), inline: true },
           { name: "Membros", value: `${data.memberCount}`, inline: true },
-          { name: "Representante", value: `<@${data.requesterId}>`, inline: true },
-          { name: "Data", value: data.date || "Antiga", inline: true },
-          { name: "Responsável", value: data.processedBy ? `<@${data.processedBy}>` : "Nenhum", inline: true },
-          { name: "Link de Convite", value: data.inviteLink }
+          { name: "Responsável", value: data.processedBy ? `<@${data.processedBy}>` : "Aguardando", inline: true }
         );
-
       return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
-    // --- COMANDO: LISTAR (NOVO) ---
     if (sub === "listar") {
-      if (!isStaff) return interaction.reply({ embeds: [createErrorEmbed("Acesso negado.")], ephemeral: true });
-
       const active = Object.values(partners).filter(p => p.status === "accepted");
-      if (active.length === 0) return interaction.reply({ content: "Nenhuma parceria ativa encontrada.", ephemeral: true });
-
-      const embed = new EmbedBuilder()
-        .setTitle("🤝 Parcerias Ativas")
-        .setColor(0x5865F2)
-        .setDescription(active.map(p => `\`${p.id}\` - **${p.serverName}** (<@${p.requesterId}>)`).join("\n").slice(0, 4096));
-
+      if (active.length === 0) return interaction.reply({ content: "Nenhuma parceria ativa.", ephemeral: true });
+      const embed = new EmbedBuilder().setTitle("🤝 Parcerias Ativas").setDescription(active.map(p => `\`${p.id}\` - ${p.serverName}`).join("\n"));
       return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
-    // --- COMANDO: CONFIG ---
     if (sub === "config") {
-      if (!member.permissions.has(PermissionFlagsBits.Administrator)) return;
       const logChan = interaction.options.getChannel("canal_logs");
       const role = interaction.options.getRole("cargo_staff");
       const active = interaction.options.getBoolean("ativo");
@@ -157,71 +160,27 @@ module.exports = {
       if (logChan) pConfig.logChannelId = logChan.id;
       if (active !== null) pConfig.enabledForAll = active;
       if (role) {
-        pConfig.staffRoles = pConfig.staffRoles.includes(role.id) ? pConfig.staffRoles.filter(id => id !== role.id) : [...pConfig.staffRoles, role.id];
+        // Agora o pConfig.staffRoles sempre existirá como array por causa da inicialização no topo
+        if (pConfig.staffRoles.includes(role.id)) {
+          pConfig.staffRoles = pConfig.staffRoles.filter(id => id !== role.id);
+        } else {
+          pConfig.staffRoles.push(role.id);
+        }
       }
+
       await setGuildConfig(guildId, { partnership: pConfig });
-      return interaction.reply({ content: "✅ Configurações atualizadas!", ephemeral: true });
+      return interaction.reply({ content: "✅ Configurações de parceria salvas!", ephemeral: true });
     }
 
-    // --- COMANDO: SETUP ---
     if (sub === "setup") {
-      const ranks = { bronze: interaction.options.getRole("bronze").id, prata: interaction.options.getRole("prata").id, ouro: interaction.options.getRole("ouro").id };
-      await setGuildConfig(guildId, { partnership: { ...pConfig, ranks } });
-      return interaction.reply({ content: "✅ Rankings configurados!", ephemeral: true });
+      const ranks = { 
+        bronze: interaction.options.getRole("bronze").id, 
+        prata: interaction.options.getRole("prata").id, 
+        ouro: interaction.options.getRole("ouro").id 
+      };
+      pConfig.ranks = ranks;
+      await setGuildConfig(guildId, { partnership: pConfig });
+      return interaction.reply({ content: "✅ Rankings de membros configurados!", ephemeral: true });
     }
-  },
-
-  // --- HANDLER DE BOTÕES (Aprovar/Recusar) ---
-  async handleButtons(interaction) {
-    if (!interaction.isButton()) return;
-    const [action, id] = interaction.customId.split("_");
-    const partners = await partnersStore.load();
-    const data = partners[id];
-    const guildConfig = await getGuildConfig(interaction.guildId);
-    const pConfig = guildConfig.partnership;
-
-    if (!data || data.status !== "pending") return interaction.reply({ content: "Já processado.", ephemeral: true });
-
-    if (action === "reject") {
-        await partnersStore.update(id, c => ({ ...c, status: "rejected", processedBy: interaction.user.id }));
-        await interaction.update({ content: `❌ Recusada por: <@${interaction.user.id}>`, components: [], embeds: [interaction.message.embeds[0].setColor(0xFF0000)] });
-        return;
-    }
-
-    // Lógica Simplificada de Aprovação (Pede o canal)
-    await interaction.reply({ content: "Mencione o canal de postagem abaixo:", ephemeral: true });
-    const collector = interaction.channel.createMessageCollector({ filter: m => m.author.id === interaction.user.id, max: 1, time: 20000 });
-
-    collector.on('collect', async m => {
-      const targetChan = m.mentions.channels.first();
-      if (!targetChan) return m.reply("Canal inválido.");
-
-      let rName = "Bronze", rId = pConfig.ranks?.bronze;
-      if (data.memberCount >= 1000) { rName = "Ouro"; rId = pConfig.ranks?.ouro; }
-      else if (data.memberCount >= 750) { rName = "Prata"; rId = pConfig.ranks?.prata; }
-
-      // Atribui cargo e atualiza banco
-      const memberReq = await interaction.guild.members.fetch(data.requesterId).catch(() => null);
-      if (memberReq && rId) await memberReq.roles.add(rId).catch(() => null);
-      
-      await partnersStore.update(id, c => ({ ...c, status: "accepted", processedBy: interaction.user.id }));
-
-      // Postagem Pública (Texto Fora, Embed Dentro)
-      const postEmbed = new EmbedBuilder().setColor(0x00FF00).setDescription(data.description);
-      if (data.banner) postEmbed.setImage(data.banner);
-
-      const postContent = 
-        `--- ❴✠❵ NOVA PARCERIA ❴✠❵ ---\n` +
-        `✅ **Servidor:** ${data.serverName}\n` +
-        `👤 **Representante:** <@${data.requesterId}>\n` +
-        `🏆 **Ranking:** ${rName}\n` +
-        `🔗 **Link:** ${data.inviteLink}\n` +
-        `👮 **Responsável:** <@${interaction.user.id}>\n` +
-        `❴✠❵┅━━━━╍⊶⊰ 🤝 ⊱⊷╍━━━━┅❴✠❵`;
-
-      await targetChan.send({ content: postContent, embeds: [postEmbed] });
-      await interaction.message.edit({ content: `✅ Aprovada por: <@${interaction.user.id}> | ID: \`${data.id}\``, components: [] });
-      m.delete().catch(() => null);
-    });
   }
 };
