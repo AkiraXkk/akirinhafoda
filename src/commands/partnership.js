@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
 const { getGuildConfig, setGuildConfig } = require("../config/guildConfig");
@@ -67,8 +67,6 @@ module.exports = {
             .addChoices(
               { name: "@everyone", value: "everyone" },
               { name: "@here", value: "here" },
-              { name: "@parcerias", value: "parcerias" },
-              { name: "@atualizacoes", value: "atualizacoes" },
               { name: "Não mencionar", value: "none" }
             )
         )
@@ -198,6 +196,7 @@ module.exports = {
 
       // Criar solicitação
       await partnersStore.update(requestId, (current) => ({
+        id: requestId,
         requesterId: userId,
         requesterGuild: guildId,
         serverName,
@@ -341,6 +340,8 @@ module.exports = {
 
       // Formatar menção
       let mentionText = "";
+      const mentionRoles = guildConfig?.partnership?.mentionRoles || {};
+      
       switch (mention) {
         case "everyone":
           mentionText = "@everyone";
@@ -349,10 +350,18 @@ module.exports = {
           mentionText = "@here";
           break;
         case "parcerias":
-          mentionText = "<@&parcerias>";
+          if (mentionRoles.parcerias) {
+            mentionText = `<@&${mentionRoles.parcerias}>`;
+          } else {
+            mentionText = "@parcerias (não configurado)";
+          }
           break;
         case "atualizacoes":
-          mentionText = "<@&atualizacoes>";
+          if (mentionRoles.atualizacoes) {
+            mentionText = `<@&${mentionRoles.atualizacoes}>`;
+          } else {
+            mentionText = "@atualizacoes (não configurado)";
+          }
           break;
         default:
           mentionText = "";

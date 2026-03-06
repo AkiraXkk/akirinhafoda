@@ -44,6 +44,23 @@ module.exports = {
     )
     .addSubcommand((sub) =>
       sub
+        .setName("partnership_mentions")
+        .setDescription("Configura os cargos de menção de parcerias")
+        .addRoleOption((opt) =>
+          opt
+            .setName("parcerias")
+            .setDescription("Cargo para menção de parcerias")
+            .setRequired(false)
+        )
+        .addRoleOption((opt) =>
+          opt
+            .setName("atualizacoes")
+            .setDescription("Cargo para menção de atualizações")
+            .setRequired(false)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
         .setName("view")
         .setDescription("Mostra as configurações atuais")
     ),
@@ -98,6 +115,33 @@ module.exports = {
         )],
         ephemeral: true
       });
+    }
+
+    if (sub === "partnership_mentions") {
+      const parceriasRole = interaction.options.getRole("parcerias");
+      const atualizacoesRole = interaction.options.getRole("atualizacoes");
+      
+      const currentConfig = await getGuildConfig(guildId);
+      const partnershipConfig = currentConfig?.partnership || {};
+      
+      await setGuildConfig(guildId, {
+        partnership: {
+          ...partnershipConfig,
+          mentionRoles: {
+            parcerias: parceriasRole?.id || null,
+            atualizacoes: atualizacoesRole?.id || null
+          }
+        }
+      });
+
+      const embed = createSuccessEmbed(
+        `⚙️ **Cargos de Menção Configurados!**\n\n` +
+        `**@parcerias:** ${parceriasRole ? `<@&${parceriasRole.id}>` : "❌ Não configurado"}\n` +
+        `**@atualizacoes:** ${atualizacoesRole ? `<@&${atualizacoesRole.id}>` : "❌ Não configurado"}\n\n` +
+        `Esses cargos agora estarão disponíveis para menção no sistema de parcerias!`
+      );
+
+      return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
     if (sub === "view") {
