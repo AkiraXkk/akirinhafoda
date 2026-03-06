@@ -22,7 +22,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("vip")
     .setDescription("Gerencie suas vantagens VIP")
-    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos"))
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos e painel VIP"))
     .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
     .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota").addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true)))
     .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome").setDescription("Nome do cargo (opcional)")).addStringOption(o => o.setName("cor").setDescription("Cor em hex (opcional)"))),
@@ -35,6 +35,9 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
 
     if (sub === "info") {
+      // 1. CRIAÇÃO AUTOMÁTICA! Assim que ele abre o painel, o bot cria os canais VIP caso não existam.
+      await vipChannel.ensureVipChannels(interaction.user.id, { guildId: interaction.guildId });
+
       const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
       const embed = new EmbedBuilder().setTitle("💎 Painel VIP").setColor("Gold")
         .addFields(
@@ -46,10 +49,11 @@ module.exports = {
         .setCustomId(`vip_action_${interaction.guildId}_${interaction.user.id}`)
         .setPlaceholder("Escolha uma ação")
         .addOptions(
-          new StringSelectMenuOptionBuilder().setLabel("Renomear Call Privada").setValue("call_rename"),
-          new StringSelectMenuOptionBuilder().setLabel("Customizar Cargo Pessoal").setValue("custom_role"),
-          new StringSelectMenuOptionBuilder().setLabel("Dar VIP da sua cota").setValue("give_quota"),
-          new StringSelectMenuOptionBuilder().setLabel("Gerenciar cotas dadas").setValue("manage_quota")
+          new StringSelectMenuOptionBuilder().setLabel("Criar/Sincronizar Canais").setValue("create_channels").setEmoji("🗂️"),
+          new StringSelectMenuOptionBuilder().setLabel("Renomear Call Privada").setValue("call_rename").setEmoji("✏️"),
+          new StringSelectMenuOptionBuilder().setLabel("Customizar Cargo Pessoal").setValue("custom_role").setEmoji("🎨"),
+          new StringSelectMenuOptionBuilder().setLabel("Dar VIP da sua cota").setValue("give_quota").setEmoji("🎁"),
+          new StringSelectMenuOptionBuilder().setLabel("Gerenciar cotas dadas").setValue("manage_quota").setEmoji("⚙️")
         );
 
       return interaction.reply({
@@ -115,6 +119,20 @@ module.exports = {
 
       const action = interaction.values?.[0];
       if (!action) return interaction.reply({ content: "Seleção inválida.", ephemeral: true });
+
+      // 2. OPÇÃO MANUAL PARA CRIAR OS CANAIS PELO MENU
+      if (action === "create_channels") {
+        if (!tier.canCall && !tier.chat_privado) {
+          return interaction.reply({ content: "❌ Seu tier não possui benefícios de canais personalizados.", ephemeral: true });
+        }
+        await interaction.deferReply({ ephemeral: true });
+        const res = await vipChannel.ensureVipChannels(interaction.user.id, { guildId: interaction.guildId });
+        if (res.ok) {
+           return interaction.editReply({ content: "✅ Seus canais VIP foram criados/sincronizados com sucesso! Procure na categoria VIP." });
+        } else {
+           return interaction.editReply({ content: "❌ Ocorreu um erro ao criar seus canais. Verifique se a categoria está configurada no /vipadmin." });
+        }
+      }
 
       if (action === "call_rename") {
         if (!tier.canCall) {
@@ -194,7 +212,6 @@ module.exports = {
           return interaction.reply({ content: "Você ainda não deu VIP da cota para ninguém.", ephemeral: true });
         }
 
-        // Fetch user information for better display
         const userOptions = await Promise.all(
           dados.slice(0, 25).map(async (uid) => {
             try {
@@ -249,7 +266,7 @@ module.exports = {
         return interaction.reply({ content: "❌ Cota esgotada.", ephemeral: true });
       }
       if (!tier.cotaRoleId) {
-        return interaction.reply({ content: "❌ Cargo de cota não configurado.", ephemeral: true });
+        return interaction.reply({ content: "❌ Cargo de cota não configurado no seu tier.", ephemeral: true });
       }
 
       const target = await interaction.guild.members.fetch(selectedUserId).catch(() => null);
@@ -327,18 +344,4 @@ module.exports = {
     }
 
     if (modalType === "call") {
-      if (!tier.canCall) return interaction.reply({ content: "❌ Seu tier não permite Call Privada.", ephemeral: true });
-      const nome = interaction.fields.getTextInputValue("nome");
-      const res = await vipChannel.updateChannelName(interaction.user.id, nome, { guildId: interaction.guildId });
-      return interaction.reply({ content: res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`, ephemeral: true });
-    }
-
-    if (modalType === "role") {
-      if (!tier.hasCustomRole) return interaction.reply({ content: "❌ Seu tier não permite cargo personalizado.", ephemeral: true });
-      const roleName = (interaction.fields.getTextInputValue("nome") || "").trim() || null;
-      const roleColor = (interaction.fields.getTextInputValue("cor") || "").trim() || null;
-      const res = await vipRole.updatePersonalRole(interaction.user.id, { roleName, roleColor }, { guildId: interaction.guildId });
-      return interaction.reply({ content: res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.", ephemeral: true });
-    }
-  }
-};
+      if (!tier.canCall) return interaction.reply({ content: "❌ Seu
