@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, ChannelType } = require("discord.js");
 const { createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
 const { getGuildConfig } = require("../config/guildConfig");
@@ -26,9 +26,8 @@ module.exports = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const { guildId, user, guild } = interaction;
-    
+
     if (sub === "solicitar") {
-      // 1. Atrasa a resposta IMEDIATAMENTE para matar o erro "O aplicativo não respondeu"
       await interaction.deferReply({ ephemeral: true });
 
       const guildConfig = await getGuildConfig(guildId) || {};
@@ -38,7 +37,6 @@ module.exports = {
         return interaction.editReply({ embeds: [createErrorEmbed("O sistema de parcerias está desativado.")] });
       }
 
-      // Lógica de Cooldown (24h)
       const allPartners = await partnersStore.load();
       const userRequests = Object.values(allPartners).filter(p => p.requesterId === user.id);
       if (userRequests.length > 0) {
@@ -54,6 +52,7 @@ module.exports = {
         requesterId: user.id,
         serverName: interaction.options.getString("servidor"),
         inviteLink: interaction.options.getString("convite"),
+        // Bloqueio de pings na entrada: substitui todos os "@" por vazio
         description: interaction.options.getString("descricao").replace(/@/g, ""),
         memberCount: interaction.options.getInteger("membros"),
         banner: interaction.options.getString("banner"),
@@ -81,16 +80,14 @@ module.exports = {
       );
 
       if (logChan) await logChan.send({ embeds: [embed], components: [row] });
-      // 2. Trocamos o .reply() por .editReply() porque já usamos o deferReply() lá no topo
       return interaction.editReply({ embeds: [createSuccessEmbed("Solicitação enviada com sucesso!")] });
     }
   },
 
   async handleButton(interaction) {
-    // 3. CORREÇÃO CRÍTICA DO BUG DO SPLIT: Pegando os dados de forma correta
     const parts = interaction.customId.split("_");
-    const action = parts[1]; // "approve" ou "reject"
-    const id = parts[2];     // "PARC12345"
+    const action = parts[1];
+    const id = parts[2];
 
     const partners = await partnersStore.load();
     const data = partners[id];
@@ -98,7 +95,6 @@ module.exports = {
     if (!data || data.status !== "pending") return interaction.reply({ content: "Pedido não encontrado ou já processado.", ephemeral: true });
 
     if (action === "reject") {
-      // Abre o modal na hora (não podemos usar deferUpdate antes de um modal)
       const modal = new ModalBuilder().setCustomId(`partnership_modal_reject_${id}`).setTitle("Recusar Parceria");
       const input = new TextInputBuilder().setCustomId("reason").setLabel("Motivo").setStyle(TextInputStyle.Paragraph).setRequired(true);
       modal.addComponents(new ActionRowBuilder().addComponents(input));
@@ -106,42 +102,108 @@ module.exports = {
     }
 
     if (action === "approve") {
-      // Responde pedindo o canal (isso já mata o timeout de 3 segundos)
-      await interaction.reply({ content: "Mencione o canal para postagem.", ephemeral: true });
-      const filter = m => m.author.id === interaction.user.id && m.mentions.channels.size > 0;
-      const collector = interaction.channel.createMessageCollector({ filter, max: 1, time: 30000 });
+      // 1. Painel de Seleção de Canal
+      const rowChannel = new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+          .setCustomId(`sel_chan_${id}`)
+          .setPlaceholder("Selecione o canal para postar")
+          .addChannelTypes(ChannelType.GuildText)
+      );
 
-      collector.on('collect', async m => {
-        const targetChan = m.mentions.channels.first();
-        const guildConfig = await getGuildConfig(interaction.guildId);
-        
-        // Correção de Link e Descrição
+      const promptMsg = await interaction.reply({
+        content: "✅ **Aprovação Iniciada!**\nPrimeiro, selecione o canal onde a parceria será postada:",
+        components: [rowChannel],
+        ephemeral: true,
+        fetchReply: true
+      });
+
+      try {
+        // Aguarda escolha do canal
+        const chanInter = await promptMsg.awaitMessageComponent({
+          filter: i => i.user.id === interaction.user.id && i.customId === `sel_chan_${id}`,
+          time: 60000
+        });
+        const targetChan = interaction.guild.channels.cache.get(chanInter.values[0]);
+
+        // 2. Painel de Seleção de Menção
+        const rowRole = new ActionRowBuilder().addComponents(
+          new RoleSelectMenuBuilder()
+            .setCustomId(`sel_role_${id}`)
+            .setPlaceholder("Selecione um cargo para mencionar...")
+        );
+        const rowButtons = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`ping_everyone_${id}`).setLabel("@everyone").setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId(`ping_here_${id}`).setLabel("@here").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(`ping_none_${id}`).setLabel("Sem menção").setStyle(ButtonStyle.Danger)
+        );
+
+        await chanInter.update({
+          content: `✅ Canal ${targetChan} selecionado!\nAgora, escolha quem será mencionado na postagem:`,
+          components: [rowRole, rowButtons]
+        });
+
+        // Aguarda escolha do cargo ou botão
+        const mentionInter = await promptMsg.awaitMessageComponent({
+          filter: i => i.user.id === interaction.user.id,
+          time: 60000
+        });
+
+        let pingText = "";
+        if (mentionInter.isRoleSelectMenu()) {
+          pingText = `<@&${mentionInter.values[0]}>`;
+        } else if (mentionInter.isButton()) {
+          if (mentionInter.customId.includes("everyone")) pingText = "@everyone";
+          if (mentionInter.customId.includes("here")) pingText = "@here";
+          if (mentionInter.customId.includes("none")) pingText = "Sem menção";
+        }
+
+        // 3. Formatação Final: Link e Remoção Severa
         let finalLink = data.inviteLink.trim();
+        // Garante que o link oficial do parceiro tenha https://
         if (!finalLink.startsWith('http')) finalLink = `https://${finalLink}`;
-        const cleanDesc = data.description.replace(/(https?:\/\/)?(www\.)?(discord\.(gg|io|me|li)|discordapp\.com\/invite)\/[^\s]+/gi, "[Link Removido]");
 
-        const postEmbed = new EmbedBuilder()
-          .setColor(0x2ecc71)
-          .setDescription(`--- {☩} NOVA PARCERIA FECHADA! {☩} ---\n\n✅ **Server:** ${data.serverName}\n👤 **Representante:** <@${data.requesterId}>\n🛡️ **Responsável:** <@${interaction.user.id}>\n\n${cleanDesc}\n\n{☩}----------multimap 🤝 multimap----------{☩}`);
-
-        if (data.banner?.startsWith("http")) postEmbed.setImage(data.banner);
-
-        const ping = guildConfig.partnership?.pingRole ? `<@&${guildConfig.partnership.pingRole}>` : "@everyone";
-        await targetChan.send({ content: `${ping}\n**Convite:** ${finalLink}`, embeds: [postEmbed] });
+        // Regex agressiva que detecta qualquer URL ou domínio (HTTP, HTTPS, WWW, ou domínios crus)
+        const regexQualquerLink = /(https?:\/\/[^\s]+)|([-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*))/gi;
         
+        // Remove literalmente qualquer link da descrição
+        const cleanDesc = data.description.replace(regexQualquerLink, "[Link Removido]");
+
+        // 4. Montando as Partes Separadas (Fora e Dentro da Embed)
+        
+        // DADOS FORA DA EMBED (Texto solto)
+        const textoFora = `**Nome do Servidor:** ${data.serverName}\n**Representante:** <@${data.requesterId}>\n**Responsável:** <@${interaction.user.id}>\n**Ping:** ${pingText}\n**Link:** ${finalLink}`;
+
+        // DADOS DENTRO DA EMBED (Apenas Descrição Limpa e Banner)
+        const embedParceria = new EmbedBuilder()
+          .setColor(0x2ecc71)
+          .setDescription(`--- {☩} NOVA PARCERIA FECHADA! {☩} ---\n\n${cleanDesc}\n\n{☩}----------multimap 🤝 multimap----------{☩}`);
+
+        if (data.banner && data.banner.startsWith("http")) {
+          embedParceria.setImage(data.banner);
+        }
+
+        // 5. Envio e Atualização
+        await targetChan.send({ content: textoFora, embeds: [embedParceria] });
+
         await partnersStore.update(id, c => ({ ...c, status: "accepted", processedBy: interaction.user.id }));
         await staffStatsStore.update(interaction.user.id, c => ({ ...c, approved: (c?.approved || 0) + 1 }));
 
-        await interaction.message.edit({ content: `✅ Aprovada por <@${interaction.user.id}>`, components: [], embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x00FF00)] });
-        m.delete().catch(() => null);
-      });
+        await interaction.message.edit({ 
+            content: `✅ Aprovada por <@${interaction.user.id}> e postada em ${targetChan}`, 
+            components: [], 
+            embeds: [EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x00FF00)] 
+        });
+
+        await mentionInter.update({ content: "🚀 Parceria enviada com sucesso para o canal público!", components: [] });
+
+      } catch (error) {
+        await interaction.editReply({ content: "⏳ Tempo esgotado para selecionar o canal/menção. Clique em Aprovar novamente se quiser tentar de novo.", components: [] }).catch(() => null);
+      }
     }
   },
 
   async handleModal(interaction) {
     const id = interaction.customId.split("_")[3];
-    
-    // 4. EVITANDO O 10062 AQUI TAMBÉM: Deferimos a atualização pois mandar DM para usuário pode demorar
     await interaction.deferUpdate();
 
     const reason = interaction.fields.getTextInputValue("reason");
@@ -149,13 +211,12 @@ module.exports = {
     const data = partners[id];
 
     await partnersStore.update(id, c => ({ ...c, status: "rejected", processedBy: interaction.user.id, reason }));
-    
+
     const user = await interaction.client.users.fetch(data.requesterId).catch(() => null);
     if (user) await user.send(`Sua parceria com **${data.serverName}** foi recusada. Motivo: ${reason}`).catch(() => null);
 
     const embed = EmbedBuilder.from(interaction.message.embeds[0]).setColor(0xFF0000).addFields({ name: "Motivo", value: reason });
-    
-    // Como usamos deferUpdate(), finalizamos editando a resposta
+
     return interaction.editReply({ content: `❌ Recusada por <@${interaction.user.id}>`, components: [], embeds: [embed] });
   }
 };
