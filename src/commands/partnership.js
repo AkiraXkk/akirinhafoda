@@ -2,7 +2,7 @@ const {
   SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, 
   ButtonBuilder, ButtonStyle, EmbedBuilder 
 } = require("discord.js");
-const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
+const { createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
 const { getGuildConfig, setGuildConfig } = require("../config/guildConfig");
 
@@ -13,7 +13,6 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("partnership")
     .setDescription("Sistema completo de parcerias")
-
     .addSubcommand(sub =>
       sub.setName("solicitar")
         .setDescription("Solicite uma parceria (Mínimo 350 membros)")
@@ -23,18 +22,15 @@ module.exports = {
         .addIntegerOption(o => o.setName("membros").setDescription("Número de membros").setRequired(true).setMinValue(350))
         .addStringOption(o => o.setName("banner").setDescription("Link da imagem/banner (opcional)"))
     )
-
     .addSubcommand(sub =>
       sub.setName("consultar")
         .setDescription("Consulta os detalhes de uma parceria pelo ID")
         .addStringOption(o => o.setName("id").setDescription("ID da parceria").setRequired(true))
     )
-
     .addSubcommand(sub =>
       sub.setName("listar")
         .setDescription("Lista todas as parcerias ativas")
     )
-
     .addSubcommand(sub =>
       sub.setName("config")
         .setDescription("Configurar canais e cargos de staff")
@@ -42,7 +38,6 @@ module.exports = {
         .addRoleOption(o => o.setName("cargo_staff").setDescription("Adicionar/Remover cargo da staff"))
         .addBooleanOption(o => o.setName("ativo").setDescription("Sistema aberto ao público?"))
     )
-
     .addSubcommand(sub =>
       sub.setName("setup")
         .setDescription("Configurar cargos de Ranking")
@@ -54,28 +49,19 @@ module.exports = {
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const { guildId, user, member, guild } = interaction;
-    
     const partners = await partnersStore.load();
     const guildConfig = await getGuildConfig(guildId) || {};
     
-    // Inicialização ultra segura para evitar erros de undefined
-    const pConfig = guildConfig.partnership || {};
+    const pConfig = guildConfig.partnership || { staffRoles: [], enabledForAll: false };
     if (!pConfig.staffRoles) pConfig.staffRoles = [];
-    if (pConfig.enabledForAll === undefined) pConfig.enabledForAll = false;
 
     const isStaff = member.roles.cache.some(role => pConfig.staffRoles.includes(role.id)) || member.permissions.has(PermissionFlagsBits.ManageGuild);
 
     if (sub === "solicitar") {
-      if (!isStaff && !pConfig.enabledForAll) {
-        return interaction.reply({ embeds: [createErrorEmbed("O sistema está desativado no momento.")], ephemeral: true });
-      }
-      
-      if (!pConfig.logChannelId) {
-        return interaction.reply({ embeds: [createErrorEmbed("O canal de moderação não foi configurado.")], ephemeral: true });
-      }
+      if (!isStaff && !pConfig.enabledForAll) return interaction.reply({ embeds: [createErrorEmbed("Sistema desativado.")], ephemeral: true });
+      if (!pConfig.logChannelId) return interaction.reply({ embeds: [createErrorEmbed("Canal de logs não configurado.")], ephemeral: true });
 
-      let desc = interaction.options.getString("descricao");
-      desc = desc.replace(/(https?:\/\/[^\s]+)/gi, "`[LINK]`").replace(/@/g, "(at)").replace(/\n\s*\n\s*\n/g, '\n\n');
+      let desc = interaction.options.getString("descricao").replace(/(https?:\/\/[^\s]+)/gi, "`[LINK]`").replace(/@/g, "(at)");
 
       const data = {
         id: `PARC${Math.floor(Math.random() * 90000) + 10000}`,
@@ -86,14 +72,12 @@ module.exports = {
         memberCount: interaction.options.getInteger("membros"),
         banner: interaction.options.getString("banner"),
         status: "pending",
-        date: new Date().toISOString() // Salva formato ISO para o Checker ler sem erros
+        date: new Date().toISOString()
       };
 
       await partnersStore.update(data.id, () => data);
-
       const logChan = guild.channels.cache.get(pConfig.logChannelId);
-      if (!logChan) return interaction.reply({ content: "Erro: Canal de logs não encontrado.", ephemeral: true });
-
+      
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`partnership_approve_${data.id}`).setLabel("Aprovar").setStyle(ButtonStyle.Success),
         new ButtonBuilder().setCustomId(`partnership_reject_${data.id}`).setLabel("Recusar").setStyle(ButtonStyle.Danger)
@@ -105,44 +89,29 @@ module.exports = {
         .addFields(
             { name: "ID", value: `\`${data.id}\``, inline: true },
             { name: "Servidor", value: data.serverName, inline: true },
-            { name: "Membros", value: `${data.memberCount}`, inline: true },
-            { name: "Representante", value: `<@${user.id}>` }
+            { name: "Membros", value: `${data.memberCount}`, inline: true }
         )
         .setDescription(`**Descrição:**\n${data.description}`);
 
       if (data.banner) embed.setImage(data.banner);
-
-      const pings = pConfig.staffRoles.length > 0 ? pConfig.staffRoles.map(id => `<@&${id}>`).join(" ") : "Staff";
-      await logChan.send({ content: pings, embeds: [embed], components: [row] });
-
-      return interaction.reply({ embeds: [createSuccessEmbed(`✅ Solicitação enviada! ID: \`${data.id}\``)], ephemeral: true });
+      await logChan.send({ content: pConfig.staffRoles.map(id => `<@&${id}>`).join(" "), embeds: [embed], components: [row] });
+      return interaction.reply({ embeds: [createSuccessEmbed("Solicitação enviada!")], ephemeral: true });
     }
 
-    // A partir daqui apenas staff
-    if (!isStaff) return interaction.reply({ embeds: [createErrorEmbed("Sem permissão.")], ephemeral: true });
+    if (!isStaff) return interaction.reply({ content: "Sem permissão.", ephemeral: true });
 
     if (sub === "consultar") {
       const id = interaction.options.getString("id").toUpperCase();
       const data = partners[id];
-      if (!data) return interaction.reply({ content: "❌ ID não encontrado.", ephemeral: true });
-
-      const embed = new EmbedBuilder()
-        .setTitle(`🔍 Consulta: ${data.id}`)
-        .setColor(data.status === "accepted" ? 0x00FF00 : 0xFFFF00)
-        .addFields(
-          { name: "Servidor", value: data.serverName, inline: true },
-          { name: "Status", value: data.status.toUpperCase(), inline: true },
-          { name: "Membros", value: `${data.memberCount}`, inline: true },
-          { name: "Responsável", value: data.processedBy ? `<@${data.processedBy}>` : "Aguardando", inline: true }
-        );
+      if (!data) return interaction.reply({ content: "ID não encontrado.", ephemeral: true });
+      const embed = new EmbedBuilder().setTitle(`Consulta: ${data.id}`).addFields({ name: "Servidor", value: data.serverName });
       return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
     if (sub === "listar") {
       const active = Object.values(partners).filter(p => p.status === "accepted");
-      if (active.length === 0) return interaction.reply({ content: "Sem parcerias ativas.", ephemeral: true });
-      const embed = new EmbedBuilder().setTitle("🤝 Parcerias Ativas").setDescription(active.map(p => `\`${p.id}\` - ${p.serverName}`).join("\n"));
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      const list = active.map(p => `\`${p.id}\` - ${p.serverName}`).join("\n") || "Nenhuma.";
+      return interaction.reply({ content: `**Parcerias:**\n${list}`, ephemeral: true });
     }
 
     if (sub === "config") {
@@ -152,31 +121,18 @@ module.exports = {
 
       if (logChan) pConfig.logChannelId = logChan.id;
       if (active !== null) pConfig.enabledForAll = active;
-      
       if (role) {
-        // Correção do erro de undefined (reading 'includes')
-        if (!pConfig.staffRoles) pConfig.staffRoles = [];
-        
-        if (pConfig.staffRoles.includes(role.id)) {
-          pConfig.staffRoles = pConfig.staffRoles.filter(id => id !== role.id);
-        } else {
-          pConfig.staffRoles.push(role.id);
-        }
+        pConfig.staffRoles = pConfig.staffRoles.includes(role.id) ? pConfig.staffRoles.filter(id => id !== role.id) : [...pConfig.staffRoles, role.id];
       }
 
       await setGuildConfig(guildId, { partnership: pConfig });
-      return interaction.reply({ content: "✅ Configurações de parceria salvas com sucesso!", ephemeral: true });
+      return interaction.reply({ content: "Configurações salvas.", ephemeral: true });
     }
 
     if (sub === "setup") {
-      const ranks = { 
-        bronze: interaction.options.getRole("bronze").id, 
-        prata: interaction.options.getRole("prata").id, 
-        ouro: interaction.options.getRole("ouro").id 
-      };
-      pConfig.ranks = ranks;
+      pConfig.ranks = { bronze: interaction.options.getRole("bronze").id, prata: interaction.options.getRole("prata").id, ouro: interaction.options.getRole("ouro").id };
       await setGuildConfig(guildId, { partnership: pConfig });
-      return interaction.reply({ content: "✅ Rankings de membros configurados!", ephemeral: true });
+      return interaction.reply({ content: "Rankings configurados.", ephemeral: true });
     }
   },
 
@@ -187,7 +143,7 @@ module.exports = {
     const partners = await partnersStore.load();
     const data = partners[id];
     const guildConfig = await getGuildConfig(interaction.guildId);
-    const pConfig = guildConfig.partnership || { ranks: {} };
+    const pConfig = guildConfig.partnership || {};
 
     if (!data || data.status !== "pending") return interaction.reply({ content: "Já processado.", ephemeral: true });
 
@@ -197,12 +153,12 @@ module.exports = {
     }
 
     if (action === "approve") {
-      await interaction.reply({ content: "Mencione o canal de postagem abaixo:", ephemeral: true });
+      await interaction.reply({ content: "Mencione o canal de postagem:", ephemeral: true });
       const collector = interaction.channel.createMessageCollector({ filter: m => m.author.id === interaction.user.id, max: 1, time: 20000 });
 
       collector.on('collect', async m => {
         const targetChan = m.mentions.channels.first();
-        if (!targetChan) return m.reply("Canal inválido.");
+        if (!targetChan) return;
 
         let rName = "Bronze", rId = pConfig.ranks?.bronze;
         if (data.memberCount >= 1000) { rName = "Ouro"; rId = pConfig.ranks?.ouro; }
@@ -212,22 +168,15 @@ module.exports = {
         if (memberReq && rId) await memberReq.roles.add(rId).catch(() => null);
         
         await partnersStore.update(id, c => ({ ...c, status: "accepted", processedBy: interaction.user.id, acceptedAt: new Date().toISOString() }));
-        await staffStatsStore.update(interaction.user.id, c => ({ ...c, approved: (c?.approved || 0) + 1, name: interaction.user.username }));
+        await staffStatsStore.update(interaction.user.id, c => ({ ...c, approved: (c?.approved || 0) + 1 }));
 
         const postEmbed = new EmbedBuilder().setColor(0x00FF00).setDescription(data.description);
         if (data.banner) postEmbed.setImage(data.banner);
 
-        const postContent = 
-          `--- ❴✠❵ NOVA PARCERIA ❴✠❵ ---\n` +
-          `✅ **Servidor:** ${data.serverName}\n` +
-          `👤 **Representante:** <@${data.requesterId}>\n` +
-          `🏆 **Ranking:** ${rName}\n` +
-          `🔗 **Link:** ${data.inviteLink}\n` +
-          `👮 **Responsável:** <@${interaction.user.id}>\n` +
-          `❴✠❵┅━━━━╍⊶⊰ 🤝 ⊱⊷╍━━━━┅❴✠❵`;
+        const postContent = `✅ **Servidor:** ${data.serverName}\n👤 **Representante:** <@${data.requesterId}>\n🏆 **Ranking:** ${rName}\n🔗 **Link:** ${data.inviteLink}\n👮 **Responsável:** <@${interaction.user.id}>`;
 
         await targetChan.send({ content: postContent, embeds: [postEmbed] });
-        await interaction.message.edit({ content: `✅ Aprovada por: <@${interaction.user.id}> | ID: \`${data.id}\``, components: [] });
+        await interaction.message.edit({ content: `✅ Aprovada por: <@${interaction.user.id}>`, components: [] });
         m.delete().catch(() => null);
       });
     }
