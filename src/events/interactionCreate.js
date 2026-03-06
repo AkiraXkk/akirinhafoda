@@ -16,29 +16,29 @@ module.exports = {
       return;
     }
 
-    // 2. SISTEMA DE BOTÕES (Prioridade Direta)
+    // 2. SISTEMA DE BOTÕES
     if (interaction.isButton()) {
       const customId = interaction.customId;
 
-      // Atalho para Parcerias
-      if (customId.startsWith("partnership_")) {
+      // Filtro Parcerias (Captura parceria_approve, parceria_reject, etc)
+      if (customId.includes("partnership_")) {
         const cmd = client.commands.get("partnership");
-        if (cmd) return await cmd.handleButton(interaction);
+        if (cmd) return await cmd.handleButton(interaction).catch(() => null);
       }
       
-      // Atalho para Tickets
-      if (customId.startsWith("open_ticket_") || customId === "close_ticket_btn") {
+      // Filtro Tickets
+      if (customId.startsWith("open_ticket_") || customId.includes("close_ticket")) {
         const cmd = client.commands.get("ticket");
-        if (cmd) return await cmd.handleButton(interaction);
+        if (cmd) return await cmd.handleButton(interaction).catch(() => null);
       }
 
-      // Atalho para SejaWDA
+      // Filtro SejaWDA
       if (customId.startsWith("sejawda_")) {
         const cmd = client.commands.get("sejawda");
-        if (cmd) return await cmd.handleButton(interaction);
+        if (cmd) return await cmd.handleButton(interaction).catch(() => null);
       }
 
-      // Fallback: Varredura para outros painéis que você tenha
+      // Varredura Geral para outros painéis
       for (const cmd of client.commands.values()) {
         if (typeof cmd.handleButton === "function") {
           try {
@@ -55,7 +55,7 @@ module.exports = {
 
       if (customId.startsWith("sejawda_")) {
         const cmd = client.commands.get("sejawda");
-        if (cmd) return await cmd.handleSelectMenu(interaction);
+        if (cmd) return await cmd.handleSelectMenu(interaction).catch(() => null);
       }
 
       for (const cmd of client.commands.values()) {
@@ -72,9 +72,9 @@ module.exports = {
     if (interaction.isModalSubmit()) {
       const customId = interaction.customId;
 
-      if (customId.startsWith("partnership_modal_")) {
+      if (customId.includes("partnership_modal_")) {
         const cmd = client.commands.get("partnership");
-        if (cmd) return await cmd.handleModal(interaction);
+        if (cmd) return await cmd.handleModal(interaction).catch(() => null);
       }
 
       for (const cmd of client.commands.values()) {
