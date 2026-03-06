@@ -1,5 +1,4 @@
-const { Events } = require("discord.js");
-const { createEmbed } = require("../embeds");
+const { Events, EmbedBuilder } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
 const { getGuildConfig } = require("../config/guildConfig");
 
@@ -7,83 +6,87 @@ const partnersStore = createDataStore("partners.json");
 const boostStore = createDataStore("boosts.json");
 
 module.exports = {
-  name: "ready",
+  name: Events.ClientReady, // Usando a constante oficial do discord.js
   once: true,
   async execute(client) {
-    console.log("🔍 Iniciando verificação automática de parcerias...");
+    console.log("🔍 [CHECKER] Verificação automática de parcerias e boosts iniciada.");
 
-    // Verificar parcerias a cada 5 minutos
+    // Executar verificação inicial após o bot ligar
+    setTimeout(async () => {
+      await checkExpiredPartnerships(client);
+      await checkExpiredBoosts(client);
+    }, 5000); // Espera 5 segundos para garantir que o cache de canais carregou
+
+    // Verificar a cada 10 minutos (mais eficiente para o servidor)
     setInterval(async () => {
       await checkExpiredPartnerships(client);
       await checkExpiredBoosts(client);
-    }, 5 * 60 * 1000); // 5 minutos
-
-    // Executar verificação inicial
-    await checkExpiredPartnerships(client);
-    await checkExpiredBoosts(client);
+    }, 10 * 60 * 1000);
   }
 };
 
-// Função para verificar parcerias expiradas
 async function checkExpiredPartnerships(client) {
   try {
     const partners = await partnersStore.load();
-    const mainGuildId = process.env.MAIN_GUILD_ID;
-    const mainGuild = client.guilds.cache.get(mainGuildId);
-    
-    if (!mainGuild) return;
-
-    const config = await getGuildConfig(mainGuildId);
-    const partnerChannelId = config.partnerChannelId;
-    
-    if (!partnerChannelId) return;
-
-    const partnerChannel = mainGuild.channels.cache.get(partnerChannelId);
-    if (!partnerChannel) return;
-
     const now = Date.now();
+    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
     let expiredCount = 0;
 
-    for (const [key, partnership] of Object.entries(partners)) {
-      // Verificar se a parceria expirou (30 dias)
-      const partnershipAge = now - new Date(partnership.acceptedAt).getTime();
-      const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
-      
-      if (partnership.status === "accepted" && partnershipAge > thirtyDaysInMs) {
-        // Marcar como expirada
-        await partnersStore.update(key, {
-          ...partnership,
+    for (const [id, data] of Object.entries(partners)) {
+      // Só verificamos parcerias que estão com status 'accepted'
+      if (data.status !== "accepted") continue;
+
+      // Usamos a data de solicitação ou processamento para calcular o tempo
+      const baseDate = data.requestedAt || data.date;
+      if (!baseDate) continue;
+
+      const partnershipAge = now - new Date(baseDate).getTime();
+
+      if (partnershipAge > thirtyDays) {
+        // Atualiza o banco de dados
+        await partnersStore.update(id, (current) => ({
+          ...current,
           status: "expired",
           expiredAt: new Date().toISOString()
-        });
+        }));
 
-        // Enviar notificação
-        const embed = createEmbed({
-          title: "⚠️ Parceria Expirada",
-          description: 
-            `**Servidor:** ${partnership.serverName}\n` +
-            `**ID:** ${partnership.requesterGuild}\n` +
-            `**Expirou em:** ${new Date().toLocaleString('pt-BR')}\n\n` +
-            `Esta parceria expirou após 30 dias. Para renovar, use \`/partnership solicitar\` novamente.`,
-          color: 0xff6600,
-          footer: { text: "WDA - Todos os direitos reservados" },
-          timestamp: new Date()
-        });
-
-        await partnerChannel.send({ embeds: [embed] });
         expiredCount++;
+
+        // Tentativa de enviar log para o canal configurado
+        const guild = client.guilds.cache.first(); // Pega a primeira guilda onde o bot está (ou use process.env.GUILD_ID)
+        if (guild) {
+          const config = await getGuildConfig(guild.id);
+          const logChannelId = config?.partnership?.logChannelId;
+          
+          if (logChannelId) {
+            const logChannel = guild.channels.cache.get(logChannelId);
+            if (logChannel) {
+              const expireEmbed = new EmbedBuilder()
+                .setTitle("📅 Parceria Expirada (30 Dias)")
+                .setColor(0xffa500)
+                .addFields(
+                  { name: "Servidor", value: data.serverName || "Desconhecido", inline: true },
+                  { name: "ID", value: `\`${id}\``, inline: true },
+                  { name: "Representante", value: `<@${data.requesterId}>` }
+                )
+                .setDescription("Esta parceria atingiu o limite de 30 dias e foi marcada como expirada no sistema.")
+                .setTimestamp();
+
+              await logChannel.send({ embeds: [expireEmbed] }).catch(() => null);
+            }
+          }
+        }
       }
     }
 
     if (expiredCount > 0) {
-      console.log(`📅 ${expiredCount} parcerias expiradas e removidas`);
+      console.log(`📅 [CHECKER] ${expiredCount} parcerias marcadas como expiradas.`);
     }
   } catch (error) {
-    console.error("Erro ao verificar parcerias expiradas:", error);
+    console.error("❌ Erro no checker de parcerias:", error);
   }
 }
 
-// Função para verificar boosts expirados
 async function checkExpiredBoosts(client) {
   try {
     const boosts = await boostStore.load();
@@ -91,24 +94,20 @@ async function checkExpiredBoosts(client) {
     let expiredCount = 0;
 
     for (const [key, boost] of Object.entries(boosts)) {
-      // Verificar se o boost expirou
       if (boost.status === "active" && new Date(boost.expiresAt).getTime() <= now) {
-        // Marcar como expirado
-        await boostStore.update(key, {
-          ...boost,
+        await boostStore.update(key, (current) => ({
+          ...current,
           status: "expired",
           expiredAt: new Date().toISOString()
-        });
-
-        console.log(`⏰ Boost expirado: ${boost.guildName}`);
+        }));
         expiredCount++;
       }
     }
 
     if (expiredCount > 0) {
-      console.log(`⏰ ${expiredCount} boosts expirados e removidos`);
+      console.log(`⏰ [CHECKER] ${expiredCount} boosts expirados.`);
     }
   } catch (error) {
-    console.error("Erro ao verificar boosts expirados:", error);
+    console.error("❌ Erro no checker de boosts:", error);
   }
 }
