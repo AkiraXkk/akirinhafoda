@@ -4,7 +4,7 @@ module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction, client) {
     
-    // 1. COMANDOS SLASH (Geral)
+    // 1. COMANDOS SLASH
     if (interaction.isChatInputCommand()) {
       const command = client.commands.get(interaction.commandName);
       if (!command) return;
@@ -16,41 +16,74 @@ module.exports = {
       return;
     }
 
-    // 2. SISTEMA UNIVERSAL (Botões, Menus e Modais)
-    if (interaction.isButton() || interaction.isAnySelectMenu() || interaction.isModalSubmit()) {
+    // 2. SISTEMA DE BOTÕES (Prioridade Direta)
+    if (interaction.isButton()) {
+      const customId = interaction.customId;
+
+      // Atalho para Parcerias
+      if (customId.startsWith("partnership_")) {
+        const cmd = client.commands.get("partnership");
+        if (cmd) return await cmd.handleButton(interaction);
+      }
       
-      // Determina qual função procurar dentro dos arquivos de comando
-      const handlerName = interaction.isButton() ? "handleButton" : 
-                          interaction.isAnySelectMenu() ? "handleSelectMenu" : 
-                          "handleModal";
-
-      // Pega todos os seus comandos carregados
-      const allCommands = client.commands.values();
-
-      for (const command of allCommands) {
-        // Verifica se o comando tem a função necessária (ex: handleButton)
-        if (typeof command[handlerName] === "function") {
-          try {
-            // Tenta executar. Se o comando responder à interação, o loop para.
-            await command[handlerName](interaction);
-
-            // Se o comando respondeu (replied) ou pediu tempo (deferred), missão cumprida.
-            if (interaction.replied || interaction.deferred) {
-              return; 
-            }
-          } catch (error) {
-            // Se o erro for "Unknown Interaction", o tempo expirou (3s), paramos tudo.
-            if (error.code === 10062) return;
-
-            // Caso contrário, apenas ignora e tenta o próximo comando da lista.
-            continue;
-          }
-        }
+      // Atalho para Tickets
+      if (customId.startsWith("open_ticket_") || customId === "close_ticket_btn") {
+        const cmd = client.commands.get("ticket");
+        if (cmd) return await cmd.handleButton(interaction);
       }
 
-      // Se chegou aqui e ninguém respondeu, avisamos (opcional)
-      if (!interaction.replied && !interaction.deferred) {
-        // console.log(`Interação ${interaction.customId} não foi assumida por nenhum comando.`);
+      // Atalho para SejaWDA
+      if (customId.startsWith("sejawda_")) {
+        const cmd = client.commands.get("sejawda");
+        if (cmd) return await cmd.handleButton(interaction);
+      }
+
+      // Fallback: Varredura para outros painéis que você tenha
+      for (const cmd of client.commands.values()) {
+        if (typeof cmd.handleButton === "function") {
+          try {
+            await cmd.handleButton(interaction);
+            if (interaction.replied || interaction.deferred) return;
+          } catch (e) { continue; }
+        }
+      }
+    }
+
+    // 3. MENUS DE SELEÇÃO
+    if (interaction.isAnySelectMenu()) {
+      const customId = interaction.customId;
+
+      if (customId.startsWith("sejawda_")) {
+        const cmd = client.commands.get("sejawda");
+        if (cmd) return await cmd.handleSelectMenu(interaction);
+      }
+
+      for (const cmd of client.commands.values()) {
+        if (typeof cmd.handleSelectMenu === "function") {
+          try {
+            await cmd.handleSelectMenu(interaction);
+            if (interaction.replied || interaction.deferred) return;
+          } catch (e) { continue; }
+        }
+      }
+    }
+
+    // 4. MODAIS
+    if (interaction.isModalSubmit()) {
+      const customId = interaction.customId;
+
+      if (customId.startsWith("partnership_modal_")) {
+        const cmd = client.commands.get("partnership");
+        if (cmd) return await cmd.handleModal(interaction);
+      }
+
+      for (const cmd of client.commands.values()) {
+        if (typeof cmd.handleModal === "function") {
+          try {
+            await cmd.handleModal(interaction);
+            if (interaction.replied || interaction.deferred) return;
+          } catch (e) { continue; }
+        }
       }
     }
   },
