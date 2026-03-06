@@ -1,6 +1,10 @@
 const { Events } = require("discord.js");
 const { logger } = require("../logger");
 const { createVipExpiryManager } = require("../vip/vipExpiryManager");
+const { createDataStore } = require("../store/dataStore");
+
+// Inicializa o store de manutenção para checagem no login
+const maintenanceStore = createDataStore("maintenance.json");
 
 let voiceXpTimer = null;
 
@@ -15,23 +19,34 @@ function stopVoiceXpTimer() {
 module.exports = {
   name: Events.ClientReady,
   once: true,
-  execute(readyClient, client) {
+  async execute(readyClient, client) {
     logger.info({ user: readyClient.user.tag }, "Bot online");
 
-    // --- BLOCO DE PRESENÇA ATUALIZADO ---
+    // --- 1. GESTÃO DE PRESENÇA ---
     const presenceService = client?.services?.presence;
     if (presenceService) {
-      // Aplica o presence fixo salvo
+      // Aplica o status salvo anteriormente
       if (presenceService.applyPresence) {
         presenceService.applyPresence(readyClient).catch(() => {});
       }
-      // Inicia a rotação aleatória (Novo)
+      // Inicia a rotação aleatória de frases, se configurada
       if (presenceService.startRotation) {
         presenceService.startRotation(readyClient);
       }
     }
-    // ------------------------------------
 
+    // --- 2. PERSISTÊNCIA DA MANUTENÇÃO ---
+    // Verifica se o bot "caiu" enquanto estava em manutenção
+    const mConfig = await maintenanceStore.load();
+    if (mConfig["global"]?.enabled) {
+      if (presenceService?.startMaintenanceLoop) {
+        // Retoma o loop de atualização da embed a cada 2 minutos
+        presenceService.startMaintenanceLoop(readyClient, mConfig["global"]);
+        logger.info("🛠️ Modo de manutenção detectado: Retomando loop de atualização.");
+      }
+    }
+
+    // --- 3. GESTÃO DE EXPIRAÇÃO VIP (Original) ---
     if (client?.services?.vipExpiry?.start) {
       client.services.vipExpiry.start({ intervalMs: 5 * 60 * 1000 });
     } else if (client?.services?.vip && client?.services?.vipRole && client?.services?.vipChannel) {
@@ -46,6 +61,7 @@ module.exports = {
       expiry.start({ intervalMs: 5 * 60 * 1000 });
     }
 
+    // --- 4. SISTEMA DE XP POR VOZ (Original) ---
     stopVoiceXpTimer();
     voiceXpTimer = setInterval(async () => {
         const levelsCommand = client.commands.get("rank");
