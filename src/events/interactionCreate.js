@@ -16,48 +16,38 @@ module.exports = {
       return;
     }
 
-    // 2. SISTEMA DE INTERAÇÕES (Botões, Menus e Modais)
+    // 2. ROTEAMENTO DE INTERAÇÕES (Botões, Menus e Modais)
     if (interaction.isButton() || interaction.isAnySelectMenu() || interaction.isModalSubmit()) {
       const customId = interaction.customId;
-      let command = null;
+      let commandName = "";
 
-      // IDENTIFICAÇÃO DIRETA (Garante que o bot não se perca)
+      // Descobre qual comando deve cuidar desta interação pelo prefixo do ID
       if (customId.includes("partnership")) {
-        command = client.commands.get("partnership");
-      } else if (customId.includes("ticket")) {
-        command = client.commands.get("ticket");
+        commandName = "partnership";
+      } else if (customId.includes("ticket") || customId.includes("open_") || customId.includes("close_")) {
+        commandName = "ticket";
       } else if (customId.includes("sejawda")) {
-        command = client.commands.get("sejawda");
+        commandName = "sejawda";
       } else {
-        // Se não for nenhum dos 3, tenta pegar a primeira palavra antes do "_"
-        const commandName = customId.split("_")[0];
-        command = client.commands.get(commandName);
+        // Para os outros 34 comandos, tenta pegar a primeira palavra antes do "_"
+        commandName = customId.split("_")[0];
       }
 
+      const command = client.commands.get(commandName);
+      if (!command) return;
+
+      // Define qual função disparar dentro do arquivo do comando
       const handlerName = interaction.isButton() ? "handleButton" : 
                           interaction.isAnySelectMenu() ? "handleSelectMenu" : 
                           "handleModal";
 
-      // Executa o comando identificado
-      if (command && typeof command[handlerName] === "function") {
+      if (typeof command[handlerName] === "function") {
         try {
-          await command[handlerName](interaction);
-          if (interaction.replied || interaction.deferred) return;
+          return await command[handlerName](interaction);
         } catch (e) {
-          console.error(`Erro no handler ${handlerName} do comando ${command.data.name}:`, e);
-        }
-      }
-
-      // VARREDURA DE SEGURANÇA (Para os outros comandos)
-      for (const cmd of client.commands.values()) {
-        if (typeof cmd[handlerName] === "function") {
-          try {
-            // Pula os que já tentamos acima
-            if (["partnership", "ticket", "sejawda"].includes(cmd.data.name)) continue;
-            
-            await cmd[handlerName](interaction);
-            if (interaction.replied || interaction.deferred) return;
-          } catch (e) { continue; }
+          // Se der erro 10062 (Unknown Interaction), o Discord demorou a responder
+          if (e.code === 10062) return;
+          console.error(`Erro no ${handlerName} do comando ${commandName}:`, e);
         }
       }
     }
