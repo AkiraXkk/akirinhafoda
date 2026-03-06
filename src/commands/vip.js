@@ -35,7 +35,6 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
 
     if (sub === "info") {
-      // 1. CRIAÇÃO AUTOMÁTICA! Assim que ele abre o painel, o bot cria os canais VIP caso não existam.
       await vipChannel.ensureVipChannels(interaction.user.id, { guildId: interaction.guildId });
 
       const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
@@ -94,8 +93,7 @@ module.exports = {
       return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
     }
   },
-
-  async handleSelectMenu(interaction) {
+ async handleSelectMenu(interaction) {
     if (!interaction.inGuild()) return;
     if (!interaction.customId?.startsWith("vip_")) return;
 
@@ -120,7 +118,6 @@ module.exports = {
       const action = interaction.values?.[0];
       if (!action) return interaction.reply({ content: "Seleção inválida.", ephemeral: true });
 
-      // 2. OPÇÃO MANUAL PARA CRIAR OS CANAIS PELO MENU
       if (action === "create_channels") {
         if (!tier.canCall && !tier.chat_privado) {
           return interaction.reply({ content: "❌ Seu tier não possui benefícios de canais personalizados.", ephemeral: true });
@@ -344,4 +341,18 @@ module.exports = {
     }
 
     if (modalType === "call") {
-      if (!tier.canCall) return interaction.reply({ content: "❌ Seu
+      if (!tier.canCall) return interaction.reply({ content: "❌ Seu tier não permite Call Privada.", ephemeral: true });
+      const nome = interaction.fields.getTextInputValue("nome");
+      const res = await vipChannel.updateChannelName(interaction.user.id, nome, { guildId: interaction.guildId });
+      return interaction.reply({ content: res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`, ephemeral: true });
+    }
+
+    if (modalType === "role") {
+      if (!tier.hasCustomRole) return interaction.reply({ content: "❌ Seu tier não permite cargo personalizado.", ephemeral: true });
+      const roleName = (interaction.fields.getTextInputValue("nome") || "").trim() || null;
+      const roleColor = (interaction.fields.getTextInputValue("cor") || "").trim() || null;
+      const res = await vipRole.updatePersonalRole(interaction.user.id, { roleName, roleColor }, { guildId: interaction.guildId });
+      return interaction.reply({ content: res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.", ephemeral: true });
+    }
+  }
+};
