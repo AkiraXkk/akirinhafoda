@@ -52,12 +52,12 @@ module.exports = {
         .setDescription("Aceite uma solicitação de parceria")
         .addStringOption((opt) =>
           opt.setName("id")
-            .setDescription("ID exclusivo da solicitação")
+            .setDescription("ID da solicitação (ex: PARC123)")
             .setRequired(true)
         )
-        .addStringOption((opt) =>
+        .addChannelOption((opt) =>
           opt.setName("canal")
-            .setDescription("ID do canal de parceria")
+            .setDescription("Canal de parceria")
             .setRequired(true)
         )
     )
@@ -69,7 +69,7 @@ module.exports = {
         .setDescription("Recuse uma solicitação de parceria")
         .addStringOption((opt) =>
           opt.setName("id")
-            .setDescription("ID exclusivo da solicitação")
+            .setDescription("ID da solicitação (ex: PARC123)")
             .setRequired(true)
         )
         .addStringOption((opt) =>
@@ -86,7 +86,7 @@ module.exports = {
         .setDescription("Remova uma parceria ativa")
         .addStringOption((opt) =>
           opt.setName("id")
-            .setDescription("ID exclusivo da parceria")
+            .setDescription("ID da parceria (ex: PARC123)")
             .setRequired(true)
         )
     )
@@ -169,8 +169,8 @@ module.exports = {
         });
       }
 
-      // Gerar ID exclusivo
-      const requestId = `PS-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+      // Gerar ID exclusivo simplificado
+      const requestId = `PARC${String(Date.now()).slice(-3)}`;
 
       // Criar solicitação
       await partnersStore.update(requestId, (current) => ({
@@ -236,6 +236,13 @@ module.exports = {
     }
 
     if (sub === "pendentes") {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Apenas administradores podem listar solicitações pendentes!")],
+          ephemeral: true
+        });
+      }
+
       const pendingPartnerships = Object.entries(partners).filter(([key, p]) => p.status === "pending");
       
       if (pendingPartnerships.length === 0) {
@@ -266,6 +273,152 @@ module.exports = {
                  `**Solicitante:** <@${partnership.requesterId}>`,
           inline: false
         });
+      });
+
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "aceitar") {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Apenas administradores podem aceitar parcerias!")],
+          ephemeral: true
+        });
+      }
+
+      const requestId = interaction.options.getString("id").toUpperCase();
+      const channel = interaction.options.getChannel("canal");
+      
+      const partnership = Object.values(partners).find(p => p.id === requestId || p.requestId === requestId);
+      
+      if (!partnership) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Solicitação de parceria não encontrada! Verifique o ID.")],
+          ephemeral: true
+        });
+      }
+
+      if (partnership.status !== "pending") {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Esta solicitação já foi processada!")],
+          ephemeral: true
+        });
+      }
+
+      // Atualizar status
+      await partnersStore.update(requestId, (current) => ({
+        ...current,
+        status: "accepted",
+        acceptedAt: new Date().toISOString(),
+        acceptedBy: userId,
+        partnerChannelId: channel.id
+      }));
+
+      // Enviar confirmação
+      const embed = createSuccessEmbed(
+        `✅ **Parceria Aceita!**\n\n` +
+        `**ID:** \`${requestId}\`\n` +
+        `**Servidor:** ${partnership.serverName}\n` +
+        `**Aceita por:** ${interaction.user.username}\n` +
+        `**Canal de parceria:** ${channel}\n\n` +
+        `A parceria está ativa!`
+      );
+
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "recusar") {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Apenas administradores podem recusar parcerias!")],
+          ephemeral: true
+        });
+      }
+
+      const requestId = interaction.options.getString("id").toUpperCase();
+      const reason = interaction.options.getString("motivo") || "Sem motivo especificado";
+      
+      const partnership = Object.values(partners).find(p => p.id === requestId || p.requestId === requestId);
+      
+      if (!partnership) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Solicitação de parceria não encontrada! Verifique o ID.")],
+          ephemeral: true
+        });
+      }
+
+      if (partnership.status !== "pending") {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Esta solicitação já foi processada!")],
+          ephemeral: true
+        });
+      }
+
+      // Atualizar status
+      await partnersStore.update(requestId, (current) => ({
+        ...current,
+        status: "rejected",
+        rejectedAt: new Date().toISOString(),
+        rejectedBy: userId,
+        rejectionReason: reason
+      }));
+
+      // Enviar confirmação
+      const embed = createEmbed({
+        title: "❌ Parceria Recusada",
+        description: `**ID:** \`${requestId}\`\n\n` +
+        `**Servidor:** ${partnership.serverName}\n` +
+        `**Recusada por:** ${interaction.user.username}\n` +
+        `**Motivo:** ${reason}`,
+        color: 0xff0000,
+        footer: { text: "WDA - Todos os direitos reservados" }
+      });
+
+      return interaction.reply({ embeds: [embed] });
+    }
+
+    if (sub === "remover") {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Apenas administradores podem remover parcerias!")],
+          ephemeral: true
+        });
+      }
+
+      const requestId = interaction.options.getString("id").toUpperCase();
+      
+      const partnership = Object.values(partners).find(p => p.id === requestId || p.requestId === requestId);
+      
+      if (!partnership) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Parceria não encontrada! Verifique o ID.")],
+          ephemeral: true
+        });
+      }
+
+      if (partnership.status !== "accepted") {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Apenas parcerias ativas podem ser removidas!")],
+          ephemeral: true
+        });
+      }
+
+      // Atualizar status
+      await partnersStore.update(requestId, (current) => ({
+        ...current,
+        status: "removed",
+        removedAt: new Date().toISOString(),
+        removedBy: userId
+      }));
+
+      // Enviar confirmação
+      const embed = createEmbed({
+        title: "🚫 Parceria Removida",
+        description: `**ID:** \`${requestId}\`\n\n` +
+        `**Servidor:** ${partnership.serverName}\n` +
+        `**Removida por:** ${interaction.user.username}`,
+        color: 0xff6600,
+        footer: { text: "WDA - Todos os direitos reservados" }
       });
 
       return interaction.reply({ embeds: [embed] });
