@@ -1,7 +1,4 @@
-const { 
-  SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, 
-  ButtonStyle, EmbedBuilder 
-} = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require("discord.js");
 const { createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
 const { getGuildConfig } = require("../config/guildConfig");
@@ -12,30 +9,30 @@ const staffStatsStore = createDataStore("staff_stats.json");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("partnership")
-    .setDescription("Sistema de parcerias para membros")
+    .setDescription("sistema de parcerias para membros")
     .addSubcommand(sub =>
       sub.setName("solicitar")
-        .setDescription("Solicite uma parceria (Mínimo 350 membros)")
-        .addStringOption(o => o.setName("servidor").setDescription("Nome do seu servidor").setRequired(true))
-        .addStringOption(o => o.setName("convite").setDescription("Link de convite").setRequired(true))
-        .addStringOption(o => o.setName("descricao").setDescription("Descrição do servidor").setRequired(true))
-        .addIntegerOption(o => o.setName("membros").setDescription("Número de membros").setRequired(true).setMinValue(350))
-        .addStringOption(o => o.setName("banner").setDescription("Link da imagem/banner (opcional)"))
+        .setDescription("solicite uma parceria (minimo 350 membros)")
+        .addStringOption(o => o.setName("servidor").setDescription("nome do seu servidor").setRequired(true))
+        .addStringOption(o => o.setName("convite").setDescription("link de convite").setRequired(true))
+        .addStringOption(o => o.setName("descricao").setDescription("descricao do servidor").setRequired(true))
+        .addIntegerOption(o => o.setName("membros").setDescription("numero de membros").setRequired(true).setMinValue(350))
+        .addStringOption(o => o.setName("banner").setDescription("link da imagem opcional"))
     )
     .addSubcommand(sub =>
       sub.setName("listar")
-        .setDescription("Lista todas as parcerias ativas")
+        .setDescription("lista todas as parcerias ativas")
     ),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const { guildId, user, guild } = interaction;
     const guildConfig = await getGuildConfig(guildId) || {};
-    const pConfig = guildConfig.partnership || { enabledForAll: false };
+    const pConfig = guildConfig.partnership || { enabledForAll: false, staffRoles: [] };
 
     if (sub === "solicitar") {
-      if (!pConfig.enabledForAll) return interaction.reply({ embeds: [createErrorEmbed("O sistema está desativado no momento.")], ephemeral: true });
-      if (!pConfig.logChannelId) return interaction.reply({ embeds: [createErrorEmbed("Configuração pendente pela Staff.")], ephemeral: true });
+      if (!pConfig.enabledForAll) return interaction.reply({ embeds: [createErrorEmbed("O sistema de parcerias está desativado no momento.")], ephemeral: true });
+      if (!pConfig.logChannelId) return interaction.reply({ embeds: [createErrorEmbed("O canal de logs não foi configurado pela staff.")], ephemeral: true });
 
       const data = {
         id: `PARC${Math.floor(Math.random() * 90000) + 10000}`,
@@ -58,65 +55,103 @@ module.exports = {
       );
 
       const embed = new EmbedBuilder()
-        .setTitle("📩 Nova Solicitação")
+        .setTitle("Nova Solicitação de Parceria")
         .setColor(0xFFFF00)
         .addFields(
-            { name: "ID", value: `\`${data.id}\``, inline: true },
+            { name: "ID", value: data.id, inline: true },
             { name: "Servidor", value: data.serverName, inline: true },
             { name: "Membros", value: `${data.memberCount}`, inline: true }
         )
-        .setDescription(`**Descrição:**\n${data.description}`);
+        .setDescription(data.description);
 
-      if (data.banner) embed.setImage(data.banner);
-      await logChan.send({ content: pConfig.staffRoles?.map(id => `<@&${id}>`).join(" ") || "Staff", embeds: [embed], components: [row] });
-      return interaction.reply({ embeds: [createSuccessEmbed("Solicitação enviada com sucesso!")], ephemeral: true });
+      if (data.banner && data.banner.startsWith("http")) embed.setImage(data.banner);
+      
+      const mention = Array.isArray(pConfig.staffRoles) && pConfig.staffRoles.length > 0 
+        ? pConfig.staffRoles.map(id => `<@&${id}>`).join(" ") 
+        : "Staff";
+        
+      if (logChan) {
+        await logChan.send({ content: mention, embeds: [embed], components: [row] });
+      } else {
+        return interaction.reply({ embeds: [createErrorEmbed("Canal de logs não encontrado no servidor.")], ephemeral: true });
+      }
+      
+      return interaction.reply({ embeds: [createSuccessEmbed("Sua solicitação foi enviada para análise da staff.")], ephemeral: true });
     }
 
     if (sub === "listar") {
       const partners = await partnersStore.load();
       const active = Object.values(partners).filter(p => p.status === "accepted");
-      if (active.length === 0) return interaction.reply({ content: "Nenhuma parceria ativa.", ephemeral: true });
-      return interaction.reply({ content: `**Parcerias Ativas:**\n${active.map(p => `\`${p.id}\` - ${p.serverName}`).join("\n")}`, ephemeral: true });
+      if (active.length === 0) return interaction.reply({ content: "Não há parcerias ativas no momento.", ephemeral: true });
+      
+      const list = active.map(p => `${p.id} - ${p.serverName}`).join("\n");
+      return interaction.reply({ content: `Parcerias ativas:\n\n${list}`, ephemeral: true });
     }
   },
 
   async handleButton(interaction) {
-    const [command, action, id] = interaction.customId.split("_");
-    if (command !== "partnership") return;
+    const parts = interaction.customId.split("_");
+    const action = parts[1];
+    const id = parts[2];
 
     const partners = await partnersStore.load();
     const data = partners[id];
     const guildConfig = await getGuildConfig(interaction.guildId);
-    const pConfig = guildConfig.partnership || {};
+    const pConfig = guildConfig?.partnership || {};
 
-    if (!data || data.status !== "pending") return interaction.reply({ content: "Já processado.", ephemeral: true });
+    if (!data || data.status !== "pending") {
+      return interaction.reply({ content: "Esta solicitação já foi processada ou não existe.", ephemeral: true });
+    }
 
     if (action === "reject") {
         await partnersStore.update(id, c => ({ ...c, status: "rejected", processedBy: interaction.user.id }));
-        return interaction.update({ content: `❌ Recusada por: <@${interaction.user.id}>`, components: [], embeds: [interaction.message.embeds[0].setColor(0xFF0000)] });
+        
+        const originalEmbed = EmbedBuilder.from(interaction.message.embeds[0]).setColor(0xFF0000);
+        return interaction.update({ content: `Recusada por: <@${interaction.user.id}>`, components: [], embeds: [originalEmbed] });
     }
 
     if (action === "approve") {
-      await interaction.reply({ content: "Mencione o canal de postagem:", ephemeral: true });
-      const collector = interaction.channel.createMessageCollector({ filter: m => m.author.id === interaction.user.id, max: 1, time: 20000 });
+      await interaction.reply({ content: "Mencione o canal onde a parceria será postada. Você tem 30 segundos.", ephemeral: true });
+      
+      const filter = m => m.author.id === interaction.user.id && m.mentions.channels.size > 0;
+      const collector = interaction.channel.createMessageCollector({ filter, max: 1, time: 30000 });
 
       collector.on('collect', async m => {
         const targetChan = m.mentions.channels.first();
-        if (!targetChan) return;
+        
+        let rankRole = null;
+        if (pConfig.ranks) {
+          if (data.memberCount >= 1000) rankRole = pConfig.ranks.ouro;
+          else if (data.memberCount >= 750) rankRole = pConfig.ranks.prata;
+          else if (data.memberCount >= 350) rankRole = pConfig.ranks.bronze;
+        }
 
-        let rId = data.memberCount >= 1000 ? pConfig.ranks?.ouro : (data.memberCount >= 750 ? pConfig.ranks?.prata : pConfig.ranks?.bronze);
         const memberReq = await interaction.guild.members.fetch(data.requesterId).catch(() => null);
-        if (memberReq && rId) await memberReq.roles.add(rId).catch(() => null);
+        if (memberReq && rankRole) {
+          await memberReq.roles.add(rankRole).catch(console.error);
+        }
         
         await partnersStore.update(id, c => ({ ...c, status: "accepted", processedBy: interaction.user.id, acceptedAt: new Date().toISOString() }));
         await staffStatsStore.update(interaction.user.id, c => ({ ...c, approved: (c?.approved || 0) + 1 }));
 
-        const postEmbed = new EmbedBuilder().setColor(0x00FF00).setDescription(data.description);
-        if (data.banner) postEmbed.setImage(data.banner);
+        const postEmbed = new EmbedBuilder()
+          .setColor(0x00FF00)
+          .setDescription(data.description);
+          
+        if (data.banner && data.banner.startsWith("http")) postEmbed.setImage(data.banner);
 
-        await targetChan.send({ content: `✅ **Parceria:** ${data.serverName}\n🔗 **Link:** ${data.inviteLink}`, embeds: [postEmbed] });
-        await interaction.message.edit({ content: `✅ Aprovada por: <@${interaction.user.id}>`, components: [] });
+        await targetChan.send({ content: `Parceria: ${data.serverName}\nConvite: ${data.inviteLink}`, embeds: [postEmbed] });
+        
+        const originalEmbed = EmbedBuilder.from(interaction.message.embeds[0]).setColor(0x00FF00);
+        await interaction.message.edit({ content: `Aprovada por: <@${interaction.user.id}>`, components: [], embeds: [originalEmbed] });
+        
         m.delete().catch(() => null);
+      });
+      
+      collector.on('end', collected => {
+        if (collected.size === 0) {
+          interaction.followUp({ content: "Tempo esgotado. Nenhuma ação foi concluída.", ephemeral: true }).catch(() => null);
+        }
       });
     }
   }
