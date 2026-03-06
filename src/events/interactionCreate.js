@@ -3,7 +3,7 @@ const { Events } = require("discord.js");
 module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction, client) {
-    
+
     // 1. COMANDOS SLASH
     if (interaction.isChatInputCommand()) {
       const command = client.commands.get(interaction.commandName);
@@ -23,7 +23,8 @@ module.exports = {
 
       // Descobre qual comando deve cuidar desta interação pelo prefixo do ID
       if (customId.includes("partnership")) {
-        commandName = "partnership";
+        // CORREÇÃO: Aponta para 'partnerconfig' que é o nome real do comando no builder
+        commandName = "partnerconfig"; 
       } else if (customId.includes("ticket") || customId.includes("open_") || customId.includes("close_")) {
         commandName = "ticket";
       } else if (customId.includes("sejawda")) {
@@ -34,7 +35,10 @@ module.exports = {
       }
 
       const command = client.commands.get(commandName);
-      if (!command) return;
+      if (!command) {
+        console.log(`[InteractionCreate] Comando não encontrado para a interação: ${customId}`);
+        return;
+      }
 
       // Define qual função disparar dentro do arquivo do comando
       const handlerName = interaction.isButton() ? "handleButton" : 
@@ -45,10 +49,12 @@ module.exports = {
         try {
           return await command[handlerName](interaction);
         } catch (e) {
-          // Se der erro 10062 (Unknown Interaction), o Discord demorou a responder
+          // Se der erro 10062 (Unknown Interaction), o Discord demorou a responder, ignoramos o crash
           if (e.code === 10062) return;
           console.error(`Erro no ${handlerName} do comando ${commandName}:`, e);
         }
+      } else {
+        console.log(`[InteractionCreate] A função ${handlerName} não existe no arquivo do comando ${commandName}.`);
       }
     }
   },
