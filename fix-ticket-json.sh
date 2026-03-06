@@ -1,0 +1,101 @@
+#!/bin/bash
+
+echo "🔧 CORRIGINDO ticketCategories.json NO SERVIDOR"
+echo "=============================================="
+
+# Fazer backup do arquivo corrompido
+echo "📥 Fazendo backup do arquivo atual..."
+cp src/data/ticketCategories.json src/data/ticketCategories.json.backup
+
+# Criar arquivo JSON válido
+echo "📝 Criando arquivo JSON corrigido..."
+cat > src/data/ticketCategories.json << 'EOF'
+{
+  "categories": {
+    "suporte": {
+      "id": null,
+      "name": "suporte",
+      "prefix": "suporte",
+      "title": "🎫 Central de Suporte",
+      "description": "Clique no botão abaixo para abrir um ticket de suporte.\nNossa equipe irá atendê-lo em breve.",
+      "color": 5236395,
+      "footer": "Suporte Técnico e Geral • WDA - Todos os direitos reservados",
+      "buttonLabel": "Abrir Ticket de Suporte",
+      "buttonEmoji": "🎫",
+      "staffRoleId": null,
+      "logChannelId": null,
+      "notificationMessage": "🆕 Novo ticket de suporte criado!"
+    },
+    "parceria": {
+      "id": null,
+      "name": "parceria",
+      "prefix": "parceria",
+      "title": "🤝 Central de Parcerias",
+      "description": "Solicite uma parceria com nosso servidor.\nPreencha as informações necessárias abaixo.",
+      "color": 10181038,
+      "footer": "Parcerias e Colaborações • WDA - Todos os direitos reservados",
+      "buttonLabel": "Solicitar Parceria",
+      "buttonEmoji": "🤝",
+      "staffRoleId": null,
+      "logChannelId": null,
+      "notificationMessage": "🆕 Nova solicitação de parceria recebida!"
+    },
+    "denuncia": {
+      "id": null,
+      "name": "denuncia",
+      "prefix": "denuncia",
+      "title": "⚖️ Central de Denúncias",
+      "description": "Reporte comportamentos inadequados ou infrações às regras.\nSua denúncia será analisada pela equipe.",
+      "color": 15158332,
+      "footer": "Denúncias e Reportes • WDA - Todos os direitos reservados",
+      "buttonLabel": "Fazer Denúncia",
+      "buttonEmoji": "⚖️",
+      "staffRoleId": null,
+      "logChannelId": null,
+      "notificationMessage": "🆕 Nova denúncia registrada!"
+    },
+    "sugestao": {
+      "id": null,
+      "name": "sugestao",
+      "prefix": "sugestao",
+      "title": "💡 Central de Sugestões",
+      "description": "Compartilhe suas ideias para melhorar nosso servidor.\nAvaliamos todas as sugestões com atenção.",
+      "color": 4617405,
+      "footer": "Sugestões e Feedback • WDA - Todos os direitos reservados",
+      "buttonLabel": "Enviar Sugestão",
+      "buttonEmoji": "💡",
+      "staffRoleId": null,
+      "logChannelId": null,
+      "notificationMessage": "🆕 Nova sugestão recebida!"
+    }
+  },
+  "channels": {
+    "suporte_channel_id": "suporte",
+    "parceria_channel_id": "parceria",
+    "denuncia_channel_id": "denuncia",
+    "sugestao_channel_id": "sugestao"
+  },
+  "staffRoles": {
+    "allowed": ["1476742742704132217", "722558573472776212", "749523027787645000"],
+    "priority": ["722558573472776212", "749523027787645000"]
+  },
+  "settings": {
+    "maxTicketsPerUser": 1,
+    "autoCloseAfterInactivity": 72,
+    "enableNotifications": true,
+    "enableMentions": true
+  }
+}
+EOF
+
+# Verificar se o JSON é válido
+echo "🔍 Verificando JSON..."
+node -e "try { JSON.parse(require('fs').readFileSync('src/data/ticketCategories.json', 'utf8')); console.log('✅ JSON válido!'); } catch(e) { console.log('❌ JSON inválido:', e.message); }"
+
+# Reiniciar bot
+echo "🔄 Reiniciando bot..."
+pm2 restart all
+
+echo "✅ ticketCategories.json corrigido!"
+echo ""
+echo "🎫 Sistema de tickets agora funcional!"
