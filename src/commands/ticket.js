@@ -115,7 +115,7 @@ module.exports = {
           .setCustomId(`open_ticket_${tipo}`)
           .setLabel(categoryConfig.buttonLabel)
           .setStyle(ButtonStyle.Primary)
-          .setEmoji(categoryConfig.buttonEmoji)
+          .setEmoji(categoryConfig.buttonEmoji || "🎫")
       );
 
       await interaction.channel.send({ embeds: [embed], components: [row] });

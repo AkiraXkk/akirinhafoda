@@ -113,7 +113,7 @@ module.exports = {
 
       // Criar solicitação
       const requestId = `${guildId}_${Date.now()}`;
-      await partnersStore.update(requestId, {
+      await partnersStore.update(requestId, (current) => ({
         requesterId: userId,
         requesterGuild: guildId,
         serverName,
@@ -122,7 +122,7 @@ module.exports = {
         memberCount,
         status: "pending",
         requestedAt: new Date().toISOString()
-      });
+      }));
 
       const embed = createSuccessEmbed(
         `🤝 **Solicitação de Parceria Enviada!**\n\n` +
