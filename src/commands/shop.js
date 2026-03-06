@@ -2,8 +2,7 @@ const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSe
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
 function parseCustomId(customId) {
-  const parts = String(customId || "").split("_");
-  return parts;
+  return String(customId || "").split("_");
 }
 
 async function buildCatalogItems(shopService, guildId) {
@@ -14,7 +13,7 @@ async function buildCatalogItems(shopService, guildId) {
 
 function formatCatalogLine(item) {
   const durationText = item.durationDays && item.durationDays > 0 ? `${item.durationDays}d` : "permanente";
-  return `• **${item.id}** (${item.type}) - **${item.priceCoins} 🪙** - ${durationText}`;
+  return `• **${item.name || item.id}** (${item.type}) - **${item.priceCoins} 🪙** - ${durationText}`;
 }
 
 async function renderCatalogPage({ interaction, shopService, guildId, page = 0 }) {
@@ -30,15 +29,14 @@ async function renderCatalogPage({ interaction, shopService, guildId, page = 0 }
 
   const embed = createEmbed({
     title: "🛒 Catálogo da Loja",
-    description: slice.slice(0, 10).map(formatCatalogLine).join("\n"),
+    description: slice.slice(0, 15).map(formatCatalogLine).join("\n"),
     color: 0x9b59b6,
-    footer: { text: `Página ${safePage + 1}/${totalPages} • WDA - Todos os direitos reservados` },
-    user: interaction.user,
+    footer: { text: `Página ${safePage + 1}/${totalPages} • Use /shop buy item:catalog id:<ID>` }
   });
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`shop_catalog_select_${guildId}_${safePage}`)
-    .setPlaceholder("Selecione um item para comprar")
+    .setPlaceholder("Selecione um item para ver as opções")
     .addOptions(
       slice.map((i) =>
         new StringSelectMenuOptionBuilder()
@@ -96,20 +94,10 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    const economyService = interaction.client.services.economy;
-    const vipService = interaction.client.services.vip;
-    const vipConfig = interaction.client.services.vipConfig;
-    const shopService = interaction.client.services.shop;
+    const { economy: economyService, shop: shopService, vipConfig } = interaction.client.services;
     const guildId = interaction.guildId;
     const userId = interaction.user.id;
     const sub = interaction.options.getSubcommand();
-
-    function getTierFixedPrice(tier) {
-      if (!tier) return 0;
-      if (Number.isFinite(tier.shop_fixed_price) && tier.shop_fixed_price > 0) return tier.shop_fixed_price;
-      if (Number.isFinite(tier.preco_shop) && tier.preco_shop > 0) return tier.preco_shop;
-      return 0;
-    }
 
     if (sub === "vip") {
       const tiers = await vipConfig.getGuildTiers(guildId);
@@ -120,39 +108,20 @@ module.exports = {
       const tierEntries = [];
       for (const tierId of Object.keys(tiers)) {
         const tier = await vipConfig.getTierConfig(guildId, tierId);
-        if (!tier) continue;
-        if (tier.shop_enabled === false) continue;
-        const fixedPrice = getTierFixedPrice(tier);
-        const hasPerDay = Number.isFinite(tier.shop_price_per_day) && tier.shop_price_per_day > 0;
-        if ((!fixedPrice || fixedPrice <= 0) && !hasPerDay) continue;
-        tierEntries.push(tier);
+        if (tier && tier.shop_enabled !== false) tierEntries.push(tier);
       }
 
       if (tierEntries.length === 0) {
-        return interaction.reply({ embeds: [createErrorEmbed("Nenhum Tier à venda. Use /vipadmin tier para configurar.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Nenhum VIP configurado na loja.")], ephemeral: true });
       }
-
-      tierEntries.sort((a, b) => (getTierFixedPrice(a) || 0) - (getTierFixedPrice(b) || 0));
-
-      const fields = tierEntries.map((t) => ({
-        name: `💎 ${t.name || t.id}`,
-        value: [
-          `Preço: **${getTierFixedPrice(t) || "N/A"} 🪙**`,
-          `Daily Extra: **+${t.valor_daily_extra || 0} 🪙**`,
-          `Bônus Inicial: **+${t.bonus_inicial || 0} 🪙**`,
-          `Limites: Família **${t.limite_familia ?? t.maxFamilyMembers ?? 0}** | Damas **${t.limite_damas ?? t.maxDamas ?? 1}**`,
-          `Presentear: ${t.pode_presentear ? "✅" : "❌"}`,
-          `Comprar por dia: ${(Number.isFinite(t.shop_price_per_day) && t.shop_price_per_day > 0) ? `✅ (${t.shop_price_per_day} 🪙/dia)` : "❌"}`,
-        ].join("\n"),
-      }));
 
       const menu = new StringSelectMenuBuilder()
         .setCustomId(`shop_vip_buy_${guildId}`)
         .setPlaceholder("Selecione um VIP para comprar")
-        .addOptions(tierEntries.slice(0, 25).map((t) => new StringSelectMenuOptionBuilder().setLabel((t.name || t.id).substring(0, 80)).setValue(t.id)));
+        .addOptions(tierEntries.slice(0, 25).map((t) => new StringSelectMenuOptionBuilder().setLabel(t.name || t.id).setValue(t.id)));
 
       return interaction.reply({
-        embeds: [createEmbed({ title: "💎 Planos VIP Disponíveis", description: "Selecione no menu abaixo para comprar.", fields, color: 0x9b59b6 })],
+        embeds: [createEmbed({ title: "💎 Planos VIP", description: "Selecione no menu abaixo.", color: 0x9b59b6 })],
         components: [new ActionRowBuilder().addComponents(menu)],
         ephemeral: true,
       });
@@ -170,34 +139,22 @@ module.exports = {
       const catalogId = interaction.options.getString("id");
 
       if (item === "catalog") {
-        if (!shopService) return interaction.reply({ embeds: [createErrorEmbed("Serviço de loja indisponível.")], ephemeral: true });
-
-        if (!catalogId) {
-          const items = (await shopService.listItems(guildId)).filter((i) => i.enabled !== false);
-          if (!items.length) return interaction.reply({ embeds: [createErrorEmbed("Catálogo vazio.")], ephemeral: true });
-          const lines = items.slice(0, 15).map((i) => `• **${i.id}** (${i.type}) - **${i.priceCoins} 🪙**`).join("\n");
-          return interaction.reply({ embeds: [createEmbed({ title: "🛒 Catálogo", description: `Use \`/shop buy item:catalog id:<id> quantity:1\`\n\n${lines}`, color: 0x9b59b6 })], ephemeral: true });
-        }
+        if (!catalogId) return interaction.reply({ embeds: [createErrorEmbed("Você precisa informar o `id` do item do catálogo.")], ephemeral: true });
 
         const catalogItem = await shopService.getItem(guildId, catalogId);
-        if (!catalogItem || catalogItem.enabled === false) return interaction.reply({ embeds: [createErrorEmbed("Item do catálogo não encontrado ou desativado.")], ephemeral: true });
+        if (!catalogItem || catalogItem.enabled === false) return interaction.reply({ embeds: [createErrorEmbed("Item não encontrado ou desativado.")], ephemeral: true });
 
-        const unitPrice = Number(catalogItem.priceCoins || 0);
-        const total = unitPrice * quantity;
+        const total = catalogItem.priceCoins * quantity;
         const balance = await economyService.getBalance(guildId, userId);
         
-        if ((balance.coins || 0) < total) return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente. Você precisa de **${total} 🪙** e tem **${balance.coins || 0} 🪙**.`)], ephemeral: true });
+        if ((balance.coins || 0) < total) {
+            return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Você precisa de **${total} 🪙** e tem **${balance.coins || 0} 🪙**.`)], ephemeral: true });
+        }
 
-        const ok = await economyService.removeCoins(guildId, userId, total);
-        if (!ok) return interaction.reply({ embeds: [createErrorEmbed("Falha ao cobrar moedas.")], ephemeral: true });
-
+        await economyService.removeCoins(guildId, userId, total);
         await shopService.deposit(guildId, total, { by: userId, source: "shop", itemId: catalogItem.id, qty: quantity });
 
-        const member = interaction.member;
-        const durationDays = Number(catalogItem.durationDays || 0);
-        const expiresAt = durationDays > 0 ? Date.now() + (durationDays * 24 * 60 * 60 * 1000) : null;
-
-        // ---- INTEGRAÇÃO DOS CARDS (ADICIONADA) ----
+        // INTEGRAÇÃO DOS CARDS
         if (catalogItem.type === "card") {
             const { createDataStore } = require("../store/dataStore");
             const userCardsStore = createDataStore("userCards.json");
@@ -209,7 +166,11 @@ module.exports = {
             return interaction.reply({ embeds: [createSuccessEmbed(`Você comprou o card **${catalogItem.name || catalogItem.id}** por **${total} 🪙**! Equipe usando \`/rank cards\`.`)], ephemeral: true });
         }
 
-        // ---- LÓGICA ORIGINAL RESTAURADA ----
+        // CARGOS TEMPORÁRIOS E CANAIS
+        const member = interaction.member;
+        const durationDays = Number(catalogItem.durationDays || 0);
+        const expiresAt = durationDays > 0 ? Date.now() + (durationDays * 24 * 60 * 60 * 1000) : null;
+
         if (catalogItem.type === "temporary_role") {
           if (!catalogItem.roleId) return interaction.reply({ embeds: [createErrorEmbed("Item inválido (roleId ausente).")], ephemeral: true });
           await member.roles.add(catalogItem.roleId).catch(() => {});
@@ -231,12 +192,12 @@ module.exports = {
           return interaction.reply({ embeds: [createSuccessEmbed(`Acesso ao canal concedido pelo item **${catalogItem.id}** por **${total} 🪙**.` )], ephemeral: true });
         }
 
-        return interaction.reply({ embeds: [createErrorEmbed("Tipo de item ainda não suportado.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Tipo de item ainda não suportado no shop core.")], ephemeral: true });
       }
 
       if (item === "vip_days") {
         const tiers = await vipConfig.getGuildTiers(guildId);
-        if (!tiers || Object.keys(tiers).length === 0) return interaction.reply({ embeds: [createErrorEmbed("Não há planos VIP.")], ephemeral: true });
+        if (!tiers || Object.keys(tiers).length === 0) return interaction.reply({ embeds: [createErrorEmbed("Não há planos VIP disponíveis neste servidor.")], ephemeral: true });
 
         const tierEntries = [];
         for (const tierId of Object.keys(tiers)) {
@@ -277,12 +238,11 @@ module.exports = {
       return interaction.reply({ embeds: [createErrorEmbed("Item não encontrado.")], ephemeral: true });
     }
   },
-
   async handleSelectMenu(interaction) {
-    if (!(interaction.customId.startsWith("shop_vip_buy_") || interaction.customId.startsWith("shop_vip_days_") || interaction.customId.startsWith("shop_catalog_select_"))) return;
+    if (!interaction.customId.startsWith("shop_")) return;
     if (!interaction.inGuild()) return interaction.reply({ embeds: [createErrorEmbed("Use este menu em um servidor.")], ephemeral: true });
 
-    // ---- LÓGICA DO MODAL RESTAURADA ----
+    // LÓGICA DO MODAL (CATÁLOGO)
     if (interaction.customId.startsWith("shop_catalog_select_")) {
       const parts = parseCustomId(interaction.customId);
       const guildIdFromId = parts[3];
@@ -296,7 +256,7 @@ module.exports = {
 
       const modal = new ModalBuilder()
         .setCustomId(`shop_catalog_buy_${interaction.guildId}_${item.id}`)
-        .setTitle(`Comprar: ${item.id}`);
+        .setTitle(`Comprar: ${item.id.substring(0, 30)}`);
 
       const qtyInput = new TextInputBuilder()
         .setCustomId("quantity")
@@ -309,27 +269,55 @@ module.exports = {
       return interaction.showModal(modal);
     }
 
-    const guildId = interaction.guildId;
-    const tierId = interaction.values?.[0];
-    if (!tierId) return interaction.reply({ embeds: [createErrorEmbed("Seleção inválida.")], ephemeral: true });
-
-    // ---- COMPRA VIP POR DIAS RESTAURADA ----
+    // COMPRA DE VIP POR DIAS COM MATEMÁTICA CORRIGIDA E ENTREGA DE CARGO
     if (interaction.customId.startsWith("shop_vip_days_")) {
       const parts = parseCustomId(interaction.customId);
-      const quantity = Number(parts[3]);
-      const { economy: eco, vipConfig } = interaction.client.services;
+      
+      // O array 'parts' contém: ["shop", "vip", "days", "GUILD_ID", "QUANTIDADE"]
+      const guildId = parts[3];
+      const quantity = Number(parts[4]); // <-- Pegando a quantidade de dias certa
+      const tierId = interaction.values[0];
+      
+      const { economy: eco, vipConfig, vip: vipService } = interaction.client.services;
       
       const tier = await vipConfig.getTierConfig(guildId, tierId);
       const totalCost = tier.shop_price_per_day * quantity;
       
       const balance = await eco.getBalance(guildId, interaction.user.id);
-      if (balance.coins < totalCost) return interaction.reply({ embeds: [createErrorEmbed(`Precisa de ${totalCost} 🪙.`)], ephemeral: true });
       
+      // Checa saldo
+      if ((balance.coins || 0) < totalCost) {
+          return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Você precisa de **${totalCost} 🪙** mas tem apenas **${balance.coins || 0} 🪙**.`)], ephemeral: true });
+      }
+      
+      // Desconta as moedas
       await eco.removeCoins(guildId, interaction.user.id, totalCost);
-      // Aqui a confirmação de que comprou. 
-      return interaction.reply({ embeds: [createSuccessEmbed(`VIP **${tier.name || tier.id}** comprado por ${quantity} dias com sucesso!`)], ephemeral: true });
+      
+      // Entrega o VIP (Calcula a expiração em milissegundos)
+      const diasMs = quantity * 24 * 60 * 60 * 1000;
+      const currentData = await vipService.getVipData(guildId, interaction.user.id);
+      let newExpires = Date.now() + diasMs;
+
+      // Acumula os dias se ele já for VIP desse tier
+      if (currentData && currentData.tierId === tierId && currentData.expiresAt > Date.now()) {
+          newExpires = currentData.expiresAt + diasMs;
+      }
+
+      await vipService.addVip(guildId, interaction.user.id, {
+          tierId: tierId,
+          expiresAt: newExpires,
+          addedBy: "Loja VIP"
+      });
+
+      // Entrega o Cargo no Servidor
+      if (tier.roleId) {
+          const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+          if (member) await member.roles.add(tier.roleId).catch(() => {});
+      }
+
+      return interaction.reply({ embeds: [createSuccessEmbed(`🎉 VIP **${tier.name || tier.id}** comprado por **${quantity} dia(s)** com sucesso!\n\n💸 Foram debitadas **${totalCost} 🪙** e seus benefícios já estão ativos.`)], ephemeral: true });
     }
 
-    return interaction.reply({ content: "Opção processada.", ephemeral: true });
+    return interaction.reply({ content: "Menu registrado.", ephemeral: true });
   }
 };
