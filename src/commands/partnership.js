@@ -103,6 +103,18 @@ module.exports = {
         )
     )
     
+    // Recusar todas (Admin)
+    .addSubcommand((sub) =>
+      sub
+        .setName("recusar_todas")
+        .setDescription("Recuse todas as solicitações pendentes")
+        .addStringOption((opt) =>
+          opt.setName("motivo")
+            .setDescription("Motivo da recusa em massa")
+            .setRequired(false)
+        )
+    )
+    
     // Listar pendentes (Admin)
     .addSubcommand((sub) =>
       sub
@@ -374,6 +386,49 @@ module.exports = {
         )],
         ephemeral: true
       });
+    }
+
+    if (sub === "recusar_todas") {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Apenas administradores podem recusar parcerias em massa!")],
+          ephemeral: true
+        });
+      }
+
+      const reason = interaction.options.getString("motivo") || "Limite de parcerias atingido";
+      const pendingPartnerships = Object.entries(partners).filter(([key, p]) => p.status === "pending");
+      
+      if (pendingPartnerships.length === 0) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Não há solicitações pendentes para recusar!")],
+          ephemeral: true
+        });
+      }
+
+      // Confirmar ação
+      const confirmEmbed = createEmbed({
+        title: "⚠️ Confirmar Recusa em Massa",
+        description: `Você está prestes a recusar **${pendingPartnerships.length}** solicitação(ões) de parceria.\n\n` +
+        `**Motivo:** ${reason}\n\n` +
+        `Esta ação não pode ser desfeita!`,
+        color: 0xff6600,
+        footer: { text: "WDA - Todos os direitos reservados" }
+      });
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`confirm_reject_all_${userId}`)
+          .setLabel("Confirmar Recusa")
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`cancel_reject_all_${userId}`)
+          .setLabel("Cancelar")
+          .setStyle(ButtonStyle.Secondary)
+      );
+
+      await interaction.reply({ embeds: [confirmEmbed], components: [row], ephemeral: true });
+      return;
     }
 
     if (sub === "recusar") {
