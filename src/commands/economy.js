@@ -1,6 +1,9 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
+// Map local para controlar o tempo de espera do /work
+const workCooldowns = new Map();
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("economy")
@@ -31,36 +34,88 @@ module.exports = {
         return interaction.reply({ embeds: [createEmbed({ title: `💰 Carteira de ${target.username}`, description: `🪙 Moedas: **${bal.coins || 0}**\n🏦 Banco: **${bal.bank || 0}**`, color: 0xF1C40F })] });
     }
 
+    if (sub === "work") {
+        const cooldownTime = 3600000; // 1 hora em milissegundos
+        const lastWork = workCooldowns.get(userId) || 0;
+        const now = Date.now();
+
+        if (now - lastWork < cooldownTime) {
+            const nextTime = Math.floor((lastWork + cooldownTime) / 1000);
+            return interaction.reply({ 
+                embeds: [createErrorEmbed(`Você está cansado! Descanse um pouco.\n⏳ Volte a trabalhar <t:${nextTime}:R>.`)], 
+                ephemeral: true 
+            });
+        }
+
+        // Gera um valor aleatório entre 100 e 300
+        const ganho = Math.floor(Math.random() * 200) + 100;
+        
+        await eco.addCoins(guildId, userId, ganho);
+        workCooldowns.set(userId, now);
+
+        return interaction.reply({ 
+            embeds: [createSuccessEmbed(`💼 Você trabalhou duro e ganhou **${ganho} 🪙 moedas**!`)] 
+        });
+    }
+
+    if (sub === "pay") {
+        const target = interaction.options.getUser("usuario");
+        const amount = interaction.options.getInteger("quantidade");
+
+        if (target.bot || target.id === userId) {
+            return interaction.reply({ embeds: [createErrorEmbed("Usuário inválido para transferência.")], ephemeral: true });
+        }
+
+        const bal = await eco.getBalance(guildId, userId);
+        if ((bal.coins || 0) < amount) {
+            return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Você tem apenas **${bal.coins || 0} 🪙**.`)], ephemeral: true });
+        }
+
+        await eco.removeCoins(guildId, userId, amount);
+        await eco.addCoins(guildId, target.id, amount);
+
+        return interaction.reply({ 
+            embeds: [createSuccessEmbed(`💸 Você transferiu **${amount} 🪙** para ${target}.`)] 
+        });
+    }
+
     if (sub === "daily") {
         const base = 500;
-        const tier = await vipService.getMemberTier(interaction.member);
+        const tier = await vipService?.getMemberTier(interaction.member);
         const extra = tier?.valor_daily_extra || 0;
-        const mult = tier?.mao_de_midas ? 2 : 1;
-        const total = base + (extra * mult);
+        const mult = tier?.midas ? 2 : 1; // Ajustei 'mao_de_midas' para 'midas' conforme o vipadmin.js anterior
+        const total = (base + extra) * mult;
 
         const result = await eco.daily(guildId, userId, total); 
         
         if (!result || !result.success) {
             const nextDate = result?.nextDaily ? Math.floor(result.nextDaily / 1000) : Math.floor(Date.now() / 1000) + 86400;
             return interaction.reply({ 
-                embeds: [createErrorEmbed(`Você já resgatou seu daily hoje!\n⏳ Tente novamente <t:${nextDate}:R> (<t:${nextDate}:f>)`)], 
+                embeds: [createErrorEmbed(`Você já resgatou seu daily hoje!\n⏳ Tente novamente <t:${nextDate}:R>.`)], 
                 ephemeral: true 
             });
         }
 
-        let msg = `Você recebeu **${total} 🪙**!`;
-        if (tier?.mao_de_midas) msg += "\n✨ **Mão de Midas:** Seu bônus VIP foi dobrado!";
+        let msg = `Você recebeu **${total} 🪙** diárias!`;
+        if (tier?.midas) msg += "\n✨ **Mão de Midas:** Seu bônus foi dobrado!";
         return interaction.reply({ embeds: [createSuccessEmbed(msg)] });
     }
 
-    // ... lógica de pay, add, remove (basta seguir o padrão que você já tinha)
     if (sub === "add" || sub === "remove") {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) return interaction.reply({ content: "Sem permissão.", ephemeral: true });
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return interaction.reply({ embeds: [createErrorEmbed("Sem permissão.")], ephemeral: true });
+        }
+        
         const target = interaction.options.getUser("usuario");
         const amount = interaction.options.getInteger("quantidade");
-        if (sub === "add") await eco.addCoins(guildId, target.id, amount);
-        else await eco.removeCoins(guildId, target.id, amount);
-        return interaction.reply(`✅ Operação de **${amount} 🪙** realizada para ${target}.`);
+        
+        if (sub === "add") {
+            await eco.addCoins(guildId, target.id, amount);
+            return interaction.reply({ embeds: [createSuccessEmbed(`✅ Adicionado **${amount} 🪙** para ${target}.`)] });
+        } else {
+            await eco.removeCoins(guildId, target.id, amount);
+            return interaction.reply({ embeds: [createSuccessEmbed(`✅ Removido **${amount} 🪙** de ${target}.`)] });
+        }
     }
   }
 };
