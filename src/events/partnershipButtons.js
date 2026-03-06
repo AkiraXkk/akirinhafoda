@@ -10,12 +10,10 @@ module.exports = {
     if (!interaction.isButton()) return;
 
     const customId = interaction.customId;
-    
-    // Handler para recusar todas as parcerias
+
     if (customId.startsWith("confirm_reject_all_")) {
       const userId = customId.replace("confirm_reject_all_", "");
-      
-      // Verificar se é o mesmo usuário
+
       if (interaction.user.id !== userId) {
         return interaction.reply({
           embeds: [createErrorEmbed("Você não pode usar este botão!")],
@@ -25,61 +23,41 @@ module.exports = {
 
       const partners = await partnersStore.load();
       const pendingPartnerships = Object.entries(partners).filter(([key, p]) => p.status === "pending");
-      
+
       if (pendingPartnerships.length === 0) {
         return interaction.update({
-          embeds: [createErrorEmbed("Não há solicitações pendentes para recusar!")],
+          embeds: [createErrorEmbed("Não há solicitações pendentes!")],
           components: []
         });
       }
 
-      // Recusar todas as solicitações pendentes
-      const rejectPromises = pendingPartnerships.map(async ([requestId, partnership]) => {
+      const reasonMatch = interaction.message.embeds[0].description.match(/\*\*Motivo:\*\s*(.+)/);
+      const motivo = reasonMatch ? reasonMatch[1] : "Recusa em massa";
+
+      const rejectPromises = pendingPartnerships.map(async ([requestId]) => {
         await partnersStore.update(requestId, (current) => ({
           ...current,
           status: "rejected",
-          rejectedAt: new Date().toISOString(),
-          rejectedBy: userId,
-          rejectionReason: "Recusa em massa: " + (interaction.message.embeds[0].description.match(/\*\*Motivo:\*\s*(.+)/)?.[1] || "Motivo não especificado")
+          processedBy: userId, // Alinhado com o partnership.js
+          rejectionReason: motivo,
+          rejectedAt: new Date().toISOString()
         }));
       });
 
       await Promise.all(rejectPromises);
 
-      const successEmbed = createSuccessEmbed(
-        `✅ **Recusa em Massa Concluída!**\n\n` +
-        `**Total Recusado:** ${pendingPartnerships.length} solicitação(ões)\n` +
-        `**Motivo:** ${interaction.message.embeds[0].description.match(/\*\*Motivo:\*\s*(.+)/)?.[1] || "Motivo não especificado"}\n\n` +
-        `Todas as solicitações pendentes foram recusadas com sucesso!`
-      );
-
       return interaction.update({
-        embeds: [successEmbed],
+        embeds: [createSuccessEmbed(`✅ **Recusa em Massa Concluída!**\nTotal: ${pendingPartnerships.length} solicitações.\nMotivo: ${motivo}`)],
         components: []
       });
     }
 
-    // Handler para cancelar recusa em massa
     if (customId.startsWith("cancel_reject_all_")) {
       const userId = customId.replace("cancel_reject_all_", "");
-      
-      // Verificar se é o mesmo usuário
-      if (interaction.user.id !== userId) {
-        return interaction.reply({
-          embeds: [createErrorEmbed("Você não pode usar este botão!")],
-          ephemeral: true
-        });
-      }
-
-      const cancelEmbed = createEmbed({
-        title: "❌ Ação Cancelada",
-        description: "A recusa em massa foi cancelada. Nenhuma solicitação foi alterada.",
-        color: 0xff6600,
-        footer: { text: "WDA - Todos os direitos reservados" }
-      });
+      if (interaction.user.id !== userId) return interaction.reply({ content: "Botão bloqueado.", ephemeral: true });
 
       return interaction.update({
-        embeds: [cancelEmbed],
+        embeds: [createErrorEmbed("Ação cancelada. Nenhuma solicitação foi alterada.")],
         components: []
       });
     }
