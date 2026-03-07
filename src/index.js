@@ -7,6 +7,7 @@ const { createVipService } = require("./vip/vipService");
 const { createVipRoleManager } = require("./vip/vipRoleManager");
 const { createVipChannelManager } = require("./vip/vipChannelManager");
 const { createVipConfigManager } = require("./vip/vipConfigManager");
+const { createVipExpiryManager } = require("./vip/vipExpiryManager");
 const { getGuildConfig } = require("./config/guildConfig");
 const { createEmbed } = require("./embeds");
 const { connectToMongo } = require("./database/connect");
@@ -64,6 +65,7 @@ async function main() {
     store: vipStore,
     logger,
     configManager: client.services.vipConfig,
+    client, // fix: client necessário internamente
   });
   await client.services.vip.init();
   client.services.vipRole = createVipRoleManager({
@@ -76,6 +78,17 @@ async function main() {
     vipService: client.services.vip,
     logger,
   });
+
+  // Fix: inicializar o gerenciador de expiração de VIPs
+  client.services.vipExpiry = createVipExpiryManager({
+    client,
+    vipService: client.services.vip,
+    vipRoleManager: client.services.vipRole,
+    vipChannelManager: client.services.vipChannel,
+    familyService: client.services.family,
+    logger,
+  });
+  client.services.vipExpiry.start();
 
   loadEvents(client);
 
