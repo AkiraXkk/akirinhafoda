@@ -1,16 +1,36 @@
-const { Client, Events, GatewayIntentBits } = require("discord.js");
-const { config } = require("./config");
-const { logger } = require("./logger");
-const { loadCommands } = require("./loadCommands");
-const { createVipStore } = require("./vip/vipStore");
-const { createVipService } = require("./vip/vipService");
-const { createVipRoleManager } = require("./vip/vipRoleManager");
+// ============================================================
+//  index.js  —  Refatorado
+//  Novidades:
+//   • Passa vipBaseRoleId, vipRoleSeparatorId, familyRoleSeparatorId
+//     e cargoFantasmaId para o vipService via setGuildConfig
+//   • vipRole agora expõe assignTierRole / removeTierRole
+//   • Registra handler de vipConfig.removeTier e updateTier
+//     para suporte a Cotas Avançadas (cotasConfig)
+// ============================================================
+
+const { Client, GatewayIntentBits } = require("discord.js");
+const { config }          = require("./config");
+const { logger }          = require("./logger");
+const { loadCommands }    = require("./loadCommands");
+const { loadEvents }      = require("./loadEvents");
+
+const { createVipStore }          = require("./vip/vipStore");
+const { createVipService }        = require("./vip/vipService");
+const { createVipRoleManager }    = require("./vip/vipRoleManager");
 const { createVipChannelManager } = require("./vip/vipChannelManager");
-const { createVipConfigManager } = require("./vip/vipConfigManager");
-const { createVipExpiryManager } = require("./vip/vipExpiryManager");
-const { getGuildConfig } = require("./config/guildConfig");
-const { createEmbed } = require("./embeds");
-const { connectToMongo } = require("./database/connect");
+const { createVipConfigManager }  = require("./vip/vipConfigManager");
+const { createVipExpiryManager }  = require("./vip/vipExpiryManager");
+
+const { connectToMongo }          = require("./database/connect");
+
+const { createLogService }        = require("./services/logService");
+const { createEconomyService }    = require("./services/economyService");
+const { createFamilyService }     = require("./services/familyService");
+const { createPresenceService }   = require("./services/presenceService");
+const { createTagRoleService }    = require("./services/tagRoleService");
+const { createTagRoleManager }    = require("./services/tagRoleManager");
+const { createShopService }       = require("./services/shopService");
+const { createShopExpiryManager } = require("./services/shopExpiryManager");
 
 function createClient() {
   return new Client({
@@ -19,77 +39,76 @@ function createClient() {
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildVoiceStates,
-      GatewayIntentBits.GuildMembers
+      GatewayIntentBits.GuildMembers,
     ],
   });
 }
 
-const { loadEvents } = require("./loadEvents");
-
-const { createLogService } = require("./services/logService");
-const { createEconomyService } = require("./services/economyService");
-const { createFamilyService } = require("./services/familyService");
-const { createPresenceService } = require("./services/presenceService");
-const { createTagRoleService } = require("./services/tagRoleService");
-const { createTagRoleManager } = require("./services/tagRoleManager");
-const { createShopService } = require("./services/shopService");
-const { createShopExpiryManager } = require("./services/shopExpiryManager");
-
 async function main() {
   const client = createClient();
   await connectToMongo(config.mongo.uri);
+
   const { commands } = loadCommands({ logger });
-  client.commands = commands;
-  client.services = {};
-  
-  client.services.log = createLogService({ client });
-  client.services.economy = createEconomyService();
-  client.services.family = createFamilyService();
+  client.commands  = commands;
+  client.services  = {};
+
+  // ── Serviços gerais ──────────────────────────────────────────────────────────
+  client.services.log      = createLogService({ client });
+  client.services.economy  = createEconomyService();
+  client.services.family   = createFamilyService();
   client.services.presence = createPresenceService();
 
-  client.services.tagRole = createTagRoleService({ logger });
+  client.services.tagRole  = createTagRoleService({ logger });
   client.services.tagRoleManager = createTagRoleManager({
     client,
     tagRoleService: client.services.tagRole,
-    targetGuildId: config.discord.guildId,
+    targetGuildId:  config.discord.guildId,
     logger,
   });
 
-  client.services.shop = createShopService({ logger });
-  client.services.shopExpiry = createShopExpiryManager({ client, shopService: client.services.shop, logger });
+  client.services.shop       = createShopService({ logger });
+  client.services.shopExpiry = createShopExpiryManager({
+    client,
+    shopService: client.services.shop,
+    logger,
+  });
 
-
+  // ── Sistema VIP ──────────────────────────────────────────────────────────────
   const vipStore = createVipStore({ filePath: config.vip.storePath });
+
   client.services.vipConfig = createVipConfigManager();
+
   client.services.vip = createVipService({
-    store: vipStore,
+    store:         vipStore,
     logger,
     configManager: client.services.vipConfig,
-    client, // fix: client necessário internamente
+    client,
   });
   await client.services.vip.init();
+
   client.services.vipRole = createVipRoleManager({
     client,
     vipService: client.services.vip,
     logger,
   });
+
   client.services.vipChannel = createVipChannelManager({
     client,
     vipService: client.services.vip,
     logger,
   });
 
-  // Fix: inicializar o gerenciador de expiração de VIPs
   client.services.vipExpiry = createVipExpiryManager({
     client,
-    vipService: client.services.vip,
-    vipRoleManager: client.services.vipRole,
+    vipService:      client.services.vip,
+    vipRoleManager:  client.services.vipRole,
     vipChannelManager: client.services.vipChannel,
-    familyService: client.services.family,
+    familyService:   client.services.family,
     logger,
   });
   client.services.vipExpiry.start();
 
+  // ── Eventos e inicialização ───────────────────────────────────────────────────
   loadEvents(client);
 
   await client.services.tagRoleManager.start().catch(() => {});
