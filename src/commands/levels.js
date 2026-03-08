@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, AttachmentBuilder } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
+const { logger } = require("../logger");
 
 let createCanvas, loadImage;
 try {
@@ -174,7 +175,6 @@ async function applyLevelRoles(member, nivelAnterior, novoNivel) {
     if (rolesToRemove.length) await member.roles.remove(rolesToRemove);
     if (cargoNovoId && !member.roles.cache.has(cargoNovoId)) await member.roles.add(cargoNovoId);
   } catch (err) {
-    const { logger } = require("../logger");
     logger.error({ err, memberId: member.id, guildId: member.guild.id }, "Erro ao aplicar cargos de nível");
   }
 }
