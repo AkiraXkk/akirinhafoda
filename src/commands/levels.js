@@ -105,11 +105,11 @@ async function gerarCardRank(user, data, levels, interaction) {
 
   ctx.font = "bold 36px Arial";
   ctx.fillStyle = cardConfig.levelColor;
-  ctx.fillText(`Nível ${data.level || 1}`, 160, 90);
+  ctx.fillText(`Nível ${data.level ?? 0}`, 160, 90);
 
   ctx.font = "20px Arial";
   ctx.fillStyle = cardConfig.textColor;
-  ctx.fillText(`${data.totalXp || 0} / ${((data.level || 1) * 1000)} XP`, 160, 130);
+  ctx.fillText(`${data.totalXp || 0} / ${((data.level ?? 0) + 1) * 1000} XP`, 160, 130);
 
   const progress = Math.min((data.xp || 0) / 1000, 1);
   ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
@@ -129,7 +129,7 @@ async function gerarCardRank(user, data, levels, interaction) {
 
   const sortedUsers = Object.entries(levels).filter(([id, d]) => (d.totalXp || 0) > 0).sort((a, b) => (b[1].totalXp || 0) - (a[1].totalXp || 0));
   const userRank = sortedUsers.findIndex(([id]) => id === user.id) + 1;
-  
+
   ctx.font = "14px Arial";
   ctx.fillStyle = "#95a5a6";
   ctx.fillText(`🏆 Rank #${userRank || 'N/A'}`, 160, 245);
@@ -155,11 +155,22 @@ async function setLevelRole(guildId, nivel, roleId) {
   });
 }
 
+// Essa função garante que ele fique com o cargo de um nível até bater a meta do próximo nível configurado
 async function applyLevelRoles(member, nivelAnterior, novoNivel) {
   if (!member?.guild) return;
   const config = await getLevelRoleConfig(member.guild.id);
-  const cargoNovoId = config[String(novoNivel)];
   
+  let maxLevel = -1;
+  let cargoNovoId = null;
+
+  for (const [levelStr, roleId] of Object.entries(config)) {
+    const lvl = parseInt(levelStr, 10);
+    if (lvl <= novoNivel && lvl > maxLevel) {
+      maxLevel = lvl;
+      cargoNovoId = roleId;
+    }
+  }
+
   try {
     const rolesToRemove = Object.values(config).filter(rId => member.roles.cache.has(rId) && rId !== cargoNovoId);
     if (rolesToRemove.length) await member.roles.remove(rolesToRemove);
@@ -168,12 +179,12 @@ async function applyLevelRoles(member, nivelAnterior, novoNivel) {
 }
 
 async function addXp(userId, amount = 10) {
-  let res = { subiuNivel: false, novoNivel: 1, nivelAnterior: 1 };
+  let res = { subiuNivel: false, novoNivel: 0, nivelAnterior: 0 };
   await levelsStore.update(userId, (current) => {
-    const data = current || { xp: 0, level: 1, totalXp: 0, messages_count: 0, voice_time: 0 };
-    res.nivelAnterior = data.level;
+    const data = current || { xp: 0, level: 0, totalXp: 0, messages_count: 0, voice_time: 0 };
+    res.nivelAnterior = data.level ?? 0;
     data.totalXp = (data.totalXp || 0) + amount;
-    data.level = Math.max(1, Math.floor(data.totalXp / 1000));
+    data.level = Math.floor(data.totalXp / 1000);
     data.xp = data.totalXp % 1000;
     if (data.level > res.nivelAnterior) { res.subiuNivel = true; res.novoNivel = data.level; }
     return data;
@@ -183,7 +194,7 @@ async function addXp(userId, amount = 10) {
 
 async function getLevelConfig(guildId) {
   const data = await levelConfigStore.load();
-  return { xpPerMessage: 10, xpPerMinuteVoice: 60, immuneRoleIds: [], multiplierRoles: {}, ...(data[guildId] || {}) };
+  return { xpMsgMin: 5, xpMsgMax: 15, xpVoiceMin: 20, xpVoiceMax: 40, immuneRoleIds: [], multiplierRoles: {}, ...(data[guildId] || {}) };
 }
 
 async function setLevelConfig(guildId, patch) {
@@ -191,26 +202,30 @@ async function setLevelConfig(guildId, patch) {
 }
 
 async function addXpForMessage(member) {
-  if (!member?.guild) return { subiuNivel: false, novoNivel: 1, nivelAnterior: 1 };
+  if (!member?.guild) return { subiuNivel: false, novoNivel: 0, nivelAnterior: 0 };
   const now = Date.now();
-  if (now - (xpCooldowns.get(member.id) || 0) < 60000) return { subiuNivel: false, novoNivel: 1, nivelAnterior: 1 };
-  
+  if (now - (xpCooldowns.get(member.id) || 0) < 60000) return { subiuNivel: false, novoNivel: 0, nivelAnterior: 0 };
+
   const config = await getLevelConfig(member.guild.id);
-  if (config.immuneRoleIds.some((id) => member.roles.cache.has(id))) return { subiuNivel: false, novoNivel: 1, nivelAnterior: 1 };
+  if (config.immuneRoleIds.some((id) => member.roles.cache.has(id))) return { subiuNivel: false, novoNivel: 0, nivelAnterior: 0 };
 
   let mult = 1;
   for (const [rId, m] of Object.entries(config.multiplierRoles)) if (member.roles.cache.has(rId)) { mult *= m; break; }
+
+  // Sorteia um número de XP entre o mínimo e o máximo
+  const min = config.xpMsgMin ?? 5;
+  const max = config.xpMsgMax ?? 15;
+  const xpBase = Math.floor(Math.random() * (max - min + 1)) + min;
   
-  const xpBase = Math.floor(Math.random() * (config.xpPerMessage - 1)) + 1;
   xpCooldowns.set(member.id, now);
 
-  let res = { subiuNivel: false, novoNivel: 1, nivelAnterior: 1 };
+  let res = { subiuNivel: false, novoNivel: 0, nivelAnterior: 0 };
   await levelsStore.update(member.id, (current) => {
-    const data = current || { xp: 0, level: 1, totalXp: 0, messages_count: 0, voice_time: 0 };
-    res.nivelAnterior = data.level;
+    const data = current || { xp: 0, level: 0, totalXp: 0, messages_count: 0, voice_time: 0 };
+    res.nivelAnterior = data.level ?? 0;
     data.totalXp = (data.totalXp || 0) + Math.floor(xpBase * mult);
     data.xp = data.totalXp % 1000;
-    data.level = Math.floor(data.totalXp / 1000) || 1;
+    data.level = Math.floor(data.totalXp / 1000);
     data.messages_count = (data.messages_count || 0) + 1;
     if (data.level > res.nivelAnterior) { res.subiuNivel = true; res.novoNivel = data.level; }
     return data;
@@ -219,16 +234,23 @@ async function addXpForMessage(member) {
 }
 
 async function addXpForVoiceTick(member, minutos = 1) {
-  if (!member?.guild) return { subiuNivel: false, novoNivel: 1, nivelAnterior: 1 };
+  if (!member?.guild) return { subiuNivel: false, novoNivel: 0, nivelAnterior: 0 };
   const config = await getLevelConfig(member.guild.id);
-  if (config.immuneRoleIds.some((id) => member.roles.cache.has(id))) return { subiuNivel: false, novoNivel: 1, nivelAnterior: 1 };
+  if (config.immuneRoleIds.some((id) => member.roles.cache.has(id))) return { subiuNivel: false, novoNivel: 0, nivelAnterior: 0 };
 
   let mult = 1;
   for (const [rId, m] of Object.entries(config.multiplierRoles)) if (member.roles.cache.has(rId)) mult = Math.max(mult, Number(m) || 1);
 
-  const res = await addXp(member.id, Math.max(0, Math.round((config.xpPerMinuteVoice || 60) * minutos * mult)));
+  // Sorteia XP de voz por minuto entre o mínimo e máximo
+  const min = config.xpVoiceMin ?? 20;
+  const max = config.xpVoiceMax ?? 40;
+  const xpBase = Math.floor(Math.random() * (max - min + 1)) + min;
+  
+  const finalXp = Math.max(0, Math.round(xpBase * minutos * mult));
+  const res = await addXp(member.id, finalXp);
+  
   await levelsStore.update(member.id, (current) => {
-    const data = current || { xp: 0, level: 1, totalXp: 0, messages_count: 0, voice_time: 0 };
+    const data = current || { xp: 0, level: 0, totalXp: 0, messages_count: 0, voice_time: 0 };
     data.voice_time = (data.voice_time || 0) + (minutos * 60 * 1000);
     return data;
   });
@@ -241,11 +263,16 @@ module.exports = {
     .setDescription("Sistema de níveis")
     .addSubcommand((sub) => sub.setName("view").setDescription("Verifica seu nível e XP").addUserOption((opt) => opt.setName("usuario").setDescription("Usuário")))
     .addSubcommand((sub) => sub.setName("leaderboard").setDescription("Abre o placar de líderes (Atalho)"))
-    .addSubcommand((sub) => sub.setName("xpconfig").setDescription("Configura XP (Admin)").addIntegerOption((opt) => opt.setName("xp_msg").setDescription("XP base msg")).addIntegerOption((opt) => opt.setName("xp_voz").setDescription("XP base voz")).addRoleOption((opt) => opt.setName("cargo_imune").setDescription("Cargo imune")).addRoleOption((opt) => opt.setName("cargo_multiplicador").setDescription("Cargo multiplicador")).addNumberOption((opt) => opt.setName("fator").setDescription("Fator 2x, 3x")))
+    .addSubcommand((sub) => sub.setName("xpconfig").setDescription("Configura XP (Admin)")
+        .addIntegerOption((opt) => opt.setName("xp_msg_min").setDescription("Mínimo de XP por Mensagem"))
+        .addIntegerOption((opt) => opt.setName("xp_msg_max").setDescription("Máximo de XP por Mensagem"))
+        .addIntegerOption((opt) => opt.setName("xp_voz_min").setDescription("Mínimo de XP por Minuto em Call"))
+        .addIntegerOption((opt) => opt.setName("xp_voz_max").setDescription("Máximo de XP por Minuto em Call"))
+    )
     .addSubcommand((sub) => sub.setName("config").setDescription("Mapeia nível → cargo (Admin)").addIntegerOption((opt) => opt.setName("nivel").setDescription("Nível").setRequired(true)).addRoleOption((opt) => opt.setName("cargo").setDescription("Cargo").setRequired(true)))
     .addSubcommand((sub) => sub.setName("cards").setDescription("Gerenciar cards de rank").addStringOption((opt) => opt.setName("action").setDescription("Ação").setRequired(true).addChoices({ name: "Ver meus cards", value: "view" }, { name: "Selecionar card", value: "select" })).addStringOption((opt) => opt.setName("card").setDescription("ID do Card")))
     .addSubcommand((sub) => sub.setName("manage").setDescription("Gerenciar XP (Admin)").addUserOption((opt) => opt.setName("usuario").setDescription("Usuário").setRequired(true)).addStringOption((opt) => opt.setName("action").setDescription("Ação").setRequired(true).addChoices({ name: "Add XP", value: "add" }, { name: "Remover XP", value: "remove" }, { name: "Setar XP", value: "set" }, { name: "Resetar", value: "reset" })).addIntegerOption((opt) => opt.setName("quantidade").setDescription("Qtd XP").setMinValue(0))),
-    
+
   getLevelRoleConfig, setLevelRole, applyLevelRoles, addXp, addXpForMessage, addXpForVoiceTick, getLevelConfig, setLevelConfig, getUserCards, addUserCard, getCardConfig, formatDuration, getLevelsStore: () => levelsStore,
 
   async execute(interaction) {
@@ -255,7 +282,7 @@ module.exports = {
     if (sub === "view") {
       await interaction.deferReply();
       const user = interaction.options.getUser("usuario") || interaction.user;
-      const data = levels[user.id] || { xp: 0, level: 1, totalXp: 0, messages_count: 0, voice_time: 0 };
+      const data = levels[user.id] || { xp: 0, level: 0, totalXp: 0, messages_count: 0, voice_time: 0 };
       const buffer = await gerarCardRank(user, data, levels, interaction);
       if (!buffer) return interaction.editReply("Erro ao renderizar imagem.");
       const attachment = new AttachmentBuilder(buffer, { name: "rank.png" });
@@ -290,29 +317,34 @@ module.exports = {
       const amt = interaction.options.getInteger("quantidade") || 0;
 
       await levelsStore.update(t.id, (cur) => {
-        let d = cur || { xp: 0, level: 1, totalXp: 0 };
+        let d = cur || { xp: 0, level: 0, totalXp: 0 };
         if (a === "add") d.totalXp += amt;
         if (a === "remove") d.totalXp = Math.max(0, d.totalXp - amt);
         if (a === "set") d.totalXp = amt;
-        if (a === "reset") { d.totalXp = 0; d.xp = 0; d.level = 1; }
-        d.level = Math.max(1, Math.floor(d.totalXp / 1000));
+        if (a === "reset") { d.totalXp = 0; d.xp = 0; d.level = 0; }
+        d.level = Math.floor(d.totalXp / 1000);
         d.xp = d.totalXp % 1000;
         return d;
       });
       return interaction.reply({ embeds: [createSuccessEmbed(`Operação de XP realizada em ${t}.`)], ephemeral: true });
     }
 
-    // Configs de xp e config normal (o que já existia e não quebrou)
     if (sub === "xpconfig") {
-      // (Mesma lógica mantida)
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) return interaction.reply({ embeds: [createErrorEmbed("Sem permissão.")], ephemeral: true });
+      
       const patch = {};
-      const xpMsg = interaction.options.getInteger("xp_msg");
-      const xpVoz = interaction.options.getInteger("xp_voz");
-      if (typeof xpMsg === "number") patch.xpPerMessage = xpMsg;
-      if (typeof xpVoz === "number") patch.xpPerMinuteVoice = xpVoz;
+      const xpMsgMin = interaction.options.getInteger("xp_msg_min");
+      const xpMsgMax = interaction.options.getInteger("xp_msg_max");
+      const xpVozMin = interaction.options.getInteger("xp_voz_min");
+      const xpVozMax = interaction.options.getInteger("xp_voz_max");
+      
+      if (xpMsgMin !== null) patch.xpMsgMin = xpMsgMin;
+      if (xpMsgMax !== null) patch.xpMsgMax = xpMsgMax;
+      if (xpVozMin !== null) patch.xpVoiceMin = xpVozMin;
+      if (xpVozMax !== null) patch.xpVoiceMax = xpVozMax;
+      
       await setLevelConfig(interaction.guildId, patch);
-      return interaction.reply({ embeds: [createSuccessEmbed("Config atualizada.")], ephemeral: true });
+      return interaction.reply({ embeds: [createSuccessEmbed("Configuração de margem de XP atualizada!")], ephemeral: true });
     }
 
     if (sub === "config") {
