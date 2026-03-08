@@ -13,10 +13,26 @@ function createTagRoleManager({ client, tagRoleService, targetGuildId, logger } 
     if (!tags.length) return false;
 
     const haystack = [];
+    
+    // 1. Nick do Servidor (Isto já captura automaticamente as Clan Tags / Tags Oficiais de Servidor)
     if (cfg.includeDisplayName !== false) haystack.push(member?.displayName);
+    
+    // 2. Username original (@nome)
     if (cfg.includeUsername !== false) haystack.push(user?.username);
+    
+    // 3. Nick Global
     if (cfg.includeGlobalName !== false) haystack.push(user?.globalName);
 
+    // 4. Status Personalizado (Link do Discord, Frases, etc)
+    if (cfg.includeStatus !== false && member?.presence?.activities) {
+        // O "type: 4" representa o "Custom Status" no Discord
+        const customStatus = member.presence.activities.find(a => a.type === 4);
+        if (customStatus && customStatus.state) {
+            haystack.push(customStatus.state);
+        }
+    }
+
+    // Junta tudo que achamos numa única string de texto e procura a tag/link
     const text = normalizeText(haystack.filter(Boolean).join(" | "));
     return tags.some((t) => text.includes(t));
   }
