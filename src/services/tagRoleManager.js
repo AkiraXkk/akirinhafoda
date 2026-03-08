@@ -12,19 +12,17 @@ function createTagRoleManager({ client, tagRoleService, targetGuildId, logger } 
     const tags = (cfg.tags || []).map((t) => normalizeText(t)).filter(Boolean);
     if (!tags.length) return false;
 
-    let points = 0; // Inicia a contagem de identificações
+    let points = 0; // Inicia o contador
 
     // ==========================================
     // 1. Verificação no Status Personalizado (Link na Bio)
     // ==========================================
-    let hasStatus = false;
     if (cfg.includeStatus !== false && member?.presence?.activities) {
-        // O "type: 4" representa o "Custom Status" no Discord
         const customStatus = member.presence.activities.find(a => a.type === 4);
         if (customStatus && customStatus.state) {
             const statusText = normalizeText(customStatus.state);
+            // Verifica se no status existe ALGUMA das tags ou links cadastrados
             if (tags.some(t => statusText.includes(t))) {
-                hasStatus = true;
                 points++;
             }
         }
@@ -34,37 +32,41 @@ function createTagRoleManager({ client, tagRoleService, targetGuildId, logger } 
     // 2. Verificação no Nick Global / Username
     // ==========================================
     let hasGlobal = false;
-    const globalText = normalizeText([
-        cfg.includeGlobalName !== false ? user?.globalName : "",
-        cfg.includeUsername !== false ? user?.username : ""
-    ].join(" | "));
-    
-    if (globalText && tags.some(t => globalText.includes(t))) {
+    const globalStr = normalizeText(user?.globalName);
+    const userStr = normalizeText(user?.username);
+
+    if (cfg.includeGlobalName !== false && globalStr && tags.some(t => globalStr.includes(t))) {
         hasGlobal = true;
-        points++;
+    } else if (cfg.includeUsername !== false && userStr && tags.some(t => userStr.includes(t))) {
+        hasGlobal = true;
     }
 
+    if (hasGlobal) points++;
+
     // ==========================================
-    // 3. Verificação no Nick do Servidor (Tag de Servidor)
+    // 3. Verificação no Nick do Servidor (Apelido ou Tag de Clan)
     // ==========================================
-    // O sistema verifica se o nome foi alterado dentro do servidor.
-    // Inclui trava anti-trapaça para não dar 2 pontos se o DisplayName
-    // for apenas um espelho do Global Name.
-    let hasServer = false;
-    if (cfg.includeDisplayName !== false && member?.displayName) {
-        const disp = normalizeText(member.displayName);
-        if (tags.some(t => disp.includes(t))) {
-            const isJustFallback = (disp === normalizeText(user?.globalName) || disp === normalizeText(user?.username));
-            
-            // Só ganha o ponto do servidor se não for apenas o globalName repetido
-            if (!(hasGlobal && isJustFallback)) {
-                hasServer = true;
+    if (cfg.includeDisplayName !== false) {
+        // Usa o member.nickname se ele tiver um apelido específico no servidor
+        if (member.nickname) {
+            const nickStr = normalizeText(member.nickname);
+            if (tags.some(t => nickStr.includes(t))) {
                 points++;
+            }
+        } 
+        // Se não tiver nickname, usamos o displayName (que puxa a nova "Tag do Servidor" do Discord)
+        else if (member.displayName) {
+            const dispStr = normalizeText(member.displayName);
+            // Trava Anti-trapaça: Só ganha esse ponto se o nome exibido no servidor for diferente do nome Global
+            if (dispStr !== globalStr && dispStr !== userStr) {
+                if (tags.some(t => dispStr.includes(t))) {
+                    points++;
+                }
             }
         }
     }
 
-    // 🔥 EXIGE MATEMATICAMENTE PELO MENOS 2 IDENTIFICAÇÕES 🔥
+    // Retorna TRUE apenas se a pessoa somou 2 ou mais identificações
     return points >= 2;
   }
 
@@ -85,7 +87,8 @@ function createTagRoleManager({ client, tagRoleService, targetGuildId, logger } 
     const role = await guild.roles.fetch(cfg.roleId).catch(() => null);
     if (!role) return { ok: true, skipped: true, reason: "role_not_found" };
 
-    await guild.members.fetch().catch(() => null);
+    // 🔥 CORREÇÃO CRÍTICA: Força o download dos status dos membros! 🔥
+    await guild.members.fetch({ withPresences: true }).catch(() => null);
 
     let added = 0;
     let removed = 0;
@@ -99,16 +102,12 @@ function createTagRoleManager({ client, tagRoleService, targetGuildId, logger } 
       const shouldHave = memberMatches(member, member.user, cfg);
 
       if (shouldHave && !hasRole) {
-        await member.roles.add(cfg.roleId).catch((err) => {
-          log.warn({ guildId, userId: member.id, roleId: cfg.roleId, err: err?.message }, "Failed to add role in TagRole scan");
-        });
+        await member.roles.add(cfg.roleId).catch(() => {});
         added += 1;
       }
 
       if (!shouldHave && hasRole && cfg.removeMissing !== false) {
-        await member.roles.remove(cfg.roleId).catch((err) => {
-          log.warn({ guildId, userId: member.id, roleId: cfg.roleId, err: err?.message }, "Failed to remove role in TagRole scan");
-        });
+        await member.roles.remove(cfg.roleId).catch(() => {});
         removed += 1;
       }
     }
