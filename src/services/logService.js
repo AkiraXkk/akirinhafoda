@@ -1,5 +1,6 @@
 const { getGuildConfig } = require("../config/guildConfig");
 const { createEmbed } = require("../embeds");
+const { logger: defaultLogger } = require("../logger");
 
 function createLogService({ client }) {
   // Cores baseadas em Tier VIP
@@ -49,7 +50,9 @@ function createLogService({ client }) {
       user
     });
 
-    await channel.send({ embeds: [embed] }).catch(() => {});
+    await channel.send({ embeds: [embed] }).catch((err) => {
+      defaultLogger.warn({ err, channelId: channel.id }, "Falha ao enviar log embed");
+    });
   }
 
   // Função específica para logs VIP
@@ -154,7 +157,9 @@ function createLogService({ client }) {
       user: staffUser
     });
 
-    await channel.send({ embeds: [embed] }).catch(() => {});
+    await channel.send({ embeds: [embed] }).catch((err) => {
+      defaultLogger.warn({ err, channelId: channel.id }, "Falha ao enviar log VIP embed");
+    });
   }
 
   return { log, logVipAction };

@@ -377,6 +377,7 @@ module.exports = {
     // RPS Button Handler
     if (customId.startsWith("fun_rps_")) {
       const parts = customId.split("_");
+      if (parts.length < 4) return;
       const choice = parts[2];
       const originalUserId = parts[3];
 
