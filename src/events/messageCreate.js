@@ -13,26 +13,28 @@ module.exports = {
       if (!membro) return;
 
       const { subiuNivel, novoNivel, nivelAnterior } = await levelsCommand.addXpForMessage(membro);
+      
+      // Quando a pessoa subir para QUALQUER nível, sem limites:
       if (subiuNivel && levelsCommand.applyLevelRoles) {
         await levelsCommand.applyLevelRoles(membro, nivelAnterior, novoNivel);
-        
-        // Enviar mensagem de level up
+
+        // Enviar mensagem de level up no canal em que ela acabou de falar
         const levelUpMessage = await message.channel.send({
           embeds: [{
             title: "🎉 LEVEL UP!",
-            description: `Parabéns ${message.author}! Você subiu para o nível **${novoNivel}**!`,
+            description: `Parabéns ${message.author}! Você alcançou o nível **${novoNivel}**!`,
             color: 0x00ff00,
-            thumbnail: message.author.displayAvatarURL({ dynamic: true }),
-            footer: { text: "Esta mensagem será excluída em 15 segundos • WDA - Todos os direitos reservados" }
+            thumbnail: { url: message.author.displayAvatarURL({ dynamic: true }) },
+            footer: { text: "Esta mensagem será excluída em 20 segundos • WDA - Todos os direitos reservados" }
           }]
         });
-        
-        // Apagar mensagem após 15 segundos
+
+        // Apagar mensagem após 20 segundos
         setTimeout(() => {
           levelUpMessage.delete().catch(() => {
-            console.log("Não foi possível apagar mensagem de level up (pode já ter sido excluída)");
+            // Ignora o erro silenciosamente caso a mensagem já tenha sido apagada
           });
-        }, 15000);
+        }, 20000);
       }
     } catch (_) {}
   },
