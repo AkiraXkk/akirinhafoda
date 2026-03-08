@@ -1,5 +1,60 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
+const { logger } = require("../logger");
+
+// State management for interactive commands
+const activeBattles = new Map();
+const triviaAnswers = new Map();
+
+// Constants
+const TRIVIA_TIMEOUT_MS = 60000;
+const BATTLE_TIMEOUT_MS = 180000;
+const ATTACK_DAMAGE_BASE = 15;
+const ATTACK_DAMAGE_RANGE = 11;
+const SPECIAL_DAMAGE_BASE = 25;
+const SPECIAL_DAMAGE_RANGE = 16;
+
+function rollAttackDamage() {
+  return Math.floor(Math.random() * ATTACK_DAMAGE_RANGE) + ATTACK_DAMAGE_BASE;
+}
+
+function rollSpecialDamage() {
+  return Math.floor(Math.random() * SPECIAL_DAMAGE_RANGE) + SPECIAL_DAMAGE_BASE;
+}
+
+// Helper: decode HTML entities from trivia API
+function decodeHtml(text) {
+  const entities = {
+    '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"',
+    '&#039;': "'", '&apos;': "'", '&laquo;': '«', '&raquo;': '»',
+    '&ndash;': '–', '&mdash;': '—', '&hellip;': '…',
+    '&eacute;': 'é', '&Eacute;': 'É', '&ntilde;': 'ñ',
+    '&oacute;': 'ó', '&uuml;': 'ü', '&iacute;': 'í'
+  };
+  return text.replace(/&[#\w]+;/g, match => entities[match] || match);
+}
+
+// Helper: shuffle array (Fisher-Yates)
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Helper: generate unique ID
+function uniqueId() {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
+}
+
+// Helper: HP bar for battle
+function hpBar(current, max) {
+  const pct = Math.max(0, current) / max;
+  const filled = Math.round(pct * 10);
+  return '🟩'.repeat(filled) + '⬛'.repeat(10 - filled) + ` ${Math.max(0, current)}/${max}`;
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -71,6 +126,70 @@ module.exports = {
         .addIntegerOption((opt) =>
           opt.setName("quantidade").setDescription("Quantidade de dados (padrão: 1)").setRequired(false).setMinValue(1).setMaxValue(10)
         )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("trivia")
+        .setDescription("Responda perguntas de trivia com botões!")
+        .addStringOption((opt) =>
+          opt.setName("dificuldade")
+            .setDescription("Dificuldade da pergunta")
+            .setRequired(false)
+            .addChoices(
+              { name: "Fácil", value: "easy" },
+              { name: "Médio", value: "medium" },
+              { name: "Difícil", value: "hard" }
+            )
+        )
+        .addStringOption((opt) =>
+          opt.setName("categoria")
+            .setDescription("Categoria da pergunta")
+            .setRequired(false)
+            .addChoices(
+              { name: "🧠 Conhecimento Geral", value: "9" },
+              { name: "🔬 Ciência", value: "17" },
+              { name: "💻 Computação", value: "18" },
+              { name: "⚽ Esportes", value: "21" },
+              { name: "🌍 Geografia", value: "22" },
+              { name: "📜 História", value: "23" },
+              { name: "🎨 Arte", value: "25" },
+              { name: "🐾 Animais", value: "27" }
+            )
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("batalha")
+        .setDescription("Batalha RPG contra o bot com ataques, defesa e especial!")
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("horoscopo")
+        .setDescription("Veja seu horóscopo e personalidade do signo")
+        .addStringOption((opt) =>
+          opt.setName("signo")
+            .setDescription("Seu signo do zodíaco")
+            .setRequired(true)
+            .addChoices(
+              { name: "♈ Áries", value: "aries" },
+              { name: "♉ Touro", value: "touro" },
+              { name: "♊ Gêmeos", value: "gemeos" },
+              { name: "♋ Câncer", value: "cancer" },
+              { name: "♌ Leão", value: "leao" },
+              { name: "♍ Virgem", value: "virgem" },
+              { name: "♎ Libra", value: "libra" },
+              { name: "♏ Escorpião", value: "escorpiao" },
+              { name: "♐ Sagitário", value: "sagitario" },
+              { name: "♑ Capricórnio", value: "capricornio" },
+              { name: "♒ Aquário", value: "aquario" },
+              { name: "♓ Peixes", value: "peixes" }
+            )
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("slot")
+        .setDescription("Jogue na máquina caça-níquel!")
     ),
 
   async execute(interaction) {
@@ -369,6 +488,322 @@ module.exports = {
         })]
       });
     }
+
+    // TRIVIA
+    if (sub === "trivia") {
+      const difficulty = interaction.options.getString("dificuldade") || "";
+      const category = interaction.options.getString("categoria") || "";
+
+      await interaction.deferReply();
+
+      try {
+        let url = "https://opentdb.com/api.php?amount=1&type=multiple";
+        if (difficulty) url += `&difficulty=${difficulty}`;
+        if (category) url += `&category=${category}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.response_code !== 0 || !data.results.length) {
+          return interaction.editReply({
+            embeds: [createErrorEmbed("Não foi possível buscar uma pergunta. Tente novamente.")]
+          });
+        }
+
+        const q = data.results[0];
+        const question = decodeHtml(q.question);
+        const correct = decodeHtml(q.correct_answer);
+        const answers = shuffle([correct, ...q.incorrect_answers.map(decodeHtml)]);
+        const correctIndex = answers.indexOf(correct);
+
+        const id = uniqueId();
+        triviaAnswers.set(id, {
+          correctIndex,
+          userId: interaction.user.id,
+          question,
+          answers,
+          timeout: setTimeout(() => triviaAnswers.delete(id), TRIVIA_TIMEOUT_MS)
+        });
+
+        const difficultyEmoji = { easy: "🟢 Fácil", medium: "🟡 Médio", hard: "🔴 Difícil" };
+        const labels = ["A", "B", "C", "D"];
+
+        const row = new ActionRowBuilder().addComponents(
+          answers.map((_, i) =>
+            new ButtonBuilder()
+              .setCustomId(`fun_trivia_${i}_${id}`)
+              .setLabel(labels[i])
+              .setStyle(ButtonStyle.Primary)
+          )
+        );
+
+        const answersText = answers.map((a, i) => `**${labels[i]}.** ${a}`).join("\n");
+
+        await interaction.editReply({
+          embeds: [createEmbed({
+            title: "🧠 Trivia!",
+            description: `**${question}**\n\n${answersText}`,
+            fields: [
+              { name: "📂 Categoria", value: decodeHtml(q.category), inline: true },
+              { name: "📊 Dificuldade", value: difficultyEmoji[q.difficulty] || q.difficulty, inline: true }
+            ],
+            color: 0x3498DB,
+            footer: "Tempo: 60 segundos • Responda clicando nos botões"
+          })],
+          components: [row]
+        });
+      } catch (error) {
+        logger.error({ err: error }, "Erro no comando trivia");
+        await interaction.editReply({
+          embeds: [createErrorEmbed("Erro ao buscar pergunta de trivia. Tente novamente.")]
+        });
+      }
+    }
+
+    // BATALHA
+    if (sub === "batalha") {
+      const battleId = uniqueId();
+      const state = {
+        userId: interaction.user.id,
+        playerHp: 100,
+        botHp: 100,
+        playerLastDefended: false,
+        botLastDefended: false,
+        playerSpecials: 2,
+        botSpecials: 2,
+        turn: 1,
+        timeout: setTimeout(() => activeBattles.delete(battleId), BATTLE_TIMEOUT_MS)
+      };
+
+      activeBattles.set(battleId, state);
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`fun_batalha_atacar_${battleId}`).setLabel("⚔️ Atacar").setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`fun_batalha_defender_${battleId}`).setLabel("🛡️ Defender").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`fun_batalha_especial_${battleId}`).setLabel(`✨ Especial (${state.playerSpecials})`).setStyle(ButtonStyle.Secondary)
+      );
+
+      await interaction.reply({
+        embeds: [createEmbed({
+          title: "⚔️ Batalha contra o Bot!",
+          description: `**Turno ${state.turn}** — Escolha sua ação!\n\n` +
+            `**❤️ Você:** ${hpBar(state.playerHp, 100)}\n` +
+            `**🤖 Bot:** ${hpBar(state.botHp, 100)}\n\n` +
+            `⚔️ **Atacar** — Causa 15-25 de dano\n` +
+            `🛡️ **Defender** — Reduz dano recebido pela metade\n` +
+            `✨ **Especial** — Causa 25-40 de dano, ignora defesa (${state.playerSpecials} usos)`,
+          color: 0xE74C3C
+        })],
+        components: [row]
+      });
+    }
+
+    // HOROSCOPO
+    if (sub === "horoscopo") {
+      const sign = interaction.options.getString("signo");
+
+      const zodiac = {
+        aries: {
+          emoji: "♈", name: "Áries", element: "🔥 Fogo", period: "21/03 - 19/04",
+          planet: "♂️ Marte",
+          traits: ["Corajoso", "Determinado", "Confiante", "Entusiástico", "Otimista", "Honesto"],
+          weaknesses: ["Impaciente", "Temperamental", "Agressivo", "Impulsivo"],
+          compatibility: "Leão, Sagitário, Gêmeos",
+          luckyNumbers: "1, 8, 17", luckyColor: "🔴 Vermelho",
+          description: "Áries é o primeiro signo do zodíaco. Como líder natural, são corajosos e aventureiros, sempre prontos para enfrentar novos desafios com energia e determinação."
+        },
+        touro: {
+          emoji: "♉", name: "Touro", element: "🌍 Terra", period: "20/04 - 20/05",
+          planet: "♀️ Vênus",
+          traits: ["Confiável", "Paciente", "Prático", "Dedicado", "Responsável", "Estável"],
+          weaknesses: ["Teimoso", "Possessivo", "Inflexível", "Materialista"],
+          compatibility: "Virgem, Capricórnio, Câncer",
+          luckyNumbers: "2, 6, 9", luckyColor: "🟢 Verde",
+          description: "Touro é o signo mais confiável do zodíaco. Valorizam estabilidade, conforto e os prazeres da vida. São trabalhadores dedicados com um olho para a beleza."
+        },
+        gemeos: {
+          emoji: "♊", name: "Gêmeos", element: "💨 Ar", period: "21/05 - 20/06",
+          planet: "☿ Mercúrio",
+          traits: ["Adaptável", "Comunicativo", "Curioso", "Versátil", "Inteligente", "Sociável"],
+          weaknesses: ["Nervoso", "Indeciso", "Inconsistente", "Superficial"],
+          compatibility: "Libra, Aquário, Áries",
+          luckyNumbers: "5, 7, 14", luckyColor: "🟡 Amarelo",
+          description: "Gêmeos são as borboletas sociais do zodíaco. Com uma mente rápida e curiosidade insaciável, adoram aprender e compartilhar conhecimento."
+        },
+        cancer: {
+          emoji: "♋", name: "Câncer", element: "💧 Água", period: "21/06 - 22/07",
+          planet: "🌙 Lua",
+          traits: ["Leal", "Emocional", "Protetor", "Intuitivo", "Carinhoso", "Imaginativo"],
+          weaknesses: ["Mal-humorado", "Pessimista", "Desconfiado", "Manipulador"],
+          compatibility: "Escorpião, Peixes, Touro",
+          luckyNumbers: "2, 3, 15", luckyColor: "⚪ Branco",
+          description: "Câncer é o guardião do zodíaco. Profundamente conectados com família e lar, são extremamente leais e protetores com quem amam."
+        },
+        leao: {
+          emoji: "♌", name: "Leão", element: "🔥 Fogo", period: "23/07 - 22/08",
+          planet: "☀️ Sol",
+          traits: ["Criativo", "Generoso", "Caloroso", "Alegre", "Líder", "Dramático"],
+          weaknesses: ["Arrogante", "Teimoso", "Preguiçoso", "Egocêntrico"],
+          compatibility: "Áries, Sagitário, Libra",
+          luckyNumbers: "1, 3, 10", luckyColor: "🟠 Laranja",
+          description: "Leão é o rei do zodíaco. Naturalmente carismáticos e dramáticos, adoram ser o centro das atenções e têm um coração generoso."
+        },
+        virgem: {
+          emoji: "♍", name: "Virgem", element: "🌍 Terra", period: "23/08 - 22/09",
+          planet: "☿ Mercúrio",
+          traits: ["Analítico", "Trabalhador", "Prático", "Detalhista", "Organizado", "Modesto"],
+          weaknesses: ["Tímido", "Preocupado", "Crítico", "Perfeccionista"],
+          compatibility: "Touro, Capricórnio, Câncer",
+          luckyNumbers: "5, 14, 23", luckyColor: "🟤 Marrom",
+          description: "Virgem é o perfeccionista do zodíaco. Com atenção meticulosa aos detalhes, são trabalhadores dedicados que sempre buscam melhorar."
+        },
+        libra: {
+          emoji: "♎", name: "Libra", element: "💨 Ar", period: "23/09 - 22/10",
+          planet: "♀️ Vênus",
+          traits: ["Diplomático", "Justo", "Social", "Cooperativo", "Gracioso", "Harmonioso"],
+          weaknesses: ["Indeciso", "Evita conflitos", "Rancoroso", "Autocomplacente"],
+          compatibility: "Gêmeos, Aquário, Leão",
+          luckyNumbers: "4, 6, 13", luckyColor: "🩷 Rosa",
+          description: "Libra busca equilíbrio e harmonia em tudo. São diplomatas naturais com um senso apurado de justiça e amor pela beleza."
+        },
+        escorpiao: {
+          emoji: "♏", name: "Escorpião", element: "💧 Água", period: "23/10 - 21/11",
+          planet: "♇ Plutão",
+          traits: ["Apaixonado", "Determinado", "Corajoso", "Leal", "Estratégico", "Intenso"],
+          weaknesses: ["Ciumento", "Secreto", "Vingativo", "Desconfiado"],
+          compatibility: "Câncer, Peixes, Virgem",
+          luckyNumbers: "8, 11, 18", luckyColor: "🔴 Escarlate",
+          description: "Escorpião é o mais intenso do zodíaco. Com uma paixão ardente e determinação inabalável, são verdadeiros mestres da transformação."
+        },
+        sagitario: {
+          emoji: "♐", name: "Sagitário", element: "🔥 Fogo", period: "22/11 - 21/12",
+          planet: "♃ Júpiter",
+          traits: ["Otimista", "Aventureiro", "Honesto", "Filosófico", "Livre", "Engraçado"],
+          weaknesses: ["Prometem demais", "Impaciente", "Descuidado", "Direto demais"],
+          compatibility: "Áries, Leão, Aquário",
+          luckyNumbers: "3, 7, 9", luckyColor: "🟣 Roxo",
+          description: "Sagitário é o aventureiro do zodíaco. Com um espírito livre e otimismo contagiante, estão sempre em busca de novas experiências e conhecimento."
+        },
+        capricornio: {
+          emoji: "♑", name: "Capricórnio", element: "🌍 Terra", period: "22/12 - 19/01",
+          planet: "♄ Saturno",
+          traits: ["Responsável", "Disciplinado", "Ambicioso", "Paciente", "Prático", "Sábio"],
+          weaknesses: ["Pessimista", "Teimoso", "Rígido", "Workaholic"],
+          compatibility: "Touro, Virgem, Escorpião",
+          luckyNumbers: "4, 8, 13", luckyColor: "⚫ Preto",
+          description: "Capricórnio é o mais ambicioso do zodíaco. Com disciplina e paciência extraordinárias, constroem seu caminho até o topo com determinação."
+        },
+        aquario: {
+          emoji: "♒", name: "Aquário", element: "💨 Ar", period: "20/01 - 18/02",
+          planet: "♅ Urano",
+          traits: ["Progressivo", "Original", "Independente", "Humanitário", "Inventivo", "Visionário"],
+          weaknesses: ["Distante", "Imprevisível", "Teimoso", "Extremista"],
+          compatibility: "Gêmeos, Libra, Sagitário",
+          luckyNumbers: "4, 7, 11", luckyColor: "🔵 Azul",
+          description: "Aquário é o visionário do zodíaco. Com ideias revolucionárias e espírito humanitário, estão sempre à frente do seu tempo."
+        },
+        peixes: {
+          emoji: "♓", name: "Peixes", element: "💧 Água", period: "19/02 - 20/03",
+          planet: "♆ Netuno",
+          traits: ["Compassivo", "Artístico", "Intuitivo", "Gentil", "Sábio", "Sonhador"],
+          weaknesses: ["Medroso", "Triste demais", "Deseja escapar", "Vítima"],
+          compatibility: "Câncer, Escorpião, Touro",
+          luckyNumbers: "3, 9, 12", luckyColor: "🟢 Verde-água",
+          description: "Peixes é o mais empático do zodíaco. Com uma intuição afiada e alma artística, sentem profundamente e têm uma conexão especial com o mundo espiritual."
+        }
+      };
+
+      const z = zodiac[sign];
+      if (!z) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Signo não encontrado.")],
+          ephemeral: true
+        });
+      }
+
+      const elementColors = {
+        "🔥 Fogo": 0xE74C3C,
+        "🌍 Terra": 0x8B4513,
+        "💨 Ar": 0x87CEEB,
+        "💧 Água": 0x3498DB
+      };
+
+      await interaction.reply({
+        embeds: [createEmbed({
+          title: `${z.emoji} ${z.name}`,
+          description: `*${z.description}*`,
+          fields: [
+            { name: "📅 Período", value: z.period, inline: true },
+            { name: "🌟 Elemento", value: z.element, inline: true },
+            { name: "🪐 Planeta Regente", value: z.planet, inline: true },
+            { name: "💪 Qualidades", value: z.traits.join(", "), inline: false },
+            { name: "⚠️ Fraquezas", value: z.weaknesses.join(", "), inline: false },
+            { name: "💕 Compatibilidade", value: z.compatibility, inline: true },
+            { name: "🔢 Números da Sorte", value: z.luckyNumbers, inline: true },
+            { name: "🎨 Cor da Sorte", value: z.luckyColor, inline: true }
+          ],
+          color: elementColors[z.element] || 0x9B59B6
+        })]
+      });
+    }
+
+    // SLOT
+    if (sub === "slot") {
+      const symbols = ['🍒', '🍋', '🍊', '🍇', '💎', '7️⃣', '🔔', '⭐'];
+      const weights = [25, 20, 20, 15, 5, 3, 7, 5];
+
+      function weightedRandom() {
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
+        let randomWeight = Math.floor(Math.random() * totalWeight);
+        for (let i = 0; i < symbols.length; i++) {
+          randomWeight -= weights[i];
+          if (randomWeight < 0) return symbols[i];
+        }
+        return symbols[0];
+      }
+
+      const reel1 = weightedRandom();
+      const reel2 = weightedRandom();
+      const reel3 = weightedRandom();
+
+      const topRow = [weightedRandom(), weightedRandom(), weightedRandom()];
+      const bottomRow = [weightedRandom(), weightedRandom(), weightedRandom()];
+
+      let result;
+      let color;
+
+      if (reel1 === reel2 && reel2 === reel3) {
+        if (reel1 === '💎') {
+          result = "💰 **JACKPOT DIAMANTE!!!** Você é incrivelmente sortudo!";
+          color = 0xFFD700;
+        } else if (reel1 === '7️⃣') {
+          result = "🎰 **JACKPOT 777!!!** Sorte máxima!";
+          color = 0xFF0000;
+        } else {
+          result = `🎉 **TRIPLE ${reel1}!** Você ganhou!`;
+          color = 0x2ECC71;
+        }
+      } else if (reel1 === reel2 || reel2 === reel3 || reel1 === reel3) {
+        result = "😊 **Par!** Quase lá, tente novamente!";
+        color = 0xF1C40F;
+      } else {
+        result = "😔 **Nada desta vez...** Tente a sorte novamente!";
+        color = 0x95A5A6;
+      }
+
+      const slotDisplay =
+        `⬛ ${topRow[0]} ┃ ${topRow[1]} ┃ ${topRow[2]} ⬛\n` +
+        `▶ ${reel1} ┃ ${reel2} ┃ ${reel3} ◀\n` +
+        `⬛ ${bottomRow[0]} ┃ ${bottomRow[1]} ┃ ${bottomRow[2]} ⬛`;
+
+      await interaction.reply({
+        embeds: [createEmbed({
+          title: "🎰 Caça-Níquel",
+          description: `${slotDisplay}\n\n${result}`,
+          color
+        })]
+      });
+    }
   },
 
   async handleButton(interaction) {
@@ -424,6 +859,228 @@ module.exports = {
           color
         })],
         components: [disabledRow]
+      });
+    }
+
+    // TRIVIA Button Handler
+    if (customId.startsWith("fun_trivia_")) {
+      const parts = customId.split("_");
+      if (parts.length < 4) {
+        logger.warn("Trivia button customId malformado: %s", customId);
+        return;
+      }
+      const answerIndex = parseInt(parts[2]);
+      const triviaId = parts[3];
+
+      const state = triviaAnswers.get(triviaId);
+      if (!state) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Esta pergunta expirou.")],
+          ephemeral: true
+        });
+      }
+
+      if (interaction.user.id !== state.userId) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Apenas quem iniciou o trivia pode responder!")],
+          ephemeral: true
+        });
+      }
+
+      clearTimeout(state.timeout);
+      triviaAnswers.delete(triviaId);
+
+      const correct = answerIndex === state.correctIndex;
+      const labels = ["A", "B", "C", "D"];
+
+      const answersText = state.answers.map((a, i) => {
+        if (i === state.correctIndex) return `✅ **${labels[i]}.** ${a}`;
+        if (i === answerIndex && !correct) return `❌ **${labels[i]}.** ${a}`;
+        return `${labels[i]}. ${a}`;
+      }).join("\n");
+
+      const disabledRow = new ActionRowBuilder().addComponents(
+        labels.map((label, i) =>
+          new ButtonBuilder()
+            .setCustomId(`fun_trivia_${i}_disabled`)
+            .setLabel(label)
+            .setStyle(i === state.correctIndex ? ButtonStyle.Success : (i === answerIndex && !correct ? ButtonStyle.Danger : ButtonStyle.Secondary))
+            .setDisabled(true)
+        )
+      );
+
+      await interaction.update({
+        embeds: [createEmbed({
+          title: correct ? "🧠 Trivia — Correto! 🎉" : "🧠 Trivia — Errado! 😔",
+          description: `**${state.question}**\n\n${answersText}`,
+          color: correct ? 0x2ECC71 : 0xE74C3C,
+          footer: correct ? "Parabéns, você acertou!" : `A resposta correta era ${labels[state.correctIndex]}. ${state.answers[state.correctIndex]}`
+        })],
+        components: [disabledRow]
+      });
+    }
+
+    // BATALHA Button Handler
+    if (customId.startsWith("fun_batalha_")) {
+      const parts = customId.split("_");
+      if (parts.length < 4) {
+        logger.warn("Batalha button customId malformado: %s", customId);
+        return;
+      }
+      const action = parts[2];
+      const battleId = parts[3];
+
+      const state = activeBattles.get(battleId);
+      if (!state) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Esta batalha expirou ou já terminou.")],
+          ephemeral: true
+        });
+      }
+
+      if (interaction.user.id !== state.userId) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Apenas quem iniciou a batalha pode jogar!")],
+          ephemeral: true
+        });
+      }
+
+      if (action === "defender" && state.playerLastDefended) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Você não pode defender duas vezes seguidas!")],
+          ephemeral: true
+        });
+      }
+
+      if (action === "especial" && state.playerSpecials <= 0) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Você não tem mais usos de especial!")],
+          ephemeral: true
+        });
+      }
+
+      // Player action
+      let playerDmg = 0;
+      let playerActionText = "";
+      const playerDefending = action === "defender";
+
+      if (action === "atacar") {
+        playerDmg = rollAttackDamage();
+        playerActionText = `⚔️ Você atacou causando`;
+      } else if (action === "defender") {
+        playerActionText = "🛡️ Você se defendeu";
+      } else if (action === "especial") {
+        playerDmg = rollSpecialDamage();
+        state.playerSpecials--;
+        playerActionText = `✨ Você usou especial causando`;
+      }
+
+      // Bot AI
+      let botAction = "";
+      let botDmg = 0;
+      let botDefending = false;
+
+      const rand = Math.random();
+      const canBotDefend = !state.botLastDefended;
+      const canBotSpecial = state.botSpecials > 0;
+
+      if (canBotDefend && canBotSpecial) {
+        if (rand < 0.50) botAction = "atacar";
+        else if (rand < 0.80) botAction = "defender";
+        else botAction = "especial";
+      } else if (canBotDefend) {
+        botAction = rand < 0.70 ? "atacar" : "defender";
+      } else if (canBotSpecial) {
+        botAction = rand < 0.65 ? "atacar" : "especial";
+      } else {
+        botAction = "atacar";
+      }
+
+      if (botAction === "atacar") {
+        botDmg = rollAttackDamage();
+      } else if (botAction === "defender") {
+        botDefending = true;
+      } else if (botAction === "especial") {
+        botDmg = rollSpecialDamage();
+        state.botSpecials--;
+      }
+
+      // Apply damage — player to bot
+      if (playerDmg > 0) {
+        if (botDefending && action !== "especial") {
+          playerDmg = Math.floor(playerDmg / 2);
+        }
+        state.botHp = Math.max(0, state.botHp - playerDmg);
+        playerActionText += ` **${playerDmg}** de dano`;
+      }
+
+      // Apply damage — bot to player
+      if (botDmg > 0) {
+        if (playerDefending && botAction !== "especial") {
+          botDmg = Math.floor(botDmg / 2);
+        }
+        state.playerHp = Math.max(0, state.playerHp - botDmg);
+      }
+
+      const botActionNames = {
+        atacar: `⚔️ Bot atacou causando **${botDmg}** de dano`,
+        defender: "🛡️ Bot se defendeu",
+        especial: `✨ Bot usou especial causando **${botDmg}** de dano`
+      };
+
+      state.playerLastDefended = playerDefending;
+      state.botLastDefended = botDefending;
+      state.turn++;
+
+      const gameOver = state.playerHp <= 0 || state.botHp <= 0;
+      let resultText = "";
+      let embedColor = 0xE74C3C;
+
+      if (gameOver) {
+        clearTimeout(state.timeout);
+        activeBattles.delete(battleId);
+
+        if (state.playerHp <= 0 && state.botHp <= 0) {
+          resultText = "\n\n🤝 **EMPATE!** Ambos caíram ao mesmo tempo!";
+          embedColor = 0xF1C40F;
+        } else if (state.botHp <= 0) {
+          resultText = "\n\n🎉 **VITÓRIA!** Você derrotou o bot!";
+          embedColor = 0x2ECC71;
+        } else {
+          resultText = "\n\n💀 **DERROTA!** O bot te derrotou!";
+          embedColor = 0xE74C3C;
+        }
+      }
+
+      const battleRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`fun_batalha_atacar_${battleId}`)
+          .setLabel("⚔️ Atacar")
+          .setStyle(ButtonStyle.Danger)
+          .setDisabled(gameOver),
+        new ButtonBuilder()
+          .setCustomId(`fun_batalha_defender_${battleId}`)
+          .setLabel("🛡️ Defender")
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(gameOver || playerDefending),
+        new ButtonBuilder()
+          .setCustomId(`fun_batalha_especial_${battleId}`)
+          .setLabel(`✨ Especial (${state.playerSpecials})`)
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(gameOver || state.playerSpecials <= 0)
+      );
+
+      await interaction.update({
+        embeds: [createEmbed({
+          title: gameOver ? "⚔️ Batalha — Fim!" : `⚔️ Batalha — Turno ${state.turn}`,
+          description:
+            `**❤️ Você:** ${hpBar(state.playerHp, 100)}\n` +
+            `**🤖 Bot:** ${hpBar(state.botHp, 100)}\n\n` +
+            `📋 **Turno ${state.turn - 1}:**\n${playerActionText}\n${botActionNames[botAction]}` +
+            resultText,
+          color: embedColor
+        })],
+        components: [battleRow]
       });
     }
   },
