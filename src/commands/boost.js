@@ -86,16 +86,19 @@ module.exports = {
       const boostId = `${guildId}_${Date.now()}`;
       const expiresAt = new Date(Date.now() + (duration * 60 * 60 * 1000));
       
-      await boostStore.update(boostId, {
-        requesterId: userId,
-        guildId,
-        guildName: interaction.guild.name,
-        guildIcon: interaction.guild.iconURL(),
-        message,
-        duration,
-        status: "active",
-        createdAt: new Date().toISOString(),
-        expiresAt: expiresAt.toISOString()
+      // ✅ CORREÇÃO AQUI: Passando os dados através de uma função de callback
+      await boostStore.update(boostId, (currentData) => {
+        return {
+          requesterId: userId,
+          guildId,
+          guildName: interaction.guild.name,
+          guildIcon: interaction.guild.iconURL(),
+          message,
+          duration,
+          status: "active",
+          createdAt: new Date().toISOString(),
+          expiresAt: expiresAt.toISOString()
+        };
       });
 
       const embed = createSuccessEmbed(
@@ -166,7 +169,7 @@ module.exports = {
                  `⏰ Restante: ${hoursRemaining} horas\n` +
                  `💬 ${boost.message}\n` +
                  `👥 Promovido por: <@${boost.requesterId}>`;
-        }).join("\n"),
+        }).join("\n\n"), // Adicionei um \n extra aqui para ficar com mais espaço entre um servidor e outro
         color: 0x00ff00,
         footer: { text: "WDA - Todos os direitos reservados" }
       });
