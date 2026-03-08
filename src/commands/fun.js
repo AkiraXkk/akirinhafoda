@@ -6,6 +6,22 @@ const { logger } = require("../logger");
 const activeBattles = new Map();
 const triviaAnswers = new Map();
 
+// Constants
+const TRIVIA_TIMEOUT_MS = 60000;
+const BATTLE_TIMEOUT_MS = 180000;
+const ATTACK_DAMAGE_BASE = 15;
+const ATTACK_DAMAGE_RANGE = 11;
+const SPECIAL_DAMAGE_BASE = 25;
+const SPECIAL_DAMAGE_RANGE = 16;
+
+function rollAttackDamage() {
+  return Math.floor(Math.random() * ATTACK_DAMAGE_RANGE) + ATTACK_DAMAGE_BASE;
+}
+
+function rollSpecialDamage() {
+  return Math.floor(Math.random() * SPECIAL_DAMAGE_RANGE) + SPECIAL_DAMAGE_BASE;
+}
+
 // Helper: decode HTML entities from trivia API
 function decodeHtml(text) {
   const entities = {
@@ -30,7 +46,7 @@ function shuffle(arr) {
 
 // Helper: generate unique ID
 function uniqueId() {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+  return Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
 }
 
 // Helper: HP bar for battle
@@ -506,7 +522,7 @@ module.exports = {
           userId: interaction.user.id,
           question,
           answers,
-          timeout: setTimeout(() => triviaAnswers.delete(id), 60000)
+          timeout: setTimeout(() => triviaAnswers.delete(id), TRIVIA_TIMEOUT_MS)
         });
 
         const difficultyEmoji = { easy: "🟢 Fácil", medium: "🟡 Médio", hard: "🔴 Difícil" };
@@ -556,7 +572,7 @@ module.exports = {
         playerSpecials: 2,
         botSpecials: 2,
         turn: 1,
-        timeout: setTimeout(() => activeBattles.delete(battleId), 180000)
+        timeout: setTimeout(() => activeBattles.delete(battleId), BATTLE_TIMEOUT_MS)
       };
 
       activeBattles.set(battleId, state);
@@ -738,10 +754,10 @@ module.exports = {
 
       function weightedRandom() {
         const totalWeight = weights.reduce((a, b) => a + b, 0);
-        let rand = Math.floor(Math.random() * totalWeight);
+        let randomWeight = Math.floor(Math.random() * totalWeight);
         for (let i = 0; i < symbols.length; i++) {
-          rand -= weights[i];
-          if (rand < 0) return symbols[i];
+          randomWeight -= weights[i];
+          if (randomWeight < 0) return symbols[i];
         }
         return symbols[0];
       }
@@ -849,7 +865,10 @@ module.exports = {
     // TRIVIA Button Handler
     if (customId.startsWith("fun_trivia_")) {
       const parts = customId.split("_");
-      if (parts.length < 4) return;
+      if (parts.length < 4) {
+        logger.warn("Trivia button customId malformado: %s", customId);
+        return;
+      }
       const answerIndex = parseInt(parts[2]);
       const triviaId = parts[3];
 
@@ -904,7 +923,10 @@ module.exports = {
     // BATALHA Button Handler
     if (customId.startsWith("fun_batalha_")) {
       const parts = customId.split("_");
-      if (parts.length < 4) return;
+      if (parts.length < 4) {
+        logger.warn("Batalha button customId malformado: %s", customId);
+        return;
+      }
       const action = parts[2];
       const battleId = parts[3];
 
@@ -943,12 +965,12 @@ module.exports = {
       const playerDefending = action === "defender";
 
       if (action === "atacar") {
-        playerDmg = Math.floor(Math.random() * 11) + 15;
+        playerDmg = rollAttackDamage();
         playerActionText = `⚔️ Você atacou causando`;
       } else if (action === "defender") {
         playerActionText = "🛡️ Você se defendeu";
       } else if (action === "especial") {
-        playerDmg = Math.floor(Math.random() * 16) + 25;
+        playerDmg = rollSpecialDamage();
         state.playerSpecials--;
         playerActionText = `✨ Você usou especial causando`;
       }
@@ -975,11 +997,11 @@ module.exports = {
       }
 
       if (botAction === "atacar") {
-        botDmg = Math.floor(Math.random() * 11) + 15;
+        botDmg = rollAttackDamage();
       } else if (botAction === "defender") {
         botDefending = true;
       } else if (botAction === "especial") {
-        botDmg = Math.floor(Math.random() * 16) + 25;
+        botDmg = rollSpecialDamage();
         state.botSpecials--;
       }
 
