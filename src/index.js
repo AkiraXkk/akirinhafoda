@@ -32,6 +32,9 @@ const { createTagRoleManager }    = require("./services/tagRoleManager");
 const { createShopService }       = require("./services/shopService");
 const { createShopExpiryManager } = require("./services/shopExpiryManager");
 
+// 👇 Opcional: Se você ativou o AutoBump das parcerias, descomente a linha abaixo 👇
+// const { createPartnershipNotifier } = require("./services/partnershipNotifier");
+
 function createClient() {
   return new Client({
     intents: [
@@ -40,6 +43,7 @@ function createClient() {
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildVoiceStates,
       GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildPresences, // ✅ INTENT DE LER O STATUS ADICIONADA AQUI
     ],
   });
 }
@@ -72,6 +76,10 @@ async function main() {
     shopService: client.services.shop,
     logger,
   });
+
+  // 👇 Opcional: Iniciar o notificador de parcerias se você estiver usando 👇
+  // client.services.partnershipNotifier = createPartnershipNotifier({ client, logger });
+  // client.services.partnershipNotifier.start();
 
   // ── Sistema VIP ──────────────────────────────────────────────────────────────
   const vipStore = createVipStore({ filePath: config.vip.storePath });
