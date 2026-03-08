@@ -8,7 +8,11 @@ const smuggleCooldowns = new Map();
 const ROB_COOLDOWN = 10 * 60 * 1000;   // 10 minutos
 const CRIME_COOLDOWN = 15 * 60 * 1000; // 15 minutos
 const SMUGGLE_COOLDOWN = 30 * 60 * 1000; // 30 minutos
-const ROB_MIN_BALANCE = 200; // Saldo mínimo para roubar
+const ROB_MIN_BALANCE = 200; // Saldo mínimo do ladrão para roubar
+const ROB_MIN_VICTIM_BALANCE = 50; // Saldo mínimo da vítima
+const ROB_SUCCESS_RATE = 0.45; // 45% de chance de sucesso
+const ROB_MAX_PERCENTAGE = 0.3; // Rouba até 30% do saldo da vítima
+const ROB_ABSOLUTE_MAX = 500; // Máximo absoluto de moedas roubadas
 
 const CRIMES = [
   { name: "Hackear um sistema bancário", reward: [150, 500], risk: 0.45 },
@@ -90,7 +94,7 @@ module.exports = {
       }
 
       const victimBal = await eco.getBalance(guildId, victim.id);
-      if ((victimBal.coins || 0) < 50) {
+      if ((victimBal.coins || 0) < ROB_MIN_VICTIM_BALANCE) {
         return interaction.reply({
           embeds: [createErrorEmbed(`${victim.username} não tem moedas suficientes para roubar.`)],
           ephemeral: true
@@ -99,12 +103,11 @@ module.exports = {
 
       robCooldowns.set(cooldownKey, Date.now());
 
-      // 45% de chance de sucesso
-      const success = Math.random() < 0.45;
+      const success = Math.random() < ROB_SUCCESS_RATE;
 
       if (success) {
-        const maxSteal = Math.min(Math.floor(victimBal.coins * 0.3), 500);
-        const stolen = randomInt(50, Math.max(50, maxSteal));
+        const maxSteal = Math.min(Math.floor(victimBal.coins * ROB_MAX_PERCENTAGE), ROB_ABSOLUTE_MAX);
+        const stolen = randomInt(ROB_MIN_VICTIM_BALANCE, Math.max(ROB_MIN_VICTIM_BALANCE, maxSteal));
 
         await eco.removeCoins(guildId, victim.id, stolen);
         await eco.addCoins(guildId, userId, stolen);
