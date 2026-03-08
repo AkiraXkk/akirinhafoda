@@ -12,29 +12,60 @@ function createTagRoleManager({ client, tagRoleService, targetGuildId, logger } 
     const tags = (cfg.tags || []).map((t) => normalizeText(t)).filter(Boolean);
     if (!tags.length) return false;
 
-    const haystack = [];
-    
-    // 1. Nick do Servidor (Isto já captura automaticamente as Clan Tags / Tags Oficiais de Servidor)
-    if (cfg.includeDisplayName !== false) haystack.push(member?.displayName);
-    
-    // 2. Username original (@nome)
-    if (cfg.includeUsername !== false) haystack.push(user?.username);
-    
-    // 3. Nick Global
-    if (cfg.includeGlobalName !== false) haystack.push(user?.globalName);
+    let points = 0; // Inicia a contagem de identificações
 
-    // 4. Status Personalizado (Link do Discord, Frases, etc)
+    // ==========================================
+    // 1. Verificação no Status Personalizado (Link na Bio)
+    // ==========================================
+    let hasStatus = false;
     if (cfg.includeStatus !== false && member?.presence?.activities) {
         // O "type: 4" representa o "Custom Status" no Discord
         const customStatus = member.presence.activities.find(a => a.type === 4);
         if (customStatus && customStatus.state) {
-            haystack.push(customStatus.state);
+            const statusText = normalizeText(customStatus.state);
+            if (tags.some(t => statusText.includes(t))) {
+                hasStatus = true;
+                points++;
+            }
         }
     }
 
-    // Junta tudo que achamos numa única string de texto e procura a tag/link
-    const text = normalizeText(haystack.filter(Boolean).join(" | "));
-    return tags.some((t) => text.includes(t));
+    // ==========================================
+    // 2. Verificação no Nick Global / Username
+    // ==========================================
+    let hasGlobal = false;
+    const globalText = normalizeText([
+        cfg.includeGlobalName !== false ? user?.globalName : "",
+        cfg.includeUsername !== false ? user?.username : ""
+    ].join(" | "));
+    
+    if (globalText && tags.some(t => globalText.includes(t))) {
+        hasGlobal = true;
+        points++;
+    }
+
+    // ==========================================
+    // 3. Verificação no Nick do Servidor (Tag de Servidor)
+    // ==========================================
+    // O sistema verifica se o nome foi alterado dentro do servidor.
+    // Inclui trava anti-trapaça para não dar 2 pontos se o DisplayName
+    // for apenas um espelho do Global Name.
+    let hasServer = false;
+    if (cfg.includeDisplayName !== false && member?.displayName) {
+        const disp = normalizeText(member.displayName);
+        if (tags.some(t => disp.includes(t))) {
+            const isJustFallback = (disp === normalizeText(user?.globalName) || disp === normalizeText(user?.username));
+            
+            // Só ganha o ponto do servidor se não for apenas o globalName repetido
+            if (!(hasGlobal && isJustFallback)) {
+                hasServer = true;
+                points++;
+            }
+        }
+    }
+
+    // 🔥 EXIGE MATEMATICAMENTE PELO MENOS 2 IDENTIFICAÇÕES 🔥
+    return points >= 2;
   }
 
   async function applyOnce() {
