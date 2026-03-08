@@ -23,7 +23,6 @@ module.exports = {
         .addRoleOption(o => o.setName("prata").setDescription("cargo para 500+ membros").setRequired(true))
         .addRoleOption(o => o.setName("ouro").setDescription("cargo para 1000+ membros").setRequired(true))
     )
-    // 👇 NOVO COMANDO: DEFINE O CARGO DE QUEM RECEBE O AUTOBUMP 👇
     .addSubcommand(sub =>
       sub.setName("boostrole")
         .setDescription("configura o cargo VIP para parceiros com AutoBump")
@@ -33,6 +32,13 @@ module.exports = {
       sub.setName("info")
         .setDescription("consulta os detalhes de uma parceria especifica")
         .addStringOption(o => o.setName("id").setDescription("ID da parceria (ex: PARC12345)").setRequired(true))
+    )
+    // ==========================================
+    // NOVO SUBCOMANDO: LIST (VISÃO DE ADMIN)
+    // ==========================================
+    .addSubcommand(sub =>
+      sub.setName("list")
+        .setDescription("lista TODAS as parcerias ativas do servidor")
     )
     .addSubcommand(sub =>
       sub.setName("clear")
@@ -101,6 +107,40 @@ module.exports = {
       if (data.reason) embed.addFields({ name: "Motivo da Recusa", value: data.reason, inline: false });
 
       return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    // ==========================================
+    // EXECUÇÃO DA NOVA LISTA DE ADMIN
+    // ==========================================
+    if (sub === "list") {
+      await interaction.deferReply({ ephemeral: true });
+
+      const allPartners = await partnersStore.load();
+      const activePartners = Object.values(allPartners).filter(p => p.status === "accepted");
+
+      if (activePartners.length === 0) {
+        return interaction.editReply({ content: "❌ Não há nenhuma parceria ativa no momento." });
+      }
+
+      const embedList = new EmbedBuilder()
+        .setTitle("🤝 Parcerias Ativas (Painel Admin)")
+        .setColor(0x3498db)
+        .setDescription(`Temos um total de **${activePartners.length}** parceria(s) fechada(s) e ativa(s) no banco de dados.`);
+
+      // Exibe até 25 parcerias (limite do Discord para Embed Fields)
+      activePartners.slice(0, 25).forEach(p => {
+        embedList.addFields({
+          name: `🔰 ${p.serverName} (${p.tier || "Bronze"})`,
+          value: `**ID:** \`${p.id}\`\n**Rep:** <@${p.requesterId}>\n**Staff:** <@${p.processedBy}>\n**Link:** [Convite](${p.inviteLink})`,
+          inline: true
+        });
+      });
+
+      if (activePartners.length > 25) {
+        embedList.setFooter({ text: `Mostrando as primeiras 25 de ${activePartners.length} parcerias.` });
+      }
+
+      return interaction.editReply({ embeds: [embedList] });
     }
 
     if (sub === "clear") {
