@@ -1,15 +1,5 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
-
-// Constantes para Velha
-const EMPTY = "⬜";
-const X_EMOJI = "❌";
-const O_EMOJI = "⭕";
-const WIN_CONDITIONS = [
-  [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
-  [0, 3, 6], [1, 4, 7], [2, 5, 8], // columns
-  [0, 4, 8], [2, 4, 6], // diagonals
-];
 
 // Constantes para Roleta
 const CHAMBERS = 6;
@@ -44,53 +34,12 @@ const animals = [
   { id: 25, name: "Vaca", emoji: "🐄" }
 ];
 
-// Funções utilitárias
-function checkWinner(board) {
-  for (const [a, b, c] of WIN_CONDITIONS) {
-    if (board[a] !== EMPTY && board[a] === board[b] && board[b] === board[c]) {
-      return board[a];
-    }
-  }
-  return null;
-}
-
-function isBoardFull(board) {
-  return board.every((cell) => cell !== EMPTY);
-}
-
 function getGroup(number) {
   const lastTwo = number % 100;
   if (lastTwo === 0) return 25;
   return Math.ceil(lastTwo / 4);
 }
 
-function getBoardButtons(board, disabled = false) {
-  const rows = [];
-  for (let row = 0; row < 3; row++) {
-    const actionRow = new ActionRowBuilder();
-    for (let col = 0; col < 3; col++) {
-      const index = row * 3 + col;
-      const cell = board[index];
-      const button = new ButtonBuilder()
-        .setCustomId(`velha_${index}`)
-        .setStyle(
-          cell === X_EMOJI
-            ? ButtonStyle.Danger
-            : cell === O_EMOJI
-            ? ButtonStyle.Success
-            : ButtonStyle.Secondary
-        )
-        .setLabel(cell)
-        .setDisabled(disabled || cell !== EMPTY);
-      actionRow.addComponents(button);
-    }
-    rows.push(actionRow);
-  }
-  return rows;
-}
-
-// Storage para jogos
-const velhaGames = new Map();
 const roletaGames = new Map();
 
 module.exports = {
@@ -128,12 +77,6 @@ module.exports = {
       sub
         .setName("coinflip")
         .setDescription("Joga uma moeda (Cara ou Coroa)")
-    )
-    .addSubcommand((sub) =>
-      sub
-        .setName("velha")
-        .setDescription("Jogue Jogo da Velha contra um amigo")
-        .addUserOption((opt) => opt.setName("oponente").setDescription("Seu oponente").setRequired(true))
     )
     .addSubcommand((sub) =>
       sub
@@ -274,59 +217,6 @@ module.exports = {
       });
     }
 
-    // VELHA
-    if (sub === "velha") {
-      const opponent = interaction.options.getUser("oponente");
-
-      if (opponent.id === interaction.user.id) {
-        return interaction.reply({ 
-          embeds: [createErrorEmbed("Você não pode jogar contra si mesmo!")],
-          ephemeral: true 
-        });
-      }
-
-      if (opponent.bot) {
-        return interaction.reply({ 
-          embeds: [createErrorEmbed("Você não pode jogar contra um bot!")],
-          ephemeral: true 
-        });
-      }
-
-      const gameId = `${interaction.user.id}_${opponent.id}`;
-
-      if (velhaGames.has(gameId)) {
-        return interaction.reply({ 
-          embeds: [createErrorEmbed("Você já tem um jogo em andamento com este usuário!")],
-          ephemeral: true 
-        });
-      }
-
-      const board = Array(9).fill(EMPTY);
-      velhaGames.set(gameId, {
-        board,
-        players: [interaction.user.id, opponent.id],
-        currentPlayer: 0,
-        message: null,
-        guildId: interaction.guildId
-      });
-
-      const embed = createEmbed({
-        title: "🎮 Jogo da Velha",
-        description: `**${interaction.user.username}** ❌ vs **${opponent.username}** ⭕\n\nÉ a vez de **${interaction.user.username}**!`,
-        color: 0x3498db
-      });
-
-      const rows = getBoardButtons(board);
-
-      const message = await interaction.reply({ 
-        embeds: [embed], 
-        components: rows,
-        fetchReply: true 
-      });
-
-      velhaGames.get(gameId).message = message;
-    }
-
     // ROLETA
     if (sub === "roleta") {
       const { economy: eco } = interaction.client.services;
@@ -424,60 +314,6 @@ module.exports = {
   // Handlers para interações de componentes
   async handleButton(interaction) {
     const customId = interaction.customId;
-
-    // Handler para Velha
-    if (customId.startsWith('velha_')) {
-      const index = parseInt(customId.split('_')[1]);
-      const userId = interaction.user.id;
-
-      let game = null;
-      let gameId = null;
-
-      for (const [key, value] of velhaGames.entries()) {
-        if (value.players.includes(userId)) {
-          game = value;
-          gameId = key;
-          break;
-        }
-      }
-
-      if (!game || game.players[game.currentPlayer] !== userId) {
-        return interaction.reply({ content: "Não é sua vez!", ephemeral: true });
-      }
-
-      if (game.board[index] !== EMPTY) {
-        return interaction.reply({ content: "Esta posição já está ocupada!", ephemeral: true });
-      }
-
-      game.board[index] = game.currentPlayer === 0 ? X_EMOJI : O_EMOJI;
-
-      const winner = checkWinner(game.board);
-      const isFull = isBoardFull(game.board);
-
-      if (winner || isFull) {
-        const embed = createEmbed({
-          title: "🎮 Jogo da Velha - Fim!",
-          description: winner 
-            ? `**${winner === X_EMOJI ? interaction.client.users.cache.get(game.players[0])?.username : interaction.client.users.cache.get(game.players[1])?.username}** venceu! 🎉`
-            : "Empate! 🤝",
-          color: winner ? 0x00ff00 : 0xffaa00
-        });
-
-        await interaction.update({ embeds: [embed], components: getBoardButtons(game.board, true) });
-        velhaGames.delete(gameId);
-      } else {
-        game.currentPlayer = 1 - game.currentPlayer;
-        const nextPlayer = interaction.client.users.cache.get(game.players[game.currentPlayer]);
-
-        const embed = createEmbed({
-          title: "🎮 Jogo da Velha",
-          description: `**${interaction.client.users.cache.get(game.players[0])?.username}** ❌ vs **${interaction.client.users.cache.get(game.players[1])?.username}** ⭕\n\nÉ a vez de **${nextPlayer?.username}**!`,
-          color: 0x3498db
-        });
-
-        await interaction.update({ embeds: [embed], components: getBoardButtons(game.board) });
-      }
-    }
 
     // Handler para Roleta
     if (customId.startsWith('roleta_bet_')) {
