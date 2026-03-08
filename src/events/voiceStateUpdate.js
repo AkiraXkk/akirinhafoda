@@ -186,5 +186,5 @@ async function finalizeVoiceSession(userId, session) {
   }
 }
 
-// Iniciar processamento de XP
-setInterval(processVoiceXp, MINUTE_MS);
+// O processamento de XP por voz é gerenciado pelo timer em ready.js (com cleanup adequado).
+// NÃO iniciar outro setInterval aqui para evitar XP duplicado e vazamento de memória.
