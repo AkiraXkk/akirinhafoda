@@ -8,7 +8,6 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("partnerconfig")
     .setDescription("configuracoes administrativas do sistema de parceria")
-    // GARANTE QUE SÓ QUEM GERENCIA O SERVIDOR VEJA O COMANDO
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(sub =>
       sub.setName("set")
@@ -24,6 +23,12 @@ module.exports = {
         .addRoleOption(o => o.setName("prata").setDescription("cargo para 500+ membros").setRequired(true))
         .addRoleOption(o => o.setName("ouro").setDescription("cargo para 1000+ membros").setRequired(true))
     )
+    // 👇 NOVO COMANDO: DEFINE O CARGO DE QUEM RECEBE O AUTOBUMP 👇
+    .addSubcommand(sub =>
+      sub.setName("boostrole")
+        .setDescription("configura o cargo VIP para parceiros com AutoBump")
+        .addRoleOption(o => o.setName("cargo").setDescription("Cargo de Parceiro Boost").setRequired(true))
+    )
     .addSubcommand(sub =>
       sub.setName("info")
         .setDescription("consulta os detalhes de uma parceria especifica")
@@ -38,7 +43,6 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
     const { guildId } = interaction;
     
-    // Carrega a config atual ou cria uma base
     let guildConfig = await getGuildConfig(guildId) || {};
     if (!guildConfig.partnership) guildConfig.partnership = { enabledForAll: false, ranks: {} };
     let pConfig = guildConfig.partnership;
@@ -50,7 +54,7 @@ module.exports = {
 
       if (logChan) pConfig.logChannelId = logChan.id;
       if (active !== null) pConfig.enabledForAll = active;
-      if (staffRole) pConfig.staffPingRoleId = staffRole.id; // Salva para o ping no log
+      if (staffRole) pConfig.staffPingRoleId = staffRole.id; 
 
       await setGuildConfig(guildId, { partnership: pConfig });
       return interaction.reply({ content: "✅ Configurações básicas de parceria atualizadas.", ephemeral: true });
@@ -62,9 +66,14 @@ module.exports = {
         prata: interaction.options.getRole("prata").id,
         ouro: interaction.options.getRole("ouro").id
       };
-
       await setGuildConfig(guildId, { partnership: pConfig });
-      return interaction.reply({ content: "✅ Cargos de Ranking (Bronze, Prata e Ouro) configurados com sucesso.", ephemeral: true });
+      return interaction.reply({ content: "✅ Cargos de Ranking configurados com sucesso.", ephemeral: true });
+    }
+
+    if (sub === "boostrole") {
+      pConfig.boostRole = interaction.options.getRole("cargo").id;
+      await setGuildConfig(guildId, { partnership: pConfig });
+      return interaction.reply({ content: "✅ Cargo VIP de **Parceiro Boost** configurado com sucesso!", ephemeral: true });
     }
 
     if (sub === "info") {
@@ -83,50 +92,30 @@ module.exports = {
           { name: "Membros Reais", value: `${data.memberCount}`, inline: true },
           { name: "Representante", value: `<@${data.requesterId}>`, inline: true },
           { name: "Status", value: data.status.toUpperCase(), inline: true },
+          { name: "AutoBump VIP?", value: data.autoBump ? "✅ Ativo" : "❌ Inativo", inline: true },
           { name: "Link", value: `[Clique aqui](${data.inviteLink})`, inline: true }
         )
         .setFooter({ text: `Solicitado em: ${new Date(data.date).toLocaleDateString('pt-BR')}` });
 
-      if (data.processedBy) {
-        embed.addFields({ name: "Processado por", value: `<@${data.processedBy}>`, inline: false });
-      }
-      
-      if (data.reason) {
-        embed.addFields({ name: "Motivo da Recusa", value: data.reason, inline: false });
-      }
+      if (data.processedBy) embed.addFields({ name: "Processado por", value: `<@${data.processedBy}>`, inline: false });
+      if (data.reason) embed.addFields({ name: "Motivo da Recusa", value: data.reason, inline: false });
 
       return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
     if (sub === "clear") {
       await interaction.deferReply({ ephemeral: true });
-
       const allPartners = await partnersStore.load();
       const keys = Object.keys(allPartners);
+      if (keys.length === 0) return interaction.editReply({ content: "❌ O banco de dados já está vazio!" });
 
-      if (keys.length === 0) {
-        return interaction.editReply({ content: "❌ O banco de dados de parcerias já está vazio!" });
-      }
-
-      // Varre o banco de dados com dupla segurança
       for (const key of keys) {
         try {
-            // 1. Força a mudança de status para que ela suma IMEDIATAMENTE da lista
-            await partnersStore.update(key, (data) => {
-                if (data) data.status = "deleted";
-                return data;
-            });
-            
-            // 2. Tenta deletar fisicamente do banco de dados (se o método existir no seu wrapper)
-            if (typeof partnersStore.delete === 'function') {
-                await partnersStore.delete(key);
-            }
-        } catch (e) {
-            console.error(`Erro ao limpar a chave ${key}:`, e);
-        }
+            await partnersStore.update(key, (data) => { if (data) data.status = "deleted"; return data; });
+            if (typeof partnersStore.delete === 'function') await partnersStore.delete(key);
+        } catch (e) {}
       }
-
-      return interaction.editReply({ content: `✅ Limpeza forçada concluída! **${keys.length}** parcerias foram removidas da lista do servidor.` });
+      return interaction.editReply({ content: `✅ Limpeza forçada concluída! **${keys.length}** parcerias removidas.` });
     }
   }
 };
