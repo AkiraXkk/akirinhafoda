@@ -28,14 +28,17 @@ module.exports = {
             thumbnail: { url: message.author.displayAvatarURL({ dynamic: true }) },
             footer: { text: "Esta mensagem será excluída em 20 segundos • WDA - Todos os direitos reservados" }
           }]
+        }).catch((err) => {
+          logger.warn({ err, channelId: message.channel.id }, "Falha ao enviar mensagem de level up");
+          return null;
         });
 
         // Apagar mensagem após 20 segundos
-        setTimeout(() => {
-          levelUpMessage.delete().catch(() => {
-            // Ignora o erro silenciosamente caso a mensagem já tenha sido apagada
-          });
-        }, 20000);
+        if (levelUpMessage) {
+          setTimeout(() => {
+            levelUpMessage.delete().catch(() => {});
+          }, 20000);
+        }
       }
     } catch (err) {
       logger.error({ err }, "Erro ao processar XP no messageCreate");

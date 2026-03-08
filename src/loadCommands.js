@@ -13,14 +13,19 @@ function loadCommands({ logger } = {}) {
 
   for (const file of commandFiles) {
     const filePath = path.join(commandsPath, file);
-    const command = require(filePath);
+    try {
+      const command = require(filePath);
 
-    if (!command?.data?.name || typeof command.execute !== "function") {
-      throw new Error(`Comando inválido: ${file}`);
+      if (!command?.data?.name || typeof command.execute !== "function") {
+        logger?.warn?.({ file }, "Comando inválido ignorado (sem data.name ou execute)");
+        continue;
+      }
+
+      commands.set(command.data.name, command);
+      commandsJson.push(command.data.toJSON());
+    } catch (err) {
+      logger?.error?.({ err, file }, "Erro ao carregar comando");
     }
-
-    commands.set(command.data.name, command);
-    commandsJson.push(command.data.toJSON());
   }
 
   logger?.info?.({ count: commands.size }, "Comandos carregados");

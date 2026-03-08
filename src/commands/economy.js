@@ -72,8 +72,12 @@ module.exports = {
             return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Você tem apenas **${bal.coins || 0} 🪙**.`)], ephemeral: true });
         }
 
-        await eco.removeCoins(guildId, userId, amount);
-        await eco.addCoins(guildId, target.id, amount);
+        try {
+            await eco.removeCoins(guildId, userId, amount);
+            await eco.addCoins(guildId, target.id, amount);
+        } catch (err) {
+            return interaction.reply({ embeds: [createErrorEmbed("Erro ao processar a transferência. Tente novamente.")], ephemeral: true });
+        }
 
         return interaction.reply({ 
             embeds: [createSuccessEmbed(`💸 Você transferiu **${amount} 🪙** para ${target}.`)] 

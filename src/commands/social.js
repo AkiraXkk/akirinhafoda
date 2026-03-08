@@ -38,7 +38,7 @@ module.exports = {
 
         await interaction.reply({
             embeds: [createEmbed({
-                author: { name: `${interaction.user.username} (@${interaction.user.tag})`, iconURL: interaction.user.displayAvatarURL() },
+                author: { name: `${interaction.user.username} (@${interaction.user.username})`, iconURL: interaction.user.displayAvatarURL() },
                 description: message,
                 color: 0x1DA1F2, // Twitter Blue
                 footer: { text: "Twitter for Discord", iconURL: "https://abs.twimg.com/icons/apple-touch-icon-192x192.png" },

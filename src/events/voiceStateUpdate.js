@@ -11,8 +11,8 @@ module.exports = {
     // Armazenar referência do client para uso posterior
     if (!clientInstance) clientInstance = client;
     
-    // Ignorar bots
-    if (newState.member?.user?.bot) return;
+    // Ignorar bots e membros nulos
+    if (!newState.member || newState.member.user?.bot) return;
 
     const userId = newState.member.id;
     const guildId = newState.guild.id;

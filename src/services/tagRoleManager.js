@@ -80,8 +80,8 @@ function createTagRoleManager({ client, tagRoleService, targetGuildId, logger } 
 
     if (timer) clearInterval(timer);
     
-    applyOnce().catch(() => {});
-    timer = setInterval(() => applyOnce().catch(() => {}), intervalMs);
+    applyOnce().catch((err) => log.warn({ err }, "TagRole initial apply failed"));
+    timer = setInterval(() => applyOnce().catch((err) => log.warn({ err }, "TagRole periodic apply failed")), intervalMs);
     
     log.info({ guildId, intervalHours }, "TagRole manager started");
   }
