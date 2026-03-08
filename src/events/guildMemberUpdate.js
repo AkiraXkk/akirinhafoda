@@ -42,9 +42,11 @@ module.exports = {
           }
         }
 
-        const entry = vip.getVip(newMember.id);
+        const entry = vip.getVip(newMember.guild.id, newMember.id);
         if (entry) {
-          await vip.removeVip(newMember.id).catch(() => {});
+          await vip.removeVip(newMember.guild.id, newMember.id).catch((err) => {
+            logger.error({ err, userId: newMember.id, guildId: newMember.guild.id }, "Erro ao remover VIP no GuildMemberUpdate");
+          });
         }
 
         if (entry?.tierId) {

@@ -28,7 +28,7 @@ function createEmbed({
   if (footer) {
       embed.setFooter(typeof footer === "string" ? { text: footer } : footer);
   } else if (user) {
-      embed.setFooter({ text: `${user.tag} • ${DEFAULT_FOOTER_TEXT}`, iconURL: user.displayAvatarURL() });
+      embed.setFooter({ text: `${user.username} • ${DEFAULT_FOOTER_TEXT}`, iconURL: user.displayAvatarURL?.() || undefined });
   } else {
       embed.setFooter({ text: DEFAULT_FOOTER_TEXT });
   }

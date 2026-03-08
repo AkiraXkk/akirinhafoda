@@ -109,9 +109,11 @@ async function main() {
   client.services.vipExpiry.start();
 
   // ── Eventos e inicialização ───────────────────────────────────────────────────
-  loadEvents(client);
+  loadEvents(client, { logger });
 
-  await client.services.tagRoleManager.start().catch(() => {});
+  await client.services.tagRoleManager.start().catch((err) => {
+    logger.warn({ err }, "TagRole manager falhou ao iniciar");
+  });
   client.services.shopExpiry?.start?.();
 
   process.on("unhandledRejection", (reason) => {

@@ -2,11 +2,12 @@ const fs = require('fs');
 const path = require('path');
 
 const commands = [
-  'ajuda', 'bicho', 'blackjack', 'boost', 'botadmin', 'config', 'dama', 
-  'economy', 'enquete', 'family', 'fun', 'leaderboard', 'leveladmin', 
-  'levels', 'logs', 'moderation', 'partnership', 'ping', 'presence', 
-  'resetconfig', 'roleta', 'sejawda', 'setupcards', 'shop', 'shopadmin', 
-  'social', 'tagroleadmin', 'ticket', 'utility', 'velha', 'verify', 'vip', 
+  'ajuda', 'bicho', 'blackjack', 'boost', 'botadmin', 'config', 'configsugestao',
+  'dama', 'devil', 'economy', 'enquete', 'family', 'fun', 'jogar', 'leaderboard',
+  'leveladmin', 'levels', 'logs', 'maintenance', 'moderation', 'partnerconfig',
+  'partnership', 'ping', 'presence', 'rankcheck', 'resetconfig', 'roleta',
+  'sejawda', 'serverbpost', 'setupcards', 'shop', 'shopadmin', 'social',
+  'sugerir', 'tagroleadmin', 'ticket', 'utility', 'velha', 'verify', 'vip',
   'vipadmin', 'vipbuy', 'vipservice', 'welcome'
 ];
 

@@ -7,6 +7,7 @@ const { createDataStore } = require("../store/dataStore");
 const maintenanceStore = createDataStore("maintenance.json");
 
 let voiceXpTimer = null;
+let voiceXpProcessing = false;
 
 function stopVoiceXpTimer() {
   if (voiceXpTimer) {
@@ -20,14 +21,16 @@ module.exports = {
   name: Events.ClientReady,
   once: true,
   async execute(readyClient, client) {
-    logger.info({ user: readyClient.user.tag }, "Bot online");
+    logger.info({ user: readyClient.user.username }, "Bot online");
 
     // --- 1. GESTÃO DE PRESENÇA ---
     const presenceService = client?.services?.presence;
     if (presenceService) {
       // Aplica o status salvo anteriormente
       if (presenceService.applyPresence) {
-        presenceService.applyPresence(readyClient).catch(() => {});
+      presenceService.applyPresence(readyClient).catch((err) => {
+          logger.warn({ err }, "Falha ao aplicar presença salva");
+        });
       }
       // Inicia a rotação aleatória de frases, se configurada
       if (presenceService.startRotation) {
@@ -64,9 +67,12 @@ module.exports = {
     // --- 4. SISTEMA DE XP POR VOZ (Original) ---
     stopVoiceXpTimer();
     voiceXpTimer = setInterval(async () => {
+        if (voiceXpProcessing) return;
+        voiceXpProcessing = true;
+
         const levelsCommand = client.commands.get("rank");
         const economyService = client.services?.economy;
-        if (!levelsCommand || !economyService) return;
+        if (!levelsCommand || !economyService) { voiceXpProcessing = false; return; }
 
         try {
             for (const guild of client.guilds.cache.values()) {
@@ -87,6 +93,8 @@ module.exports = {
             }
         } catch (e) {
             logger.error({ err: e }, "Erro no Voice XP");
+        } finally {
+            voiceXpProcessing = false;
         }
     }, 60000);
 

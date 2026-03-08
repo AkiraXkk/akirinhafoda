@@ -9,11 +9,19 @@ function createVipConfigManager() {
   if (!fs.existsSync(configPath)) fs.writeFileSync(configPath, JSON.stringify({}));
 
   function getConfigs() {
-    return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    try {
+      return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } catch (err) {
+      return {};
+    }
   }
 
   function saveConfigs(data) {
-    fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
+    try {
+      fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
+    } catch (err) {
+      console.error("Erro ao salvar vipConfigs:", err);
+    }
   }
 
   return {

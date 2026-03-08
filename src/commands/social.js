@@ -1,6 +1,10 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require("discord.js");
 const { createEmbed } = require("../embeds");
 
+// Rastreia quais usuários já curtiram cada post: Map<messageId, Set<userId>>
+const likedByUsers = new Map();
+const MAX_TRACKED_POSTS = 500;
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("social")
@@ -34,7 +38,7 @@ module.exports = {
 
         await interaction.reply({
             embeds: [createEmbed({
-                author: { name: `${interaction.user.username} (@${interaction.user.tag})`, iconURL: interaction.user.displayAvatarURL() },
+                author: { name: `${interaction.user.username} (@${interaction.user.username})`, iconURL: interaction.user.displayAvatarURL() },
                 description: message,
                 color: 0x1DA1F2, // Twitter Blue
                 footer: { text: "Twitter for Discord", iconURL: "https://abs.twimg.com/icons/apple-touch-icon-192x192.png" },
@@ -107,23 +111,44 @@ module.exports = {
     if (customId === 'social_insta_like' || customId === 'insta_like') {
         const message = interaction.message;
         const embed = message.embeds[0];
+        const messageId = message.id;
+        const userId = interaction.user.id;
 
+        // Inicializa o Set de likes para esta mensagem se não existir
+        if (!likedByUsers.has(messageId)) {
+            // Limpa entradas antigas se exceder o limite
+            if (likedByUsers.size >= MAX_TRACKED_POSTS) {
+                const oldestKey = likedByUsers.keys().next().value;
+                likedByUsers.delete(oldestKey);
+            }
+            likedByUsers.set(messageId, new Set());
+        }
+
+        const likedUsers = likedByUsers.get(messageId);
+
+        // Toggle: se já curtiu, descurte; se não, curte
         let currentLikes = 0;
         if (embed.footer && embed.footer.text) {
-            const match = embed.footer.text.match(/❤️ (\d+) curtidas/);
+            const match = embed.footer.text.match(/❤️ (\d+) curtidas?/);
             if (match) {
                 currentLikes = parseInt(match[1]);
             }
         }
 
-        currentLikes++;
+        if (likedUsers.has(userId)) {
+            likedUsers.delete(userId);
+            currentLikes = Math.max(0, currentLikes - 1);
+        } else {
+            likedUsers.add(userId);
+            currentLikes++;
+        }
 
         const newEmbed = createEmbed({
             author: embed.author,
             description: embed.description,
             image: embed.image?.url,
             color: embed.color,
-            footer: { text: `Instagram • ❤️ ${currentLikes} curtidas`, iconURL: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Instagram_logo_2016.svg/2048px-Instagram_logo_2016.svg.png" }
+            footer: { text: `Instagram • ❤️ ${currentLikes} curtida${currentLikes !== 1 ? 's' : ''}`, iconURL: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Instagram_logo_2016.svg/2048px-Instagram_logo_2016.svg.png" }
         });
 
         await interaction.update({ embeds: [newEmbed] });

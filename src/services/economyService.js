@@ -126,7 +126,90 @@ function createEconomyService() {
     return await daily({ guildId, userId }, amount);
   }
 
-  return { getBalance, addCoins, removeCoins, transfer, work, daily, claimDaily, buildKey };
+  async function depositToBank(guildId, userId, amount) {
+    const key = buildKey(guildId, userId);
+    if (!key) return { success: false };
+    let success = false;
+    await store.update(key, (current) => {
+      const data = current || { coins: 0, bank: 0 };
+      if ((data.coins || 0) < amount) {
+        success = false;
+        return data;
+      }
+      data.coins -= amount;
+      data.bank = (data.bank || 0) + amount;
+      success = true;
+      return data;
+    });
+    return { success };
+  }
+
+  async function withdrawFromBank(guildId, userId, amount) {
+    const key = buildKey(guildId, userId);
+    if (!key) return { success: false };
+    let success = false;
+    await store.update(key, (current) => {
+      const data = current || { coins: 0, bank: 0 };
+      if ((data.bank || 0) < amount) {
+        success = false;
+        return data;
+      }
+      data.bank -= amount;
+      data.coins = (data.coins || 0) + amount;
+      success = true;
+      return data;
+    });
+    return { success };
+  }
+
+  async function hourly(guildId, userId, amount) {
+    const key = buildKey(guildId, userId);
+    if (!key) return { success: false };
+    let success = false;
+    let nextHourly = 0;
+    await store.update(key, (current) => {
+      const data = current || { coins: 0, bank: 0 };
+      const now = Date.now();
+      const cooldown = 60 * 60 * 1000; // 1 hora
+      if (data.lastHourly && now - data.lastHourly < cooldown) {
+        success = false;
+        nextHourly = data.lastHourly + cooldown;
+        return data;
+      }
+      data.coins = (data.coins || 0) + amount;
+      data.lastHourly = now;
+      success = true;
+      return data;
+    });
+    return { success, nextHourly };
+  }
+
+  async function weekly(guildId, userId, amount) {
+    const key = buildKey(guildId, userId);
+    if (!key) return { success: false };
+    let success = false;
+    let nextWeekly = 0;
+    await store.update(key, (current) => {
+      const data = current || { coins: 0, bank: 0 };
+      const now = Date.now();
+      const cooldown = 7 * 24 * 60 * 60 * 1000; // 7 dias
+      if (data.lastWeekly && now - data.lastWeekly < cooldown) {
+        success = false;
+        nextWeekly = data.lastWeekly + cooldown;
+        return data;
+      }
+      data.coins = (data.coins || 0) + amount;
+      data.lastWeekly = now;
+      success = true;
+      return data;
+    });
+    return { success, nextWeekly };
+  }
+
+  return {
+    getBalance, addCoins, removeCoins, transfer, work, daily, claimDaily,
+    depositToBank, withdrawFromBank, hourly, weekly, buildKey
+  };
 }
 
 module.exports = { createEconomyService };

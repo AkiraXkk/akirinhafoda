@@ -4,6 +4,15 @@ const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds
 const SUITS = ["♠", "♥", "♦", "♣"];
 const VALUES = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
 const QUICK_BETS = [100, 500, 1000];
+const FOOTER_TEXT = "WDA - Todos os direitos reservados";
+
+function shuffleDeck(deck) {
+    for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
+    return deck;
+}
 
 function createDeck() {
     let deck = [];
@@ -15,7 +24,7 @@ function createDeck() {
             deck.push({ value, suit, weight });
         }
     }
-    return deck.sort(() => Math.random() - 0.5);
+    return shuffleDeck(deck);
 }
 
 function calculateScore(hand) {
@@ -73,7 +82,7 @@ module.exports = {
                 { name: "💸 Pagamentos", value: "Vitória: **2x**\nBlackjack natural: **2.5x**\nEmpate: **aposta devolvida**", inline: true },
                 { name: "🎮 Como jogar", value: "Use aposta rápida, aposta personalizada ou `/blackjack aposta:valor`", inline: true }
             ],
-            footer: { text: "WDA - Todos os direitos reservados" }
+            footer: { text: FOOTER_TEXT }
         });
 
         const rowMain = new ActionRowBuilder().addComponents(
@@ -211,7 +220,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
                         ],
                         color: 0xf1c40f,
                         thumbnail: "https://cdn-icons-png.flaticon.com/512/6556/6556073.png",
-                        footer: { text: "WDA - Todos os direitos reservados" }
+                        footer: { text: FOOTER_TEXT }
                     })],
                     components: []
                 });
@@ -229,7 +238,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
                 ],
                 color: 0xf1c40f,
                 thumbnail: "https://cdn-icons-png.flaticon.com/512/6556/6556073.png",
-                footer: { text: "WDA - Todos os direitos reservados" }
+                footer: { text: FOOTER_TEXT }
             });
 
             return interaction.editReply({ content: null, embeds: [embedBJ], components: [] });
@@ -268,8 +277,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
                 }
             ],
             thumbnail: isGameOver ? "https://media1.tenor.com/m/Xf7Lp9-3uKAAAAAC/kakegurui-yumeko-jabami.gif" : "https://cdn-icons-png.flaticon.com/512/10603/10603460.png",
-            footer: isGameOver ? { text: "Jogo encerrado" } : { text: "Sua vez! Escolha uma ação:" },
-            footer: { text: "WDA - Todos os direitos reservados" }
+            footer: isGameOver ? { text: `Jogo encerrado • ${FOOTER_TEXT}` } : { text: `Sua vez! Escolha uma ação: • ${FOOTER_TEXT}` }
         });
         return embed;
     };
@@ -308,6 +316,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
         try {
         // --- HIT ---
         if (i.customId === 'bj_hit') {
+            if (deck.length === 0) deck = createDeck();
             playerHand.push(deck.pop());
             playerScore = calculateScore(playerHand);
 
@@ -337,6 +346,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
             bet *= 2;
             isDoubled = true;
 
+            if (deck.length === 0) deck = createDeck();
             playerHand.push(deck.pop());
             playerScore = calculateScore(playerHand);
 
@@ -370,6 +380,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
 
     async function dealerTurn(i) {
         while (calculateScore(dealerHand) < 17) {
+            if (deck.length === 0) deck = createDeck();
             dealerHand.push(deck.pop());
         }
         dealerScore = calculateScore(dealerHand);

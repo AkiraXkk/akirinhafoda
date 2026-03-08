@@ -16,7 +16,7 @@ module.exports = {
         const vipData = await vipService.getVipData(guildId, userId);
         
         if (vipData && vipData.tierId) {
-          logger.info({ userId, guildId, userTag: member.user.tag }, "VIP deixou o servidor - iniciando cleanup");
+          logger.info({ userId, guildId, username: member.user.username }, "VIP deixou o servidor - iniciando cleanup");
 
           // Remove Cargo Personalizado
           if (vipRoleManager) {

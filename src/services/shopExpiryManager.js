@@ -48,8 +48,8 @@ function createShopExpiryManager({ client, shopService, logger } = {}) {
   }
 
   function start({ intervalMs = 5 * 60 * 1000 } = {}) {
-    runOnce().catch(() => {});
-    setInterval(() => runOnce().catch(() => {}), intervalMs);
+    runOnce().catch((err) => logger.warn({ err }, "Shop expiry initial run failed"));
+    setInterval(() => runOnce().catch((err) => logger.warn({ err }, "Shop expiry periodic run failed")), intervalMs);
   }
 
   return { start, runOnce };

@@ -65,10 +65,10 @@ module.exports = {
         if (logService) {
           await logService.log(interaction.guild, {
             title: "🧹 Mensagens Apagadas",
-            description: `**${interaction.user.tag}** apagou **${deleted.size}** mensagens em **${interaction.channel.name}**.`,
+            description: `**${interaction.user.username}** apagou **${deleted.size}** mensagens em **${interaction.channel.name}**.`,
             color: 0x3498db,
             fields: [
-              { name: "👤 Moderador", value: interaction.user.tag, inline: true },
+              { name: "👤 Moderador", value: interaction.user.username, inline: true },
               { name: "💬 Canal", value: interaction.channel.name, inline: true },
               { name: "📊 Quantidade", value: `${deleted.size} mensagens`, inline: true }
             ],
@@ -110,11 +110,11 @@ module.exports = {
         if (logService) {
           await logService.log(interaction.guild, {
             title: "🔨 Usuário Banido",
-            description: `**${user.tag}** foi banido por **${interaction.user.tag}**.`,
+            description: `**${user.username}** foi banido por **${interaction.user.username}**.`,
             color: 0xFF0000,
             fields: [
-              { name: "👤 Moderador", value: interaction.user.tag, inline: true },
-              { name: "👤 Usuário", value: user.tag, inline: true },
+              { name: "👤 Moderador", value: interaction.user.username, inline: true },
+              { name: "👤 Usuário", value: user.username, inline: true },
               { name: "📝 Motivo", value: reason, inline: false }
             ],
             user: interaction.user
@@ -124,7 +124,7 @@ module.exports = {
         await interaction.editReply({ 
             embeds: [createEmbed({
                 title: "🔨 Usuário Banido",
-                description: `**${user.tag}** foi banido com sucesso.`,
+                description: `**${user.username}** foi banido com sucesso.`,
                 fields: [{ name: "Motivo", value: reason }],
                 color: 0xFF0000 // Red
             })] 
@@ -160,11 +160,11 @@ module.exports = {
         if (logService) {
           await logService.log(interaction.guild, {
             title: "🦶 Usuário Expulso",
-            description: `**${user.tag}** foi expulso por **${interaction.user.tag}**.`,
+            description: `**${user.username}** foi expulso por **${interaction.user.username}**.`,
             color: 0xFFA500,
             fields: [
-              { name: "👤 Moderador", value: interaction.user.tag, inline: true },
-              { name: "👤 Usuário", value: user.tag, inline: true },
+              { name: "👤 Moderador", value: interaction.user.username, inline: true },
+              { name: "👤 Usuário", value: user.username, inline: true },
               { name: "📝 Motivo", value: reason, inline: false }
             ],
             user: interaction.user
@@ -174,7 +174,7 @@ module.exports = {
         await interaction.editReply({ 
             embeds: [createEmbed({
                 title: "🦶 Usuário Expulso",
-                description: `**${user.tag}** foi expulso com sucesso.`,
+                description: `**${user.username}** foi expulso com sucesso.`,
                 fields: [{ name: "Motivo", value: reason }],
                 color: 0xFFA500 // Orange
             })] 
@@ -193,11 +193,11 @@ module.exports = {
       await interaction.deferReply();
       try {
         await interaction.channel.permissionOverwrites.edit(interaction.guild.id, {
-          [PermissionFlagsBits.SendMessages]: false
+          SendMessages: false
         });
-        await interaction.editReply({ embeds: [createSuccessEmbed("O canal foi trancado.")] });
+        await interaction.editReply({ embeds: [createSuccessEmbed("🔒 O canal foi trancado.")] });
       } catch (error) {
-        await interaction.editReply({ embeds: [createErrorEmbed("Erro ao trancar o canal.")] });
+        await interaction.editReply({ embeds: [createErrorEmbed("Erro ao trancar o canal. Verifique minhas permissões.")] });
       }
     }
 
@@ -210,11 +210,11 @@ module.exports = {
       await interaction.deferReply();
       try {
         await interaction.channel.permissionOverwrites.edit(interaction.guild.id, {
-          [PermissionFlagsBits.SendMessages]: true
+          SendMessages: null
         });
-        await interaction.editReply({ embeds: [createSuccessEmbed("O canal foi destrancado.")] });
+        await interaction.editReply({ embeds: [createSuccessEmbed("🔓 O canal foi destrancado.")] });
       } catch (error) {
-        await interaction.editReply({ embeds: [createErrorEmbed("Erro ao destrancar o canal.")] });
+        await interaction.editReply({ embeds: [createErrorEmbed("Erro ao destrancar o canal. Verifique minhas permissões.")] });
       }
     }
   },

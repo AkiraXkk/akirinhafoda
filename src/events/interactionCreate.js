@@ -1,4 +1,5 @@
 const { Events } = require("discord.js");
+const { logger } = require("../logger");
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -7,11 +8,20 @@ module.exports = {
     // 1. COMANDOS SLASH
     if (interaction.isChatInputCommand()) {
       const command = client.commands.get(interaction.commandName);
-      if (!command) return;
+      if (!command) {
+        logger.warn({ commandName: interaction.commandName }, "Comando slash não encontrado");
+        return;
+      }
       try {
         await command.execute(interaction);
       } catch (error) {
-        console.error(`Erro no comando /${interaction.commandName}:`, error);
+        logger.error({ err: error, command: interaction.commandName }, "Erro no comando slash");
+        const errorPayload = { content: "Ocorreu um erro ao executar este comando.", ephemeral: true };
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(errorPayload).catch(() => {});
+        } else {
+          await interaction.reply(errorPayload).catch(() => {});
+        }
       }
       return;
     }
@@ -36,7 +46,7 @@ module.exports = {
 
       const command = client.commands.get(commandName);
       if (!command) {
-        console.log(`[InteractionCreate] Comando de interação não encontrado para: ${commandName} (Custom ID: ${customId})`);
+        logger.debug({ commandName, customId }, "Comando de interação não encontrado");
         return;
       }
 
@@ -72,10 +82,10 @@ module.exports = {
         } catch (e) {
           // Se der erro 10062 (Unknown Interaction), o Discord demorou a responder
           if (e.code === 10062) return;
-          console.error(`Erro no ${handlerName} do comando ${commandName}:`, e);
+          logger.error({ err: e, handler: handlerName, command: commandName }, "Erro no handler de interação");
         }
       } else {
-        console.log(`[InteractionCreate] O arquivo ${commandName}.js não possui a função ${handlerName}()`);
+        logger.debug({ commandName, handlerName }, "Handler não encontrado no comando");
       }
     }
   },

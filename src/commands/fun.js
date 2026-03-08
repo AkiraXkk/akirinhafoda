@@ -1,97 +1,60 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
+const { logger } = require("../logger");
 
-// Constantes para Velha
-const EMPTY = "⬜";
-const X_EMOJI = "❌";
-const O_EMOJI = "⭕";
-const WIN_CONDITIONS = [
-  [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
-  [0, 3, 6], [1, 4, 7], [2, 5, 8], // columns
-  [0, 4, 8], [2, 4, 6], // diagonals
-];
+// State management for interactive commands
+const activeBattles = new Map();
+const triviaAnswers = new Map();
 
-// Constantes para Roleta
-const CHAMBERS = 6;
-const QUICK_BETS = [100, 500, 1000];
+// Constants
+const TRIVIA_TIMEOUT_MS = 60000;
+const BATTLE_TIMEOUT_MS = 180000;
+const ATTACK_DAMAGE_BASE = 15;
+const ATTACK_DAMAGE_RANGE = 11;
+const SPECIAL_DAMAGE_BASE = 25;
+const SPECIAL_DAMAGE_RANGE = 16;
 
-// Animais para Bicho
-const animals = [
-  { id: 1, name: "Avestruz", emoji: "🐦" },
-  { id: 2, name: "Águia", emoji: "🦅" },
-  { id: 3, name: "Burro", emoji: "🐴" },
-  { id: 4, name: "Borboleta", emoji: "🦋" },
-  { id: 5, name: "Cachorro", emoji: "🐕" },
-  { id: 6, name: "Cabra", emoji: "🐐" },
-  { id: 7, name: "Carneiro", emoji: "🐑" },
-  { id: 8, name: "Camelo", emoji: "🐫" },
-  { id: 9, name: "Cobra", emoji: "🐍" },
-  { id: 10, name: "Coelho", emoji: "🐇" },
-  { id: 11, name: "Cavalo", emoji: "🐎" },
-  { id: 12, name: "Elefante", emoji: "🐘" },
-  { id: 13, name: "Galo", emoji: "🐓" },
-  { id: 14, name: "Gato", emoji: "🐈" },
-  { id: 15, name: "Jacaré", emoji: "🐊" },
-  { id: 16, name: "Leão", emoji: "🦁" },
-  { id: 17, name: "Macaco", emoji: "🐒" },
-  { id: 18, name: "Porco", emoji: "🐖" },
-  { id: 19, name: "Pavão", emoji: "🦚" },
-  { id: 20, name: "Peru", emoji: "🦃" },
-  { id: 21, name: "Touro", emoji: "🐂" },
-  { id: 22, name: "Tigre", emoji: "🐅" },
-  { id: 23, name: "Urso", emoji: "🐻" },
-  { id: 24, name: "Veado", emoji: "🦌" },
-  { id: 25, name: "Vaca", emoji: "🐄" }
-];
+function rollAttackDamage() {
+  return Math.floor(Math.random() * ATTACK_DAMAGE_RANGE) + ATTACK_DAMAGE_BASE;
+}
 
-// Funções utilitárias
-function checkWinner(board) {
-  for (const [a, b, c] of WIN_CONDITIONS) {
-    if (board[a] !== EMPTY && board[a] === board[b] && board[b] === board[c]) {
-      return board[a];
-    }
+function rollSpecialDamage() {
+  return Math.floor(Math.random() * SPECIAL_DAMAGE_RANGE) + SPECIAL_DAMAGE_BASE;
+}
+
+// Helper: decode HTML entities from trivia API
+function decodeHtml(text) {
+  const entities = {
+    '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"',
+    '&#039;': "'", '&apos;': "'", '&laquo;': '«', '&raquo;': '»',
+    '&ndash;': '–', '&mdash;': '—', '&hellip;': '…',
+    '&eacute;': 'é', '&Eacute;': 'É', '&ntilde;': 'ñ',
+    '&oacute;': 'ó', '&uuml;': 'ü', '&iacute;': 'í'
+  };
+  return text.replace(/&[#\w]+;/g, match => entities[match] || match);
+}
+
+// Helper: shuffle array (Fisher-Yates)
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
   }
-  return null;
+  return a;
 }
 
-function isBoardFull(board) {
-  return board.every((cell) => cell !== EMPTY);
+// Helper: generate unique ID
+function uniqueId() {
+  return Date.now().toString(36) + Math.random().toString(36).substring(2, 7);
 }
 
-function getGroup(number) {
-  const lastTwo = number % 100;
-  if (lastTwo === 0) return 25;
-  return Math.ceil(lastTwo / 4);
+// Helper: HP bar for battle
+function hpBar(current, max) {
+  const pct = Math.max(0, current) / max;
+  const filled = Math.round(pct * 10);
+  return '🟩'.repeat(filled) + '⬛'.repeat(10 - filled) + ` ${Math.max(0, current)}/${max}`;
 }
-
-function getBoardButtons(board, disabled = false) {
-  const rows = [];
-  for (let row = 0; row < 3; row++) {
-    const actionRow = new ActionRowBuilder();
-    for (let col = 0; col < 3; col++) {
-      const index = row * 3 + col;
-      const cell = board[index];
-      const button = new ButtonBuilder()
-        .setCustomId(`velha_${index}`)
-        .setStyle(
-          cell === X_EMOJI
-            ? ButtonStyle.Danger
-            : cell === O_EMOJI
-            ? ButtonStyle.Success
-            : ButtonStyle.Secondary
-        )
-        .setLabel(cell)
-        .setDisabled(disabled || cell !== EMPTY);
-      actionRow.addComponents(button);
-    }
-    rows.push(actionRow);
-  }
-  return rows;
-}
-
-// Storage para jogos
-const velhaGames = new Map();
-const roletaGames = new Map();
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -131,26 +94,102 @@ module.exports = {
     )
     .addSubcommand((sub) =>
       sub
-        .setName("velha")
-        .setDescription("Jogue Jogo da Velha contra um amigo")
-        .addUserOption((opt) => opt.setName("oponente").setDescription("Seu oponente").setRequired(true))
-    )
-    .addSubcommand((sub) =>
-      sub
-        .setName("roleta")
-        .setDescription("Jogue Roleta Russa e aposte suas moedas!")
-        .addIntegerOption((opt) =>
-          opt
-            .setName("aposta")
-            .setDescription("Valor da aposta para iniciar direto")
-            .setMinValue(1)
-            .setRequired(false)
+        .setName("pokemon")
+        .setDescription("Busca informações de um Pokémon")
+        .addStringOption((opt) =>
+          opt.setName("nome").setDescription("Nome ou número do Pokémon").setRequired(true)
         )
     )
     .addSubcommand((sub) =>
       sub
-        .setName("bicho")
-        .setDescription("Aposte no Jogo do Bicho!")
+        .setName("rps")
+        .setDescription("Jogue Pedra, Papel ou Tesoura contra o bot!")
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("ship")
+        .setDescription("Descubra a compatibilidade entre dois usuários")
+        .addUserOption((opt) =>
+          opt.setName("usuario1").setDescription("Primeiro usuário").setRequired(true)
+        )
+        .addUserOption((opt) =>
+          opt.setName("usuario2").setDescription("Segundo usuário").setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("dado")
+        .setDescription("Rola um dado com lados configuráveis")
+        .addIntegerOption((opt) =>
+          opt.setName("lados").setDescription("Número de lados do dado (padrão: 6)").setRequired(false).setMinValue(2).setMaxValue(1000)
+        )
+        .addIntegerOption((opt) =>
+          opt.setName("quantidade").setDescription("Quantidade de dados (padrão: 1)").setRequired(false).setMinValue(1).setMaxValue(10)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("trivia")
+        .setDescription("Responda perguntas de trivia com botões!")
+        .addStringOption((opt) =>
+          opt.setName("dificuldade")
+            .setDescription("Dificuldade da pergunta")
+            .setRequired(false)
+            .addChoices(
+              { name: "Fácil", value: "easy" },
+              { name: "Médio", value: "medium" },
+              { name: "Difícil", value: "hard" }
+            )
+        )
+        .addStringOption((opt) =>
+          opt.setName("categoria")
+            .setDescription("Categoria da pergunta")
+            .setRequired(false)
+            .addChoices(
+              { name: "🧠 Conhecimento Geral", value: "9" },
+              { name: "🔬 Ciência", value: "17" },
+              { name: "💻 Computação", value: "18" },
+              { name: "⚽ Esportes", value: "21" },
+              { name: "🌍 Geografia", value: "22" },
+              { name: "📜 História", value: "23" },
+              { name: "🎨 Arte", value: "25" },
+              { name: "🐾 Animais", value: "27" }
+            )
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("batalha")
+        .setDescription("Batalha RPG contra o bot com ataques, defesa e especial!")
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("horoscopo")
+        .setDescription("Veja seu horóscopo e personalidade do signo")
+        .addStringOption((opt) =>
+          opt.setName("signo")
+            .setDescription("Seu signo do zodíaco")
+            .setRequired(true)
+            .addChoices(
+              { name: "♈ Áries", value: "aries" },
+              { name: "♉ Touro", value: "touro" },
+              { name: "♊ Gêmeos", value: "gemeos" },
+              { name: "♋ Câncer", value: "cancer" },
+              { name: "♌ Leão", value: "leao" },
+              { name: "♍ Virgem", value: "virgem" },
+              { name: "♎ Libra", value: "libra" },
+              { name: "♏ Escorpião", value: "escorpiao" },
+              { name: "♐ Sagitário", value: "sagitario" },
+              { name: "♑ Capricórnio", value: "capricornio" },
+              { name: "♒ Aquário", value: "aquario" },
+              { name: "♓ Peixes", value: "peixes" }
+            )
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("slot")
+        .setDescription("Jogue na máquina caça-níquel!")
     ),
 
   async execute(interaction) {
@@ -274,369 +313,775 @@ module.exports = {
       });
     }
 
-    // VELHA
-    if (sub === "velha") {
-      const opponent = interaction.options.getUser("oponente");
+    // POKEMON
+    if (sub === "pokemon") {
+      const input = interaction.options.getString("nome").toLowerCase().trim();
+      await interaction.deferReply();
 
-      if (opponent.id === interaction.user.id) {
-        return interaction.reply({ 
-          embeds: [createErrorEmbed("Você não pode jogar contra si mesmo!")],
-          ephemeral: true 
-        });
-      }
-
-      if (opponent.bot) {
-        return interaction.reply({ 
-          embeds: [createErrorEmbed("Você não pode jogar contra um bot!")],
-          ephemeral: true 
-        });
-      }
-
-      const gameId = `${interaction.user.id}_${opponent.id}`;
-
-      if (velhaGames.has(gameId)) {
-        return interaction.reply({ 
-          embeds: [createErrorEmbed("Você já tem um jogo em andamento com este usuário!")],
-          ephemeral: true 
-        });
-      }
-
-      const board = Array(9).fill(EMPTY);
-      velhaGames.set(gameId, {
-        board,
-        players: [interaction.user.id, opponent.id],
-        currentPlayer: 0,
-        message: null,
-        guildId: interaction.guildId
-      });
-
-      const embed = createEmbed({
-        title: "🎮 Jogo da Velha",
-        description: `**${interaction.user.username}** ❌ vs **${opponent.username}** ⭕\n\nÉ a vez de **${interaction.user.username}**!`,
-        color: 0x3498db
-      });
-
-      const rows = getBoardButtons(board);
-
-      const message = await interaction.reply({ 
-        embeds: [embed], 
-        components: rows,
-        fetchReply: true 
-      });
-
-      velhaGames.get(gameId).message = message;
-    }
-
-    // ROLETA
-    if (sub === "roleta") {
-      const { economy: eco } = interaction.client.services;
-      if (!eco) {
-        return interaction.reply({ 
-          embeds: [createErrorEmbed("Serviço de economia não disponível!")],
-          ephemeral: true 
-        });
-      }
-
-      const guildId = interaction.guildId;
-      const userId = interaction.user.id;
-      const directBet = interaction.options.getInteger("aposta");
-
-      if (directBet) {
-        return runRoletaGame(interaction, directBet, eco, guildId, userId);
-      }
-
-      const mainEmbed = createEmbed({
-        title: "🔫 Roleta Russa",
-        description: "Teste sua coragem! O revólver tem **6 câmaras** e **1 bala**.\nA cada rodada você puxa o gatilho. Quanto mais sobreviver, maior o prêmio!",
-        color: 0xe74c3c,
-        fields: [
-          {
-            name: "💸 Premiação",
-            value: "1ª rodada: **1.2x**\n2ª rodada: **1.5x**\n3ª rodada: **2x**\n4ª rodada: **3x**\n5ª rodada: **5x**\nSobreviveu tudo: **6x**",
-            inline: true,
-          },
-          {
-            name: "🎮 Como jogar",
-            value: "Escolha um valor e puxe o gatilho!\nVocê pode parar a qualquer momento e levar o prêmio acumulado.",
-            inline: true,
-          },
-        ],
-      });
-
-      const row = new ActionRowBuilder();
-      QUICK_BETS.forEach((bet) => {
-        row.addComponents(
-          new ButtonBuilder()
-            .setCustomId(`roleta_bet_${bet}`)
-            .setLabel(`${bet} moedas`)
-            .setStyle(ButtonStyle.Primary)
-        );
-      });
-
-      await interaction.reply({ embeds: [mainEmbed], components: [row] });
-    }
-
-    // BICHO
-    if (sub === "bicho") {
-      const { economy: eco } = interaction.client.services;
-      if (!eco) {
-        return interaction.reply({ 
-          embeds: [createErrorEmbed("Serviço de economia não disponível!")],
-          ephemeral: true 
-        });
-      }
-
-      const mainEmbed = createEmbed({
-        title: "🎰 Banca do Jogo do Bicho",
-        description: "Aposte nos animais e ganhe prêmios incríveis!\n\n**Como funciona:**\n• Escolha um animal ou grupo\n• Aguarde o sorteio\n• Ganhe se seu animal for sorteado!",
-        color: 0x00ff00,
-        fields: [
-          {
-            name: "🏆 Premiações",
-            value: "• **Animal correto:** 18x\n• **Grupo correto:** 3x\n• **Milhar correta:** 100x",
-            inline: true,
-          },
-          {
-            name: "📊 Grupos",
-            value: "Cada animal pertence a um grupo (1-25)\nAposte no animal ou no grupo inteiro!",
-            inline: true,
-          }
-        ]
-      });
-
-      const animalSelect = new StringSelectMenuBuilder()
-        .setCustomId('bicho_animal_select')
-        .setPlaceholder('Escolha um animal para apostar')
-        .addOptions(
-          animals.slice(0, 25).map(animal => ({
-            label: `${animal.emoji} ${animal.name}`,
-            description: `Grupo ${getGroup(animal.id * 4)}`,
-            value: animal.id.toString()
-          }))
-        );
-
-      const row = new ActionRowBuilder().addComponents(animalSelect);
-
-      await interaction.reply({ embeds: [mainEmbed], components: [row] });
-    }
-  },
-
-  // Handlers para interações de componentes
-  async handleButton(interaction) {
-    const customId = interaction.customId;
-
-    // Handler para Velha
-    if (customId.startsWith('velha_')) {
-      const index = parseInt(customId.split('_')[1]);
-      const userId = interaction.user.id;
-
-      let game = null;
-      let gameId = null;
-
-      for (const [key, value] of velhaGames.entries()) {
-        if (value.players.includes(userId)) {
-          game = value;
-          gameId = key;
-          break;
+      try {
+        const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${encodeURIComponent(input)}`);
+        if (!res.ok) {
+          return interaction.editReply({
+            embeds: [createErrorEmbed(`Pokémon **${input}** não encontrado. Verifique o nome ou número.`)]
+          });
         }
-      }
 
-      if (!game || game.players[game.currentPlayer] !== userId) {
-        return interaction.reply({ content: "Não é sua vez!", ephemeral: true });
-      }
+        const data = await res.json();
 
-      if (game.board[index] !== EMPTY) {
-        return interaction.reply({ content: "Esta posição já está ocupada!", ephemeral: true });
-      }
+        const speciesRes = await fetch(data.species.url);
+        const speciesData = speciesRes.ok ? await speciesRes.json() : null;
 
-      game.board[index] = game.currentPlayer === 0 ? X_EMOJI : O_EMOJI;
+        const displayName = speciesData
+          ? (speciesData.names.find(n => n.language.name === "ja") || speciesData.names.find(n => n.language.name === "en") || { name: data.name })
+          : { name: data.name };
 
-      const winner = checkWinner(game.board);
-      const isFull = isBoardFull(game.board);
+        const flavorEntry = speciesData
+          ? speciesData.flavor_text_entries.find(f => f.language.name === "en")
+          : null;
+        const description = flavorEntry
+          ? flavorEntry.flavor_text.replace(/[\n\f\r]/g, " ")
+          : "Sem descrição disponível.";
 
-      if (winner || isFull) {
+        const typeNames = {
+          normal: "Normal", fire: "Fogo", water: "Água", electric: "Elétrico",
+          grass: "Planta", ice: "Gelo", fighting: "Lutador", poison: "Veneno",
+          ground: "Terrestre", flying: "Voador", psychic: "Psíquico", bug: "Inseto",
+          rock: "Pedra", ghost: "Fantasma", dragon: "Dragão", dark: "Sombrio",
+          steel: "Aço", fairy: "Fada"
+        };
+
+        const typeColors = {
+          normal: 0xA8A878, fire: 0xF08030, water: 0x6890F0, electric: 0xF8D030,
+          grass: 0x78C850, ice: 0x98D8D8, fighting: 0xC03028, poison: 0xA040A0,
+          ground: 0xE0C068, flying: 0xA890F0, psychic: 0xF85888, bug: 0xA8B820,
+          rock: 0xB8A038, ghost: 0x705898, dragon: 0x7038F8, dark: 0x705848,
+          steel: 0xB8B8D0, fairy: 0xEE99AC
+        };
+
+        const statNames = {
+          hp: "HP", attack: "Ataque", defense: "Defesa",
+          "special-attack": "Atq. Esp.", "special-defense": "Def. Esp.", speed: "Velocidade"
+        };
+
+        const types = data.types.map(t => typeNames[t.type.name] || t.type.name).join(", ");
+        const mainType = data.types[0].type.name;
+        const color = typeColors[mainType] || 0xFFFFFF;
+
+        const MAX_STAT_BAR_LENGTH = 26;
+        const statsText = data.stats.map(s => {
+          const name = statNames[s.stat.name] || s.stat.name;
+          const val = s.base_stat;
+          const filled = Math.round(val / 10);
+          const bar = "█".repeat(filled) + "░".repeat(Math.max(0, MAX_STAT_BAR_LENGTH - filled));
+          return `**${name}**: ${val} \`${bar}\``;
+        }).join("\n");
+
+        const abilities = data.abilities.map(a => {
+          const name = a.ability.name.replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+          return a.is_hidden ? `${name} *(oculta)*` : name;
+        }).join(", ");
+
+        const sprite = data.sprites.other["official-artwork"].front_default
+          || data.sprites.front_default
+          || null;
+
         const embed = createEmbed({
-          title: "🎮 Jogo da Velha - Fim!",
-          description: winner 
-            ? `**${winner === X_EMOJI ? interaction.client.users.cache.get(game.players[0])?.username : interaction.client.users.cache.get(game.players[1])?.username}** venceu! 🎉`
-            : "Empate! 🤝",
-          color: winner ? 0x00ff00 : 0xffaa00
+          title: `#${data.id} — ${data.name.charAt(0).toUpperCase() + data.name.slice(1)} (${displayName.name})`,
+          description: `*${description}*`,
+          color,
+          thumbnail: sprite,
+          fields: [
+            { name: "📋 Tipo(s)", value: types, inline: true },
+            { name: "⚖️ Peso", value: `${(data.weight / 10).toFixed(1)} kg`, inline: true },
+            { name: "📏 Altura", value: `${(data.height / 10).toFixed(1)} m`, inline: true },
+            { name: "✨ Habilidades", value: abilities, inline: false },
+            { name: "📊 Stats Base", value: statsText, inline: false }
+          ]
         });
 
-        await interaction.update({ embeds: [embed], components: getBoardButtons(game.board, true) });
-        velhaGames.delete(gameId);
-      } else {
-        game.currentPlayer = 1 - game.currentPlayer;
-        const nextPlayer = interaction.client.users.cache.get(game.players[game.currentPlayer]);
-
-        const embed = createEmbed({
-          title: "🎮 Jogo da Velha",
-          description: `**${interaction.client.users.cache.get(game.players[0])?.username}** ❌ vs **${interaction.client.users.cache.get(game.players[1])?.username}** ⭕\n\nÉ a vez de **${nextPlayer?.username}**!`,
-          color: 0x3498db
+        await interaction.editReply({ embeds: [embed] });
+      } catch (error) {
+        console.error("Erro no comando pokemon:", error);
+        await interaction.editReply({
+          embeds: [createErrorEmbed("Ocorreu um erro ao buscar informações do Pokémon. Tente novamente.")]
         });
-
-        await interaction.update({ embeds: [embed], components: getBoardButtons(game.board) });
       }
     }
 
-    // Handler para Roleta
-    if (customId.startsWith('roleta_bet_')) {
-      const bet = parseInt(customId.split('_')[2]);
-      const { economy: eco } = interaction.client.services;
+    // RPS (Pedra, Papel, Tesoura)
+    if (sub === "rps") {
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`fun_rps_pedra_${interaction.user.id}`).setLabel("🪨 Pedra").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`fun_rps_papel_${interaction.user.id}`).setLabel("📄 Papel").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`fun_rps_tesoura_${interaction.user.id}`).setLabel("✂️ Tesoura").setStyle(ButtonStyle.Danger)
+      );
 
-      await runRoletaGame(interaction, bet, eco, interaction.guildId, interaction.user.id);
+      await interaction.reply({
+        embeds: [createEmbed({
+          title: "✊ Pedra, Papel ou Tesoura!",
+          description: "Escolha sua jogada clicando em um dos botões abaixo!",
+          color: 0x9B59B6
+        })],
+        components: [row]
+      });
     }
-  },
 
-  async handleSelectMenu(interaction) {
-    const customId = interaction.customId;
+    // SHIP
+    if (sub === "ship") {
+      const user1 = interaction.options.getUser("usuario1");
+      const user2 = interaction.options.getUser("usuario2");
 
-    if (customId === 'bicho_animal_select') {
-      const animalId = parseInt(interaction.values[0]);
-      const animal = animals.find(a => a.id === animalId);
+      // Deterministic hash (djb2) of sorted user IDs ensures the same pair always gets the same result
+      const ids = [user1.id, user2.id].sort();
+      const seed = ids.join("");
+      let hash = 0;
+      for (let i = 0; i < seed.length; i++) {
+        hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+        hash |= 0;
+      }
+      const percentage = Math.abs(hash) % 101;
 
-      if (!animal) {
-        return interaction.reply({ embeds: [createErrorEmbed("Animal inválido!")], ephemeral: true });
+      const filled = Math.round(percentage / 10);
+      const bar = "❤️".repeat(filled) + "🖤".repeat(10 - filled);
+
+      let reaction;
+      if (percentage >= 90) reaction = "💖 Almas Gêmeas! Amor verdadeiro!";
+      else if (percentage >= 70) reaction = "💕 Muito compatíveis! Há algo especial aqui!";
+      else if (percentage >= 50) reaction = "💛 Uma boa chance! Vale a pena investir!";
+      else if (percentage >= 30) reaction = "💔 Talvez com esforço... Nem tudo está perdido.";
+      else reaction = "💀 Melhor só como amigos...";
+
+      const shipName = user1.username.slice(0, Math.ceil(user1.username.length / 2))
+        + user2.username.slice(Math.floor(user2.username.length / 2));
+
+      await interaction.reply({
+        embeds: [createEmbed({
+          title: `💘 Ship: ${shipName}`,
+          description: `**${user1.username}** x **${user2.username}**\n\n${bar}\n**${percentage}%** de compatibilidade\n\n${reaction}`,
+          color: percentage >= 50 ? 0xFF69B4 : 0x808080,
+          thumbnail: user1.displayAvatarURL({ dynamic: true, size: 256 })
+        })]
+      });
+    }
+
+    // DADO
+    if (sub === "dado") {
+      const sides = interaction.options.getInteger("lados") || 6;
+      const quantity = interaction.options.getInteger("quantidade") || 1;
+
+      const results = [];
+      for (let i = 0; i < quantity; i++) {
+        results.push(Math.floor(Math.random() * sides) + 1);
       }
 
-      const modal = new ModalBuilder()
-        .setCustomId(`bicho_bet_${animalId}`)
-        .setTitle(`Apostar em ${animal.name}`)
-        .addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId('valor')
-              .setLabel('Valor da aposta')
-              .setStyle(TextInputStyle.Short)
-              .setPlaceholder('Digite o valor em moedas')
-              .setRequired(true)
+      const total = results.reduce((a, b) => a + b, 0);
+      const resultsText = results.map((r, i) => `🎲 Dado ${i + 1}: **${r}**`).join("\n");
+
+      await interaction.reply({
+        embeds: [createEmbed({
+          title: `🎲 Rolagem de Dado${quantity > 1 ? "s" : ""}`,
+          description: `${resultsText}${quantity > 1 ? `\n\n📊 **Total:** ${total}` : ""}`,
+          fields: [
+            { name: "⚙️ Configuração", value: `${quantity}d${sides}`, inline: true }
+          ],
+          color: 0xE67E22
+        })]
+      });
+    }
+
+    // TRIVIA
+    if (sub === "trivia") {
+      const difficulty = interaction.options.getString("dificuldade") || "";
+      const category = interaction.options.getString("categoria") || "";
+
+      await interaction.deferReply();
+
+      try {
+        let url = "https://opentdb.com/api.php?amount=1&type=multiple";
+        if (difficulty) url += `&difficulty=${difficulty}`;
+        if (category) url += `&category=${category}`;
+
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (data.response_code !== 0 || !data.results.length) {
+          return interaction.editReply({
+            embeds: [createErrorEmbed("Não foi possível buscar uma pergunta. Tente novamente.")]
+          });
+        }
+
+        const q = data.results[0];
+        const question = decodeHtml(q.question);
+        const correct = decodeHtml(q.correct_answer);
+        const answers = shuffle([correct, ...q.incorrect_answers.map(decodeHtml)]);
+        const correctIndex = answers.indexOf(correct);
+
+        const id = uniqueId();
+        triviaAnswers.set(id, {
+          correctIndex,
+          userId: interaction.user.id,
+          question,
+          answers,
+          timeout: setTimeout(() => triviaAnswers.delete(id), TRIVIA_TIMEOUT_MS)
+        });
+
+        const difficultyEmoji = { easy: "🟢 Fácil", medium: "🟡 Médio", hard: "🔴 Difícil" };
+        const labels = ["A", "B", "C", "D"];
+
+        const row = new ActionRowBuilder().addComponents(
+          answers.map((_, i) =>
+            new ButtonBuilder()
+              .setCustomId(`fun_trivia_${i}_${id}`)
+              .setLabel(labels[i])
+              .setStyle(ButtonStyle.Primary)
           )
         );
 
-      await interaction.showModal(modal);
-    }
-  },
+        const answersText = answers.map((a, i) => `**${labels[i]}.** ${a}`).join("\n");
 
-  async handleModal(interaction) {
-    const customId = interaction.customId;
-
-    if (customId.startsWith('bicho_bet_')) {
-      const animalId = parseInt(customId.split('_')[2]);
-      const valor = parseInt(interaction.fields.getTextInputValue('valor'));
-      const { economy: eco } = interaction.client.services;
-
-      if (!eco || !valor || valor <= 0) {
-        return interaction.reply({ embeds: [createErrorEmbed("Valor inválido!")], ephemeral: true });
-      }
-
-      const guildId = interaction.guildId;
-      const userId = interaction.user.id;
-
-      try {
-        const balance = await eco.getBalance(guildId, userId);
-        if (balance.coins < valor) {
-          return interaction.reply({ embeds: [createErrorEmbed("Você não tem moedas suficientes!")], ephemeral: true });
-        }
-
-        await eco.removeCoins(guildId, userId, valor);
-
-        const sorteio = Math.floor(Math.random() * 10000);
-        const animalSorteado = animals[Math.floor(Math.random() * animals.length)];
-        const grupoSorteado = getGroup(sorteio);
-        const grupoAnimal = getGroup(animalId * 4);
-
-        let ganhou = false;
-        let multiplicador = 0;
-
-        if (animalSorteado.id === animalId) {
-          ganhou = true;
-          multiplicador = 18;
-        } else if (grupoSorteado === grupoAnimal) {
-          ganhou = true;
-          multiplicador = 3;
-        }
-
-        if (ganhou) {
-          const premio = Math.floor(valor * multiplicador);
-          await eco.addCoins(guildId, userId, premio);
-
-          const embed = createSuccessEmbed(
-            `🎉 Você ganhou **${premio} moedas**!\n\n` +
-            `🎯 Sorteio: ${animalSorteado.emoji} ${animalSorteado.name}\n` +
-            `💰 Multiplicador: ${multiplicador}x`
-          );
-
-          await interaction.reply({ embeds: [embed] });
-        } else {
-          const embed = createErrorEmbed(
-            `😢 Você perdeu!\n\n` +
-            `🎯 Sorteio: ${animalSorteado.emoji} ${animalSorteado.name}\n` +
-            `💸 Perda: ${valor} moedas`
-          );
-
-          await interaction.reply({ embeds: [embed] });
-        }
+        await interaction.editReply({
+          embeds: [createEmbed({
+            title: "🧠 Trivia!",
+            description: `**${question}**\n\n${answersText}`,
+            fields: [
+              { name: "📂 Categoria", value: decodeHtml(q.category), inline: true },
+              { name: "📊 Dificuldade", value: difficultyEmoji[q.difficulty] || q.difficulty, inline: true }
+            ],
+            color: 0x3498DB,
+            footer: "Tempo: 60 segundos • Responda clicando nos botões"
+          })],
+          components: [row]
+        });
       } catch (error) {
-        console.error("Erro no jogo do bicho:", error);
-        await interaction.reply({ embeds: [createErrorEmbed("Ocorreu um erro ao processar sua aposta!")], ephemeral: true });
+        logger.error({ err: error }, "Erro no comando trivia");
+        await interaction.editReply({
+          embeds: [createErrorEmbed("Erro ao buscar pergunta de trivia. Tente novamente.")]
+        });
       }
     }
-  }
-};
 
-// Função auxiliar para Roleta
-async function runRoletaGame(interaction, bet, eco, guildId, userId) {
-  try {
-    const balance = await eco.getBalance(guildId, userId);
-    if (balance.coins < bet) {
-      return interaction.reply({ 
-        embeds: [createErrorEmbed("Você não tem moedas suficientes!")],
-        ephemeral: true 
+    // BATALHA
+    if (sub === "batalha") {
+      const battleId = uniqueId();
+      const state = {
+        userId: interaction.user.id,
+        playerHp: 100,
+        botHp: 100,
+        playerLastDefended: false,
+        botLastDefended: false,
+        playerSpecials: 2,
+        botSpecials: 2,
+        turn: 1,
+        timeout: setTimeout(() => activeBattles.delete(battleId), BATTLE_TIMEOUT_MS)
+      };
+
+      activeBattles.set(battleId, state);
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`fun_batalha_atacar_${battleId}`).setLabel("⚔️ Atacar").setStyle(ButtonStyle.Danger),
+        new ButtonBuilder().setCustomId(`fun_batalha_defender_${battleId}`).setLabel("🛡️ Defender").setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`fun_batalha_especial_${battleId}`).setLabel(`✨ Especial (${state.playerSpecials})`).setStyle(ButtonStyle.Secondary)
+      );
+
+      await interaction.reply({
+        embeds: [createEmbed({
+          title: "⚔️ Batalha contra o Bot!",
+          description: `**Turno ${state.turn}** — Escolha sua ação!\n\n` +
+            `**❤️ Você:** ${hpBar(state.playerHp, 100)}\n` +
+            `**🤖 Bot:** ${hpBar(state.botHp, 100)}\n\n` +
+            `⚔️ **Atacar** — Causa 15-25 de dano\n` +
+            `🛡️ **Defender** — Reduz dano recebido pela metade\n` +
+            `✨ **Especial** — Causa 25-40 de dano, ignora defesa (${state.playerSpecials} usos)`,
+          color: 0xE74C3C
+        })],
+        components: [row]
       });
     }
 
-    await eco.removeCoins(guildId, userId, bet);
+    // HOROSCOPO
+    if (sub === "horoscopo") {
+      const sign = interaction.options.getString("signo");
 
-    const bulletChamber = Math.floor(Math.random() * CHAMBERS);
-    let currentChamber = 0;
-    let survived = true;
-    let multiplier = 1;
+      const zodiac = {
+        aries: {
+          emoji: "♈", name: "Áries", element: "🔥 Fogo", period: "21/03 - 19/04",
+          planet: "♂️ Marte",
+          traits: ["Corajoso", "Determinado", "Confiante", "Entusiástico", "Otimista", "Honesto"],
+          weaknesses: ["Impaciente", "Temperamental", "Agressivo", "Impulsivo"],
+          compatibility: "Leão, Sagitário, Gêmeos",
+          luckyNumbers: "1, 8, 17", luckyColor: "🔴 Vermelho",
+          description: "Áries é o primeiro signo do zodíaco. Como líder natural, são corajosos e aventureiros, sempre prontos para enfrentar novos desafios com energia e determinação."
+        },
+        touro: {
+          emoji: "♉", name: "Touro", element: "🌍 Terra", period: "20/04 - 20/05",
+          planet: "♀️ Vênus",
+          traits: ["Confiável", "Paciente", "Prático", "Dedicado", "Responsável", "Estável"],
+          weaknesses: ["Teimoso", "Possessivo", "Inflexível", "Materialista"],
+          compatibility: "Virgem, Capricórnio, Câncer",
+          luckyNumbers: "2, 6, 9", luckyColor: "🟢 Verde",
+          description: "Touro é o signo mais confiável do zodíaco. Valorizam estabilidade, conforto e os prazeres da vida. São trabalhadores dedicados com um olho para a beleza."
+        },
+        gemeos: {
+          emoji: "♊", name: "Gêmeos", element: "💨 Ar", period: "21/05 - 20/06",
+          planet: "☿ Mercúrio",
+          traits: ["Adaptável", "Comunicativo", "Curioso", "Versátil", "Inteligente", "Sociável"],
+          weaknesses: ["Nervoso", "Indeciso", "Inconsistente", "Superficial"],
+          compatibility: "Libra, Aquário, Áries",
+          luckyNumbers: "5, 7, 14", luckyColor: "🟡 Amarelo",
+          description: "Gêmeos são as borboletas sociais do zodíaco. Com uma mente rápida e curiosidade insaciável, adoram aprender e compartilhar conhecimento."
+        },
+        cancer: {
+          emoji: "♋", name: "Câncer", element: "💧 Água", period: "21/06 - 22/07",
+          planet: "🌙 Lua",
+          traits: ["Leal", "Emocional", "Protetor", "Intuitivo", "Carinhoso", "Imaginativo"],
+          weaknesses: ["Mal-humorado", "Pessimista", "Desconfiado", "Manipulador"],
+          compatibility: "Escorpião, Peixes, Touro",
+          luckyNumbers: "2, 3, 15", luckyColor: "⚪ Branco",
+          description: "Câncer é o guardião do zodíaco. Profundamente conectados com família e lar, são extremamente leais e protetores com quem amam."
+        },
+        leao: {
+          emoji: "♌", name: "Leão", element: "🔥 Fogo", period: "23/07 - 22/08",
+          planet: "☀️ Sol",
+          traits: ["Criativo", "Generoso", "Caloroso", "Alegre", "Líder", "Dramático"],
+          weaknesses: ["Arrogante", "Teimoso", "Preguiçoso", "Egocêntrico"],
+          compatibility: "Áries, Sagitário, Libra",
+          luckyNumbers: "1, 3, 10", luckyColor: "🟠 Laranja",
+          description: "Leão é o rei do zodíaco. Naturalmente carismáticos e dramáticos, adoram ser o centro das atenções e têm um coração generoso."
+        },
+        virgem: {
+          emoji: "♍", name: "Virgem", element: "🌍 Terra", period: "23/08 - 22/09",
+          planet: "☿ Mercúrio",
+          traits: ["Analítico", "Trabalhador", "Prático", "Detalhista", "Organizado", "Modesto"],
+          weaknesses: ["Tímido", "Preocupado", "Crítico", "Perfeccionista"],
+          compatibility: "Touro, Capricórnio, Câncer",
+          luckyNumbers: "5, 14, 23", luckyColor: "🟤 Marrom",
+          description: "Virgem é o perfeccionista do zodíaco. Com atenção meticulosa aos detalhes, são trabalhadores dedicados que sempre buscam melhorar."
+        },
+        libra: {
+          emoji: "♎", name: "Libra", element: "💨 Ar", period: "23/09 - 22/10",
+          planet: "♀️ Vênus",
+          traits: ["Diplomático", "Justo", "Social", "Cooperativo", "Gracioso", "Harmonioso"],
+          weaknesses: ["Indeciso", "Evita conflitos", "Rancoroso", "Autocomplacente"],
+          compatibility: "Gêmeos, Aquário, Leão",
+          luckyNumbers: "4, 6, 13", luckyColor: "🩷 Rosa",
+          description: "Libra busca equilíbrio e harmonia em tudo. São diplomatas naturais com um senso apurado de justiça e amor pela beleza."
+        },
+        escorpiao: {
+          emoji: "♏", name: "Escorpião", element: "💧 Água", period: "23/10 - 21/11",
+          planet: "♇ Plutão",
+          traits: ["Apaixonado", "Determinado", "Corajoso", "Leal", "Estratégico", "Intenso"],
+          weaknesses: ["Ciumento", "Secreto", "Vingativo", "Desconfiado"],
+          compatibility: "Câncer, Peixes, Virgem",
+          luckyNumbers: "8, 11, 18", luckyColor: "🔴 Escarlate",
+          description: "Escorpião é o mais intenso do zodíaco. Com uma paixão ardente e determinação inabalável, são verdadeiros mestres da transformação."
+        },
+        sagitario: {
+          emoji: "♐", name: "Sagitário", element: "🔥 Fogo", period: "22/11 - 21/12",
+          planet: "♃ Júpiter",
+          traits: ["Otimista", "Aventureiro", "Honesto", "Filosófico", "Livre", "Engraçado"],
+          weaknesses: ["Prometem demais", "Impaciente", "Descuidado", "Direto demais"],
+          compatibility: "Áries, Leão, Aquário",
+          luckyNumbers: "3, 7, 9", luckyColor: "🟣 Roxo",
+          description: "Sagitário é o aventureiro do zodíaco. Com um espírito livre e otimismo contagiante, estão sempre em busca de novas experiências e conhecimento."
+        },
+        capricornio: {
+          emoji: "♑", name: "Capricórnio", element: "🌍 Terra", period: "22/12 - 19/01",
+          planet: "♄ Saturno",
+          traits: ["Responsável", "Disciplinado", "Ambicioso", "Paciente", "Prático", "Sábio"],
+          weaknesses: ["Pessimista", "Teimoso", "Rígido", "Workaholic"],
+          compatibility: "Touro, Virgem, Escorpião",
+          luckyNumbers: "4, 8, 13", luckyColor: "⚫ Preto",
+          description: "Capricórnio é o mais ambicioso do zodíaco. Com disciplina e paciência extraordinárias, constroem seu caminho até o topo com determinação."
+        },
+        aquario: {
+          emoji: "♒", name: "Aquário", element: "💨 Ar", period: "20/01 - 18/02",
+          planet: "♅ Urano",
+          traits: ["Progressivo", "Original", "Independente", "Humanitário", "Inventivo", "Visionário"],
+          weaknesses: ["Distante", "Imprevisível", "Teimoso", "Extremista"],
+          compatibility: "Gêmeos, Libra, Sagitário",
+          luckyNumbers: "4, 7, 11", luckyColor: "🔵 Azul",
+          description: "Aquário é o visionário do zodíaco. Com ideias revolucionárias e espírito humanitário, estão sempre à frente do seu tempo."
+        },
+        peixes: {
+          emoji: "♓", name: "Peixes", element: "💧 Água", period: "19/02 - 20/03",
+          planet: "♆ Netuno",
+          traits: ["Compassivo", "Artístico", "Intuitivo", "Gentil", "Sábio", "Sonhador"],
+          weaknesses: ["Medroso", "Triste demais", "Deseja escapar", "Vítima"],
+          compatibility: "Câncer, Escorpião, Touro",
+          luckyNumbers: "3, 9, 12", luckyColor: "🟢 Verde-água",
+          description: "Peixes é o mais empático do zodíaco. Com uma intuição afiada e alma artística, sentem profundamente e têm uma conexão especial com o mundo espiritual."
+        }
+      };
 
-    const gameData = {
-      bet,
-      originalBet: bet,
-      bulletChamber,
-      survived,
-      multiplier,
-      guildId,
-      userId
-    };
+      const z = zodiac[sign];
+      if (!z) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Signo não encontrado.")],
+          ephemeral: true
+        });
+      }
 
-    roletaGames.set(userId, gameData);
+      const elementColors = {
+        "🔥 Fogo": 0xE74C3C,
+        "🌍 Terra": 0x8B4513,
+        "💨 Ar": 0x87CEEB,
+        "💧 Água": 0x3498DB
+      };
 
-    const embed = createEmbed({
-      title: "🔫 Roleta Russa",
-      description: `**${interaction.user.username}** está na mira!\n\nAposta: **${bet} moedas**\nCâmara atual: **${currentChamber + 1}**`,
-      color: 0xe74c3c
-    });
+      await interaction.reply({
+        embeds: [createEmbed({
+          title: `${z.emoji} ${z.name}`,
+          description: `*${z.description}*`,
+          fields: [
+            { name: "📅 Período", value: z.period, inline: true },
+            { name: "🌟 Elemento", value: z.element, inline: true },
+            { name: "🪐 Planeta Regente", value: z.planet, inline: true },
+            { name: "💪 Qualidades", value: z.traits.join(", "), inline: false },
+            { name: "⚠️ Fraquezas", value: z.weaknesses.join(", "), inline: false },
+            { name: "💕 Compatibilidade", value: z.compatibility, inline: true },
+            { name: "🔢 Números da Sorte", value: z.luckyNumbers, inline: true },
+            { name: "🎨 Cor da Sorte", value: z.luckyColor, inline: true }
+          ],
+          color: elementColors[z.element] || 0x9B59B6
+        })]
+      });
+    }
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`roleta_pull_${userId}`)
-        .setLabel("🔫 Puxar Gatilho")
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId(`roleta_stop_${userId}`)
-        .setLabel("💰 Parar e Levar")
-        .setStyle(ButtonStyle.Success)
-    );
+    // SLOT
+    if (sub === "slot") {
+      const symbols = ['🍒', '🍋', '🍊', '🍇', '💎', '7️⃣', '🔔', '⭐'];
+      const weights = [25, 20, 20, 15, 5, 3, 7, 5];
 
-    await interaction.reply({ embeds: [embed], components: [row] });
-  } catch (error) {
-    console.error("Erro na roleta:", error);
-    await interaction.reply({ 
-      embeds: [createErrorEmbed("Ocorreu um erro ao iniciar o jogo!")],
-      ephemeral: true 
-    });
-  }
-}
+      function weightedRandom() {
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
+        let randomWeight = Math.floor(Math.random() * totalWeight);
+        for (let i = 0; i < symbols.length; i++) {
+          randomWeight -= weights[i];
+          if (randomWeight < 0) return symbols[i];
+        }
+        return symbols[0];
+      }
+
+      const reel1 = weightedRandom();
+      const reel2 = weightedRandom();
+      const reel3 = weightedRandom();
+
+      const topRow = [weightedRandom(), weightedRandom(), weightedRandom()];
+      const bottomRow = [weightedRandom(), weightedRandom(), weightedRandom()];
+
+      let result;
+      let color;
+
+      if (reel1 === reel2 && reel2 === reel3) {
+        if (reel1 === '💎') {
+          result = "💰 **JACKPOT DIAMANTE!!!** Você é incrivelmente sortudo!";
+          color = 0xFFD700;
+        } else if (reel1 === '7️⃣') {
+          result = "🎰 **JACKPOT 777!!!** Sorte máxima!";
+          color = 0xFF0000;
+        } else {
+          result = `🎉 **TRIPLE ${reel1}!** Você ganhou!`;
+          color = 0x2ECC71;
+        }
+      } else if (reel1 === reel2 || reel2 === reel3 || reel1 === reel3) {
+        result = "😊 **Par!** Quase lá, tente novamente!";
+        color = 0xF1C40F;
+      } else {
+        result = "😔 **Nada desta vez...** Tente a sorte novamente!";
+        color = 0x95A5A6;
+      }
+
+      const slotDisplay =
+        `⬛ ${topRow[0]} ┃ ${topRow[1]} ┃ ${topRow[2]} ⬛\n` +
+        `▶ ${reel1} ┃ ${reel2} ┃ ${reel3} ◀\n` +
+        `⬛ ${bottomRow[0]} ┃ ${bottomRow[1]} ┃ ${bottomRow[2]} ⬛`;
+
+      await interaction.reply({
+        embeds: [createEmbed({
+          title: "🎰 Caça-Níquel",
+          description: `${slotDisplay}\n\n${result}`,
+          color
+        })]
+      });
+    }
+  },
+
+  async handleButton(interaction) {
+    const customId = interaction.customId;
+
+    // RPS Button Handler
+    if (customId.startsWith("fun_rps_")) {
+      const parts = customId.split("_");
+      if (parts.length < 4) return;
+      const choice = parts[2];
+      const originalUserId = parts[3];
+
+      if (interaction.user.id !== originalUserId) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Apenas quem iniciou o jogo pode jogar!")],
+          ephemeral: true
+        });
+      }
+
+      const choices = ["pedra", "papel", "tesoura"];
+      const botChoice = choices[Math.floor(Math.random() * choices.length)];
+
+      const emojis = { pedra: "🪨", papel: "📄", tesoura: "✂️" };
+      const names = { pedra: "Pedra", papel: "Papel", tesoura: "Tesoura" };
+
+      let result;
+      let color;
+      if (choice === botChoice) {
+        result = "🤝 **Empate!** Ninguém ganhou dessa vez.";
+        color = 0xF1C40F;
+      } else if (
+        (choice === "pedra" && botChoice === "tesoura") ||
+        (choice === "papel" && botChoice === "pedra") ||
+        (choice === "tesoura" && botChoice === "papel")
+      ) {
+        result = "🎉 **Você ganhou!** Parabéns!";
+        color = 0x2ECC71;
+      } else {
+        result = "😔 **Você perdeu!** O bot te derrotou.";
+        color = 0xE74C3C;
+      }
+
+      const disabledRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId("fun_rps_pedra_disabled").setLabel("🪨 Pedra").setStyle(ButtonStyle.Primary).setDisabled(true),
+        new ButtonBuilder().setCustomId("fun_rps_papel_disabled").setLabel("📄 Papel").setStyle(ButtonStyle.Success).setDisabled(true),
+        new ButtonBuilder().setCustomId("fun_rps_tesoura_disabled").setLabel("✂️ Tesoura").setStyle(ButtonStyle.Danger).setDisabled(true)
+      );
+
+      await interaction.update({
+        embeds: [createEmbed({
+          title: "✊ Pedra, Papel ou Tesoura — Resultado!",
+          description: `**Você escolheu:** ${emojis[choice]} ${names[choice]}\n**Bot escolheu:** ${emojis[botChoice]} ${names[botChoice]}\n\n${result}`,
+          color
+        })],
+        components: [disabledRow]
+      });
+    }
+
+    // TRIVIA Button Handler
+    if (customId.startsWith("fun_trivia_")) {
+      const parts = customId.split("_");
+      if (parts.length < 4) {
+        logger.warn("Trivia button customId malformado: %s", customId);
+        return;
+      }
+      const answerIndex = parseInt(parts[2]);
+      const triviaId = parts[3];
+
+      const state = triviaAnswers.get(triviaId);
+      if (!state) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Esta pergunta expirou.")],
+          ephemeral: true
+        });
+      }
+
+      if (interaction.user.id !== state.userId) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Apenas quem iniciou o trivia pode responder!")],
+          ephemeral: true
+        });
+      }
+
+      clearTimeout(state.timeout);
+      triviaAnswers.delete(triviaId);
+
+      const correct = answerIndex === state.correctIndex;
+      const labels = ["A", "B", "C", "D"];
+
+      const answersText = state.answers.map((a, i) => {
+        if (i === state.correctIndex) return `✅ **${labels[i]}.** ${a}`;
+        if (i === answerIndex && !correct) return `❌ **${labels[i]}.** ${a}`;
+        return `${labels[i]}. ${a}`;
+      }).join("\n");
+
+      const disabledRow = new ActionRowBuilder().addComponents(
+        labels.map((label, i) =>
+          new ButtonBuilder()
+            .setCustomId(`fun_trivia_${i}_disabled`)
+            .setLabel(label)
+            .setStyle(i === state.correctIndex ? ButtonStyle.Success : (i === answerIndex && !correct ? ButtonStyle.Danger : ButtonStyle.Secondary))
+            .setDisabled(true)
+        )
+      );
+
+      await interaction.update({
+        embeds: [createEmbed({
+          title: correct ? "🧠 Trivia — Correto! 🎉" : "🧠 Trivia — Errado! 😔",
+          description: `**${state.question}**\n\n${answersText}`,
+          color: correct ? 0x2ECC71 : 0xE74C3C,
+          footer: correct ? "Parabéns, você acertou!" : `A resposta correta era ${labels[state.correctIndex]}. ${state.answers[state.correctIndex]}`
+        })],
+        components: [disabledRow]
+      });
+    }
+
+    // BATALHA Button Handler
+    if (customId.startsWith("fun_batalha_")) {
+      const parts = customId.split("_");
+      if (parts.length < 4) {
+        logger.warn("Batalha button customId malformado: %s", customId);
+        return;
+      }
+      const action = parts[2];
+      const battleId = parts[3];
+
+      const state = activeBattles.get(battleId);
+      if (!state) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Esta batalha expirou ou já terminou.")],
+          ephemeral: true
+        });
+      }
+
+      if (interaction.user.id !== state.userId) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Apenas quem iniciou a batalha pode jogar!")],
+          ephemeral: true
+        });
+      }
+
+      if (action === "defender" && state.playerLastDefended) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Você não pode defender duas vezes seguidas!")],
+          ephemeral: true
+        });
+      }
+
+      if (action === "especial" && state.playerSpecials <= 0) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Você não tem mais usos de especial!")],
+          ephemeral: true
+        });
+      }
+
+      // Player action
+      let playerDmg = 0;
+      let playerActionText = "";
+      const playerDefending = action === "defender";
+
+      if (action === "atacar") {
+        playerDmg = rollAttackDamage();
+        playerActionText = `⚔️ Você atacou causando`;
+      } else if (action === "defender") {
+        playerActionText = "🛡️ Você se defendeu";
+      } else if (action === "especial") {
+        playerDmg = rollSpecialDamage();
+        state.playerSpecials--;
+        playerActionText = `✨ Você usou especial causando`;
+      }
+
+      // Bot AI
+      let botAction = "";
+      let botDmg = 0;
+      let botDefending = false;
+
+      const rand = Math.random();
+      const canBotDefend = !state.botLastDefended;
+      const canBotSpecial = state.botSpecials > 0;
+
+      if (canBotDefend && canBotSpecial) {
+        if (rand < 0.50) botAction = "atacar";
+        else if (rand < 0.80) botAction = "defender";
+        else botAction = "especial";
+      } else if (canBotDefend) {
+        botAction = rand < 0.70 ? "atacar" : "defender";
+      } else if (canBotSpecial) {
+        botAction = rand < 0.65 ? "atacar" : "especial";
+      } else {
+        botAction = "atacar";
+      }
+
+      if (botAction === "atacar") {
+        botDmg = rollAttackDamage();
+      } else if (botAction === "defender") {
+        botDefending = true;
+      } else if (botAction === "especial") {
+        botDmg = rollSpecialDamage();
+        state.botSpecials--;
+      }
+
+      // Apply damage — player to bot
+      if (playerDmg > 0) {
+        if (botDefending && action !== "especial") {
+          playerDmg = Math.floor(playerDmg / 2);
+        }
+        state.botHp = Math.max(0, state.botHp - playerDmg);
+        playerActionText += ` **${playerDmg}** de dano`;
+      }
+
+      // Apply damage — bot to player
+      if (botDmg > 0) {
+        if (playerDefending && botAction !== "especial") {
+          botDmg = Math.floor(botDmg / 2);
+        }
+        state.playerHp = Math.max(0, state.playerHp - botDmg);
+      }
+
+      const botActionNames = {
+        atacar: `⚔️ Bot atacou causando **${botDmg}** de dano`,
+        defender: "🛡️ Bot se defendeu",
+        especial: `✨ Bot usou especial causando **${botDmg}** de dano`
+      };
+
+      state.playerLastDefended = playerDefending;
+      state.botLastDefended = botDefending;
+      state.turn++;
+
+      const gameOver = state.playerHp <= 0 || state.botHp <= 0;
+      let resultText = "";
+      let embedColor = 0xE74C3C;
+
+      if (gameOver) {
+        clearTimeout(state.timeout);
+        activeBattles.delete(battleId);
+
+        if (state.playerHp <= 0 && state.botHp <= 0) {
+          resultText = "\n\n🤝 **EMPATE!** Ambos caíram ao mesmo tempo!";
+          embedColor = 0xF1C40F;
+        } else if (state.botHp <= 0) {
+          resultText = "\n\n🎉 **VITÓRIA!** Você derrotou o bot!";
+          embedColor = 0x2ECC71;
+        } else {
+          resultText = "\n\n💀 **DERROTA!** O bot te derrotou!";
+          embedColor = 0xE74C3C;
+        }
+      }
+
+      const battleRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`fun_batalha_atacar_${battleId}`)
+          .setLabel("⚔️ Atacar")
+          .setStyle(ButtonStyle.Danger)
+          .setDisabled(gameOver),
+        new ButtonBuilder()
+          .setCustomId(`fun_batalha_defender_${battleId}`)
+          .setLabel("🛡️ Defender")
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(gameOver || playerDefending),
+        new ButtonBuilder()
+          .setCustomId(`fun_batalha_especial_${battleId}`)
+          .setLabel(`✨ Especial (${state.playerSpecials})`)
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(gameOver || state.playerSpecials <= 0)
+      );
+
+      await interaction.update({
+        embeds: [createEmbed({
+          title: gameOver ? "⚔️ Batalha — Fim!" : `⚔️ Batalha — Turno ${state.turn}`,
+          description:
+            `**❤️ Você:** ${hpBar(state.playerHp, 100)}\n` +
+            `**🤖 Bot:** ${hpBar(state.botHp, 100)}\n\n` +
+            `📋 **Turno ${state.turn - 1}:**\n${playerActionText}\n${botActionNames[botAction]}` +
+            resultText,
+          color: embedColor
+        })],
+        components: [battleRow]
+      });
+    }
+  },
+};

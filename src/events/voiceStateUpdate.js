@@ -11,8 +11,8 @@ module.exports = {
     // Armazenar referência do client para uso posterior
     if (!clientInstance) clientInstance = client;
     
-    // Ignorar bots
-    if (newState.member?.user?.bot) return;
+    // Ignorar bots e membros nulos
+    if (!newState.member || newState.member.user?.bot) return;
 
     const userId = newState.member.id;
     const guildId = newState.guild.id;
@@ -186,5 +186,5 @@ async function finalizeVoiceSession(userId, session) {
   }
 }
 
-// Iniciar processamento de XP
-setInterval(processVoiceXp, MINUTE_MS);
+// O processamento de XP por voz é gerenciado pelo timer em ready.js (com cleanup adequado).
+// NÃO iniciar outro setInterval aqui para evitar XP duplicado e vazamento de memória.

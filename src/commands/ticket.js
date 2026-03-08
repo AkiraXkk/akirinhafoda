@@ -249,16 +249,16 @@ module.exports = {
       });
 
       if (ticketConfig.staffRoles && ticketConfig.staffRoles.allowed) {
-          ticketConfig.staffRoles.allowed.forEach(roleId => {
+          for (const roleId of ticketConfig.staffRoles.allowed) {
             const role = interaction.guild.roles.cache.get(roleId);
             if (role) {
-              channel.permissionOverwrites.create(role, {
+              await channel.permissionOverwrites.create(role, {
                 ViewChannel: true,
                 SendMessages: true,
                 AttachFiles: true
               });
             }
-          });
+          }
       }
 
       const ticketData = {
