@@ -145,11 +145,12 @@ async function syncExistingMembers(guild, client) {
     const members = await guild.members.fetch();
     let syncedCount = 0;
 
+    const data = await levelsStore.load();
+
     for (const member of members.values()) {
       if (member.user.bot) continue;
       
       // Verificar se o usuário já tem dados de XP
-      const data = await levelsStore.load();
       if (!data[member.id]) {
         // Inicializar dados básicos para novos usuários
         await levelsStore.update(member.id, () => ({

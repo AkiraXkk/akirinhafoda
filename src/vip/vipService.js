@@ -101,14 +101,8 @@ function createVipService({ store, logger, configManager, client }) {
   async function _removeBaseRole(guildId, userId) {
     if (!client) return;
     // Só remove se o membro não tiver outro VIP ativo
-    const outros = Object.keys(state.vips?.[guildId] || {}).filter((id) => id !== userId);
-    if (outros.length > 0 && state.vips[guildId][userId] === undefined) {
-      // Verifica se algum dos outros vips ainda é do mesmo userId após remoção
-      // Se o userId já foi deletado do state antes de chegar aqui, verificamos normalmente
-    }
-    // Recarrega: após removeVip o userId já foi deletado do state
     const activeVips = state.vips?.[guildId] || {};
-    if (activeVips[userId]) return; // ainda tem outro VIP? (não deveria, mas garantia)
+    if (activeVips[userId]) return; // ainda tem VIP ativo, não remove cargo base
 
     const gConf = state.guilds[guildId] || {};
     const baseRoleId = gConf.vipBaseRoleId;

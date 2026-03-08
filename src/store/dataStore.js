@@ -20,7 +20,7 @@ async function readJson(filePath) {
 
 async function writeJsonAtomic(filePath, data) {
   await ensureParentDir(filePath);
-  const tmpPath = `${filePath}.tmp`;
+  const tmpPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   await fs.writeFile(tmpPath, JSON.stringify(data, null, 2), "utf8");
   await fs.rename(tmpPath, filePath);
 }

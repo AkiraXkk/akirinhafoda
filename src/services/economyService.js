@@ -65,14 +65,15 @@ function createEconomyService() {
       guildId = null;
     }
 
-    const fromBalance = guildId ? await getBalance(guildId, fromId) : await getBalance(fromId);
-    if ((fromBalance.coins || 0) < amount) return false;
+    const removed = guildId
+      ? await removeCoins(guildId, fromId, amount)
+      : await removeCoins(fromId, amount);
+
+    if (!removed) return false;
 
     if (guildId) {
-      await removeCoins(guildId, fromId, amount);
       await addCoins(guildId, toId, amount);
     } else {
-      await removeCoins(fromId, amount);
       await addCoins(toId, amount);
     }
     return true;

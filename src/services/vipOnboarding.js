@@ -15,7 +15,7 @@ function createVipOnboarding({ client, vipService, logManager }) {
     const channelId = guildConfig.announcementChannelId || guild.systemChannelId;
     if (!channelId) return;
 
-    const channel = guild.channels.fetch(channelId).catch(() => null);
+    const channel = await guild.channels.fetch(channelId).catch(() => null);
     if (!channel || !channel.isTextBased()) return;
 
     const embed = new EmbedBuilder()

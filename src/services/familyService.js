@@ -227,14 +227,17 @@ function createFamilyService() {
       const isAdmin = family.admins && family.admins.includes(userId);
       if (!isOwner && !isAdmin) throw new Error("Apenas admins podem sacar.");
 
-      if ((family.bank || 0) < amount) throw new Error("Saldo insuficiente no banco.");
-
       const families = await getAllFamilies();
-      families[family.id].bank -= amount;
+      const currentFamily = families[family.id];
+      if (!currentFamily) throw new Error("Família não encontrada.");
+
+      if ((currentFamily.bank || 0) < amount) throw new Error("Saldo insuficiente no banco.");
+
+      currentFamily.bank -= amount;
       await familyStore.save(families);
 
       await economyService.addCoins(userId, amount);
-      return families[family.id].bank;
+      return currentFamily.bank;
   }
 
   async function upgradeSlots(userId) {
