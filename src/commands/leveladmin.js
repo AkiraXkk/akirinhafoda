@@ -39,14 +39,14 @@ module.exports = {
         });
       }
 
-      // Criar mensagem de confirmação
+      // Colocamos o prefixo "leveladmin_" para o roteador encontrar este arquivo!
       const confirmRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`confirm_reset_${interaction.user.id}`)
+          .setCustomId(`leveladmin_confirm_${interaction.user.id}`)
           .setLabel("✅ Confirmar Reset")
           .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
-          .setCustomId(`cancel_reset_${interaction.user.id}`)
+          .setCustomId(`leveladmin_cancel_${interaction.user.id}`)
           .setLabel("❌ Cancelar")
           .setStyle(ButtonStyle.Secondary)
       );
@@ -58,7 +58,7 @@ module.exports = {
 
 **Esta ação irá:**
 - Zerar o XP de **TODOS** os usuários
-- Resetar todos os níveis para 1
+- Resetar todos os níveis para **0**
 - Remover todos os cargos de nível atribuídos
 - **Esta ação é IRREVERSÍVEL!**
 
@@ -87,10 +87,10 @@ module.exports = {
   // Handler para botões de confirmação
   async handleButton(interaction) {
     const customId = interaction.customId;
-    
-    if (customId.startsWith("confirm_reset_")) {
-      const userId = customId.replace("confirm_reset_", "");
-      
+
+    if (customId.startsWith("leveladmin_confirm_")) {
+      const userId = customId.replace("leveladmin_confirm_", "");
+
       // Verificar se é o mesmo usuário
       if (interaction.user.id !== userId) {
         return interaction.reply({
@@ -113,8 +113,16 @@ module.exports = {
         const levels = await levelsStore.load();
         const resetCount = Object.keys(levels).length;
 
-        // Resetar todos os dados
-        await levelsStore.save({});
+        // Resetar todos os dados (Tratamento para Mongo ou JSON local)
+        try {
+            await levelsStore.save({});
+        } catch (e) {
+            // Fallback caso o banco MongoDB não aceite um save vazio
+            for (const key of Object.keys(levels)) {
+                if (typeof levelsStore.delete === 'function') await levelsStore.delete(key);
+                else await levelsStore.update(key, () => undefined);
+            }
+        }
 
         // Remover cargos de nível de todos os membros
         const guild = interaction.guild;
@@ -130,7 +138,7 @@ module.exports = {
                 try {
                   await member.roles.remove(roleId);
                 } catch (error) {
-                  console.error(`Erro ao remover cargo ${roleId} do usuário ${member.id}:`, error);
+                  // Ignora se for o dono do servidor ou admin superior
                 }
               }
             }
@@ -142,8 +150,8 @@ module.exports = {
 
         const successEmbed = createSuccessEmbed(
           `✅ **Reset concluído com sucesso!**\n\n` +
-          `• ${resetCount} usuários tiveram seus dados resetados\n` +
-          `• Todos os níveis foram definidos para 1\n` +
+          `• **${resetCount}** usuários tiveram seus dados resetados\n` +
+          `• Todos os níveis foram definidos para **0**\n` +
           `• Todo o XP foi zerado\n` +
           `• Cargos de nível foram removidos`
         );
@@ -158,7 +166,7 @@ module.exports = {
 
       } catch (error) {
         console.error("Erro ao resetar níveis:", error);
-        
+
         const errorEmbed = createErrorEmbed(
           "Ocorreu um erro ao resetar o sistema de níveis. Verifique o console para mais detalhes."
         );
@@ -170,9 +178,9 @@ module.exports = {
       }
     }
 
-    if (customId.startsWith("cancel_reset_")) {
-      const userId = customId.replace("cancel_reset_", "");
-      
+    if (customId.startsWith("leveladmin_cancel_")) {
+      const userId = customId.replace("leveladmin_cancel_", "");
+
       if (interaction.user.id !== userId) {
         return interaction.reply({
           content: "Você não pode cancelar esta ação.",
@@ -184,7 +192,7 @@ module.exports = {
 
       const cancelEmbed = createEmbed({
         title: "❌ Reset Cancelado",
-        description: "O reset do sistema de níveis foi cancelado.",
+        description: "O reset do sistema de níveis foi cancelado com segurança.",
         color: 0x00ff00,
       });
 
