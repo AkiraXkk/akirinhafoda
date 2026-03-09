@@ -255,7 +255,7 @@ module.exports = {
         .setTitle("Central de Atendimento WDA")
         .setDescription("Olá, seja muito bem-vindo(a) à nossa central de suporte!\n\nPara garantir um atendimento rápido e eficaz, clique no botão abaixo e selecione o departamento que melhor atende à sua necessidade.\n\n⚠️ **Importante:**\n• Tenha sempre provas em mãos caso vá realizar uma denúncia.\n• Não abra tickets sem necessidade ou por brincadeira.\n• Aguarde com paciência, nossa equipe será notificada e chegará em breve.")
         .setColor("#1a1a1a")
-        .setImage("https://i.imgur.com/YOUR_BANNER_HERE.png"); 
+        .setImage("https://cdn.discordapp.com/attachments/801480652381356094/1480491265203376302/standard-1.gif?ex=69afde6f&is=69ae8cef&hm=b98bea705c548ddd57ffbd39d0cffc2e2875ef8a68f92018e9a47759db00e43b&"); 
 
       const btnOpen = new ButtonBuilder()
         .setCustomId("user_open_menu")
