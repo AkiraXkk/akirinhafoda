@@ -138,12 +138,12 @@ async function main() {
   // =====================================================================
   client.once("ready", () => {
     logger.info("Verificador Anti-Crash de Sorteios iniciado!");
-    
+
     setInterval(() => {
       try {
-        // Altere o caminho abaixo caso o seu "evento.js" não esteja na pasta principal de comandos
-        const eventoCmd = require("./commands/evento.js"); 
-        
+        // MÁGICA: Busca o comando direto da memória (sem usar require e caminhos de pastas!)
+        const eventoCmd = client.commands.get("evento"); 
+
         if (eventoCmd && typeof eventoCmd.checkSorteios === "function") {
           eventoCmd.checkSorteios(client);
         }
