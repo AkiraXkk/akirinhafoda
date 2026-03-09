@@ -14,14 +14,14 @@ const setupStore = createDataStore("setup_staff.json");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("setupstaff")
-    .setDescription("Cria a mega-estrutura da Staff com Ranks de Liderança e Canais Estéticos")
+    .setDescription("Cria a mega-estrutura da Staff com Ranks, Canais Estéticos e Cargos de Permissão")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
     const embedAviso = new EmbedBuilder()
       .setTitle("⚠️ Confirmação de Mega-Setup")
       .setColor(0xffaa00)
-      .setDescription("Isso criará a **Categoria da Staff**, os **5 Ranks de Liderança** e as **8 Áreas completas**!\n\n⏳ *O processo pode levar até 2 minutos devido aos limites do Discord.*\n\nDeseja iniciar a construção?");
+      .setDescription("Isso criará a **Categoria da Staff**, os **5 Ranks**, as **8 Áreas** e os **3 Cargos Fantasmas de Permissão**!\n\n⏳ *O processo pode levar até 2 minutos devido aos limites do Discord.*\n\nDeseja iniciar a construção?");
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("confirm_setup").setLabel("✅ Construir Servidor").setStyle(ButtonStyle.Success),
@@ -37,14 +37,31 @@ module.exports = {
         return btnInteraction.update({ content: "❌ Setup cancelado.", embeds: [], components: [] });
       }
 
-      await btnInteraction.update({ content: "⏳ **Construindo o império da Staff...**\nO bot está a criar os cargos, canais e a formatar os fóruns. Aguarde!", embeds: [], components: [] });
+      await btnInteraction.update({ content: "⏳ **Construindo o império da Staff...**\nO bot está a criar os cargos, permissões, canais e a formatar os fóruns. Aguarde!", embeds: [], components: [] });
       
       const guild = interaction.guild;
       const createdRoles = [];
       const createdChannels = [];
 
       // ==========================================
-      // 1. CARGOS DE RANKS E STAFF GERAL
+      // 0. CARGOS FANTASMAS DE PERMISSÃO (INVISÍVEIS)
+      // ==========================================
+      const permMod = await guild.roles.create({ 
+        name: "Perm: Moderação Global", 
+        permissions: [PermissionFlagsBits.KickMembers, PermissionFlagsBits.BanMembers, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ModerateMembers, PermissionFlagsBits.MuteMembers, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.ManageNicknames] 
+      });
+      const permCom = await guild.roles.create({ 
+        name: "Perm: Comunicação e Eventos", 
+        permissions: [PermissionFlagsBits.MentionEveryone, PermissionFlagsBits.ManageEvents, PermissionFlagsBits.ManageMessages] 
+      });
+      const permAtd = await guild.roles.create({ 
+        name: "Perm: Atendimento", 
+        permissions: [PermissionFlagsBits.ManageThreads, PermissionFlagsBits.MoveMembers] 
+      });
+      createdRoles.push(permMod.id, permCom.id, permAtd.id);
+
+      // ==========================================
+      // 1. CARGOS DE RANKS E STAFF GERAL (ESTÉTICOS)
       // ==========================================
       const roleChefe = await guild.roles.create({ name: "Chefe", color: "#ff0000", hoist: true });
       const roleSubChefe = await guild.roles.create({ name: "Sub-Chefe", color: "#ff4500", hoist: true });
@@ -179,10 +196,8 @@ module.exports = {
         // 4. MÁGICA ESTÉTICA NO FÓRUM (Sem Embed)
         // ==========================================
         
-        // Ajusta a gramática do texto automaticamente ("É responsável" -> "é responsável")
         const descricaoAjustada = area.desc.charAt(0).toLowerCase() + area.desc.slice(1);
 
-        // Texto formatado EXATAMENTE igual ao print fornecido
         const textoEstetico = `⸜ ヽ ⸼ ⢄ ${area.emojiCat} A Área de **${area.id}**, ${descricaoAjustada}\n\n⠂ ︵ ◠ . ⠈ ╰ ↪ O foco da nossa equipa é manter a organização, o engajamento e a qualidade na comunidade, trabalhando sempre em conjunto para o crescimento do servidor.\n\n૩ ↪ 𝟹 **Responsáveis pela Equipa:**\n${area.resp}\n\n<@&${cargoEquipe.id}>`;
 
         const embedLideranca = new EmbedBuilder()
@@ -212,7 +227,6 @@ module.exports = {
 
         createdChannels.push(chAv.id, chPr.id, chatArea.id, chAp.id, chAb.id, vcArea.id);
         
-        // Embed de boas vindas no chat
         const welcomeEmbed = new EmbedBuilder()
           .setColor(area.color)
           .setDescription(`Bem-vindos ao chat oficial da equipa de **${area.id}**! Lembrem-se de verificar o canal de guias.`);
@@ -221,7 +235,7 @@ module.exports = {
 
       await setupStore.update(guild.id, () => ({ roles: createdRoles, channels: createdChannels }));
 
-      return interaction.editReply({ content: "✅ **Mega-Estrutura montada com sucesso!**\nOs 5 ranks de liderança foram criados e o canal de líderes foi configurado. Os fóruns agora utilizam o seu padrão estético de texto limpo!" });
+      return interaction.editReply({ content: "✅ **Mega-Estrutura montada com sucesso!**\nOs cargos de permissão, ranks de liderança, áreas e fóruns estéticos foram criados na perfeição!" });
 
     } catch (e) {
       console.error(e);
