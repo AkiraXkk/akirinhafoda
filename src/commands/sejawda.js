@@ -90,7 +90,7 @@ module.exports = {
         "<a:y_catt:856598066940215336> Recrutamento.\n" +
         "<a:y_catt:856598066940215336> Acolhimento\n" +
         "<a:y_catt:856598066940215336> Design\n" +
-        "<a:y_catt:856598066940215336> Pastime",
+        "<a:y_catt:856598066940215336> Passtime",
       image: imagemFixa, // Puxando a imagem diretamente do link
       color: 0x8e44ad
     });
