@@ -34,13 +34,20 @@ module.exports = {
       // Descobre qual comando deve cuidar desta interação pelas suas exceções originais
       if (customId.includes("partnership")) {
         commandName = "partnership"; 
-      } else if (customId.includes("ticket") || customId.includes("open_") || customId.includes("close_")) {
+      } else if (
+        customId.includes("ticket") || 
+        customId.startsWith("open_") || 
+        customId.startsWith("close_") || 
+        customId.startsWith("setup_") ||     // <-- ADICIONADO PARA O TICKET
+        customId.startsWith("user_") ||      // <-- ADICIONADO PARA O TICKET
+        customId.startsWith("assumir_") ||   // <-- ADICIONADO PARA O TICKET
+        customId.startsWith("delete_")       // <-- ADICIONADO PARA O TICKET
+      ) {
         commandName = "ticket";
       } else if (customId.includes("sejawda")) {
         commandName = "sejawda";
       } else {
-        // Roteador Dinâmico: Corta pelo "_", "-" ou ":" para achar o nome do comando base.
-        // Ex: "vipadmin_dash:..." vira "vipadmin" | "dama_cfg:..." vira "dama" | "family_invite..." vira "family"
+        // Roteador Dinâmico original
         commandName = customId.split(/_|-|:/)[0];
       }
 
@@ -53,9 +60,14 @@ module.exports = {
       // Define qual função disparar dentro do arquivo do comando
       let handlerName = "";
 
-      if (interaction.isButton()) {
+      // MÁGICA: Se for o Ticket, joga TUDO (Botões e Menus) para o handleButton
+      if (commandName === "ticket") {
         handlerName = "handleButton";
-        // Exceção adicionada pelo Claude: o vipadmin tem botões secundários para seções de tier e cotas
+      } 
+      // Lógica original para os outros comandos:
+      else if (interaction.isButton()) {
+        handlerName = "handleButton";
+        // Exceção do Claude para vipadmin
         if (commandName === "vipadmin" && (customId.startsWith("vipadmin_tier_section:") || customId.startsWith("vipadmin_cotas:"))) {
           handlerName = "handleButtonSecondary";
         }
@@ -64,13 +76,12 @@ module.exports = {
         handlerName = "handleModal";
       } 
       else if (interaction.isAnySelectMenu()) {
-        // O Claude separou menus específicos para "Cargos" e "Usuários" (usados no /dama e /family)
         if (interaction.isRoleSelectMenu() && typeof command.handleRoleSelectMenu === "function") {
           handlerName = "handleRoleSelectMenu";
         } else if (interaction.isUserSelectMenu() && typeof command.handleUserSelectMenu === "function") {
           handlerName = "handleUserSelectMenu";
         } else {
-          // Fallback para Menus de Texto normais (como os do /shop e /vip)
+          // Fallback
           handlerName = "handleSelectMenu";
         }
       }
