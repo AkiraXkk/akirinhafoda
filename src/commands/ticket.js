@@ -60,6 +60,7 @@ module.exports = {
     .setName("ticket")
     .setDescription("Sistema de Tickets Avançado")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    // O setup agora não tem NENHUMA string option, é direto para o painel!
     .addSubcommand((sub) =>
       sub
         .setName("setup")
@@ -241,7 +242,6 @@ module.exports = {
     }
 
     if (interaction.customId === "setup_back") {
-      // Reconstrói o menu principal
       const embedSetup = new EmbedBuilder().setTitle("⚙️ Gerenciamento de Tickets WDA").setDescription("Utilize o menu abaixo para configurar qual **Categoria** e qual **Cargo** será acionado para cada tipo de ticket.\n\nQuando terminar, envie o painel.").setColor("#2F3136");
       const selectCategorias = new StringSelectMenuBuilder().setCustomId("setup_select_cat").setPlaceholder("Escolha o tipo de ticket para configurar...").addOptions(Object.entries(ticketConfig.categories).map(([key, cat]) => new StringSelectMenuOptionBuilder().setLabel(`Configurar: ${cat.title.replace(/[^a-zA-ZÀ-ÿ\s]/g, '').trim()}`).setValue(key).setEmoji(CATEGORY_ICONS[key] || "🎫")));
       const btnEnviar = new ButtonBuilder().setCustomId("setup_send_panel").setLabel("Enviar Painel Oficial Aqui").setStyle(ButtonStyle.Success).setEmoji("✅");
@@ -254,7 +254,7 @@ module.exports = {
         .setTitle("Central de Atendimento WDA")
         .setDescription("Olá, seja muito bem-vindo(a) à nossa central de suporte!\n\nPara garantir um atendimento rápido e eficaz, clique no botão abaixo e selecione o departamento que melhor atende à sua necessidade.\n\n⚠️ **Importante:**\n• Tenha sempre provas em mãos caso vá realizar uma denúncia.\n• Não abra tickets sem necessidade ou por brincadeira.\n• Aguarde com paciência, nossa equipe será notificada e chegará em breve.")
         .setColor("#1a1a1a")
-        .setImage("https://i.imgur.com/YOUR_BANNER_HERE.png"); // Troque pelo banner que quiser!
+        .setImage("https://i.imgur.com/YOUR_BANNER_HERE.png"); 
 
       const btnOpen = new ButtonBuilder()
         .setCustomId("user_open_menu")
@@ -273,7 +273,6 @@ module.exports = {
         .setDescription("Escolha a categoria correta para o seu atendimento:")
         .setColor("#2F3136");
 
-      // Cria as opções pegando do JSON, mas injetando descrições amigáveis e os ícones
       const descricoesAmigaveis = {
         suporte: "Tire suas dúvidas ou peça ajuda",
         denuncia: "Reporte infrações e abusos de poder",
@@ -302,7 +301,6 @@ module.exports = {
       const ticketType = interaction.values[0];
       const categoryConfig = ticketConfig.categories[ticketType];
 
-      // Busca as configurações feitas pelo Administrador no /setup
       const setupData = await setupStore.load();
       const typeSetup = (setupData[interaction.guildId] || {})[ticketType] || {};
       
@@ -331,7 +329,6 @@ module.exports = {
 
       if (existingTicket) return interaction.reply({ content: `❌ Você já tem um ticket aberto em <#${existingTicket[1].channelId}>.`, ephemeral: true });
 
-      // Criar canal
       const ticketId = await getNextTicketId(ticketType);
       const cleanUsername = interaction.user.username.toLowerCase().replace(/\s+/g, "-");
       const ticketName = `${categoryConfig.prefix}-${cleanUsername}`;
@@ -347,13 +344,11 @@ module.exports = {
         ]
       });
 
-      // Permissões Fixas da Cúpula/Gerência
       for (const roleId of CARGOS_STAFF_WDA) {
         const role = interaction.guild.roles.cache.get(roleId);
         if (role) await channel.permissionOverwrites.create(role, { ViewChannel: true, SendMessages: true, AttachFiles: true });
       }
 
-      // Permissão para o Cargo Específico configurado no Painel Admin!
       if (mentionRoleId) {
         const specificRole = interaction.guild.roles.cache.get(mentionRoleId);
         if (specificRole) await channel.permissionOverwrites.create(specificRole, { ViewChannel: true, SendMessages: true, AttachFiles: true });
@@ -375,19 +370,15 @@ module.exports = {
         new ButtonBuilder().setCustomId("close_ticket_btn").setLabel("Fechar").setStyle(ButtonStyle.Danger).setEmoji("🔒")
       );
 
-      // Marca o cargo específico se ele existir, se não, não marca ninguém extra
       const msgContent = mentionRoleId ? `${interaction.user} | <@&${mentionRoleId}>` : `${interaction.user}`;
       await channel.send({ content: msgContent, embeds: [embedTicket], components: [rowActions] });
       
-      // Resposta no menu para o usuário sumir
       await interaction.update({ content: `✅ Ticket criado com sucesso: ${channel}`, embeds: [], components: [] });
     }
 
-    // --- GERENCIAMENTO DO TICKET ABERTO ---
     if (interaction.customId === "assumir_ticket_btn") {
       const member = await interaction.guild.members.fetch(interaction.user.id);
       
-      // Verifica se é staff global OU se tem o cargo específico daquele ticket
       const tickets = await ticketStore.load();
       const ticketInfo = tickets[interaction.channelId] || (tickets["global"] && tickets["global"][interaction.channelId]);
       
