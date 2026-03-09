@@ -23,25 +23,30 @@ function loadTicketCategories() {
   }
 }
 
-// Gerar nome de ticket com contador
-async function generateTicketName(guild, categoryPrefix, username) {
-  const categoryChannels = guild.channels.cache.filter(c => 
-    c.name.startsWith(categoryPrefix) && c.type === ChannelType.GuildText
-  );
+// NOVO: Gerador de ID Único e Persistente (Nunca diminui)
+async function getNextTicketId(ticketType) {
+  const tickets = await ticketStore.load();
+  const counters = tickets["counters"] || {};
+  
+  // Soma +1 no tipo específico de ticket (suporte, parceria, etc)
+  const nextCount = (counters[ticketType] || 0) + 1;
+  
+  // Salva o novo contador no banco de dados
+  await ticketStore.update("counters", (data) => {
+    const current = data || {};
+    return { ...current, [ticketType]: nextCount };
+  });
 
-  const count = categoryChannels.size + 1;
-  const paddedCount = String(count).padStart(3, "0");
-  const cleanUsername = username.toLowerCase().replace(/\s+/g, "-");
-
-  return `${categoryPrefix}-${cleanUsername}-${paddedCount}`;
+  // Pega as 3 primeiras letras (ex: "sup" para suporte, "par" para parceria)
+  const shortType = ticketType.substring(0, 3).toLowerCase();
+  const paddedCount = String(nextCount).padStart(3, "0"); // Ex: 001, 002, 015
+  
+  return `${shortType}${paddedCount}`; // Retorna sup001
 }
 
-// Verificar se usuário tem permissão de staff (Prioriza os IDs fixos da WDA)
+// Verificar se usuário tem permissão de staff
 function isStaff(member, staffRoles) {
-  // 1. Verifica os cargos fixos da WDA primeiro
   if (CARGOS_STAFF_WDA.some(roleId => member.roles.cache.has(roleId))) return true;
-  
-  // 2. Fallback para o JSON (se houver)
   if (!staffRoles || !staffRoles.allowed) return false;
   return staffRoles.allowed.some(roleId => member.roles.cache.has(roleId));
 }
@@ -127,7 +132,7 @@ module.exports = {
       const allTickets = tickets["global"] || tickets; 
 
       const openTickets = Object.entries(allTickets)
-        .filter(([id, info]) => info && !info.closedAt && info.openedAt)
+        .filter(([id, info]) => id !== "counters" && info && !info.closedAt && info.openedAt)
         .sort((a, b) => b[1].openedAt - a[1].openedAt);
 
       if (openTickets.length === 0) {
@@ -135,7 +140,7 @@ module.exports = {
       }
 
       const fields = openTickets.slice(0, 10).map(([channelId, info]) => ({
-        name: `🎫 ${info.channelName}`,
+        name: `🎫 ${info.channelName} (ID: ${info.ticketId})`,
         value: `Criado por <@${info.userId}>\nAberto em <t:${Math.floor(info.openedAt / 1000)}>` ,
         inline: false
       }));
@@ -178,8 +183,13 @@ module.exports = {
       await canal.permissionOverwrites.edit(ticketInfo.userId, { ViewChannel: false });
       
       const memberCreator = await interaction.guild.members.fetch(ticketInfo.userId).catch(() => null);
-      const username = memberCreator ? memberCreator.user.username : "usuario";
-      await canal.setName(`fechado-${username}`);
+      const username = memberCreator ? memberCreator.user.username.toLowerCase().replace(/\s+/g, "-") : "usuario";
+      
+      // Resgata o ID único salvo (se for ticket antigo sem ID, usa 000)
+      const tId = ticketInfo.ticketId || "old000";
+      
+      // Renomeia o canal incluindo o ID único! (Ex: #fechado-zenox-sup001)
+      await canal.setName(`fechado-${username}-${tId}`);
 
       // Move para a categoria fixa da WDA
       await canal.setParent(CATEGORIA_FECHADOS_ID, { lockPermissions: false });
@@ -200,7 +210,8 @@ module.exports = {
         color: 0xe67e22,
         fields: [
           { name: "👤 Fechado por", value: interaction.user.tag, inline: true },
-          { name: "👥 Criador", value: `<@${ticketInfo.userId}>`, inline: true }
+          { name: "👥 Criador", value: `<@${ticketInfo.userId}>`, inline: true },
+          { name: "🏷️ ID do Ticket", value: ticketInfo.ticketId || "N/A", inline: true }
         ]
       });
     }
@@ -241,11 +252,13 @@ module.exports = {
       const allTickets = tickets["global"] || tickets;
 
       // ==========================================
-      // CAÇADOR DE FANTASMAS
+      // CAÇADOR DE FANTASMAS (Ignora os contadores)
       // ==========================================
       let existingTicket = null;
       
       for (const [id, info] of Object.entries(allTickets)) {
+        if (id === "counters") continue; // Pula a chave de contadores
+        
         if (info && info.userId === interaction.user.id && !info.closedAt) {
           const canalAindaExiste = interaction.guild.channels.cache.get(info.channelId);
           
@@ -265,8 +278,10 @@ module.exports = {
         return interaction.reply({ content: `❌ Você já tem um ticket aberto em <#${existingTicket[1].channelId}>. Feche-o para abrir um novo.`, ephemeral: true });
       }
 
-      // CRIAR CANAL NOVO
-      const ticketName = await generateTicketName(interaction.guild, categoryConfig.prefix, interaction.user.username);
+      // CRIAR CANAL NOVO COM NOME LIMPO E ID PERSISTENTE
+      const ticketId = await getNextTicketId(ticketType); // Puxa o ID (ex: sup001)
+      const cleanUsername = interaction.user.username.toLowerCase().replace(/\s+/g, "-");
+      const ticketName = `${categoryConfig.prefix}-${cleanUsername}`; // Ex: #suporte-zenox
 
       const channel = await interaction.guild.channels.create({
         name: ticketName,
@@ -279,7 +294,7 @@ module.exports = {
         ]
       });
 
-      // ADICIONA OS CARGOS FIXOS DA WDA AO CANAL PARA A STAFF CONSEGUIR LER E RESPONDER
+      // ADICIONA OS CARGOS FIXOS DA WDA AO CANAL PARA A STAFF
       for (const roleId of CARGOS_STAFF_WDA) {
         const role = interaction.guild.roles.cache.get(roleId);
         if (role) {
@@ -287,7 +302,6 @@ module.exports = {
         }
       }
 
-      // Adiciona do JSON caso tenha algum extra configurado lá
       if (ticketConfig.staffRoles && ticketConfig.staffRoles.allowed) {
           for (const roleId of ticketConfig.staffRoles.allowed) {
             const role = interaction.guild.roles.cache.get(roleId);
@@ -295,18 +309,20 @@ module.exports = {
           }
       }
 
+      // SALVA O TICKET E O SEU ID ÚNICO
       await ticketStore.update(channel.id, () => ({
         userId: interaction.user.id,
         channelName: channel.name,
         channelId: channel.id,
         ticketType: ticketType,
+        ticketId: ticketId, // <--- ID Único salvo no BD
         openedAt: Date.now(),
         closedAt: null
       }));
 
       const embed = createEmbed({
         title: `Atendimento: ${categoryConfig.title}`,
-        description: "Descreva sua dúvida ou solicitação. A equipe responsável chegará em breve.",
+        description: `Descreva sua dúvida ou solicitação. A equipe responsável chegará em breve.\n\n🏷️ **Protocolo:** \`${ticketId}\``,
         color: categoryConfig.color || 0x2ecc71,
         footer: { text: "Use os botões abaixo para gerenciar o atendimento." }
       });
