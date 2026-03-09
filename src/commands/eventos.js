@@ -6,94 +6,378 @@ const {
   ButtonStyle,
   ModalBuilder,
   TextInputBuilder,
-  TextInputStyle
+  TextInputStyle,
+  PermissionFlagsBits
 } = require("discord.js");
+const { createDataStore } = require("../store/dataStore");
+
+// Banco de dados para os sorteios
+const giveawayStore = createDataStore("eventos_sorteios.json");
+
+// Função para converter "10m", "1h", "2d" em milissegundos
+function parseTime(timeStr) {
+  const regex = /^(\d+)\s*([smhd])$/i;
+  const match = timeStr.trim().match(regex);
+  if (!match) return null;
+  const val = parseInt(match[1]);
+  const unit = match[2].toLowerCase();
+  if (unit === 's') return val * 1000;
+  if (unit === 'm') return val * 60 * 1000;
+  if (unit === 'h') return val * 60 * 60 * 1000;
+  if (unit === 'd') return val * 24 * 60 * 60 * 1000;
+  return null;
+}
+
+// ==========================================
+// MÁQUINA PRINCIPAL DE SORTEIO
+// ==========================================
+async function encerrarSorteio(client, messageId, channelId, isReroll = false) {
+  const dados = await giveawayStore.load();
+  const gw = dados[messageId];
+
+  if (!gw || (gw.ended && !isReroll)) return;
+
+  try {
+    const channel = await client.channels.fetch(channelId);
+    const message = await channel.messages.fetch(messageId).catch(() => null);
+
+    if (!message) return;
+
+    let winnersText = "Ninguém participou 😢";
+    let winArray = [];
+
+    // Lógica de Sorteio
+    if (gw.participantes.length > 0) {
+      const shuffled = gw.participantes.sort(() => 0.5 - Math.random());
+      const numGanhadores = Math.min(gw.vencedores, gw.participantes.length);
+      winArray = shuffled.slice(0, numGanhadores);
+      winnersText = winArray.map(id => `<@${id}>`).join(", ");
+    }
+
+    const tituloEmbed = isReroll ? `🎁 Sorteio: ${gw.premio} (NOVO GIRO)` : `🎁 Sorteio Encerrado: ${gw.premio}`;
+
+    const embed = EmbedBuilder.from(message.embeds[0])
+      .setColor("#95a5a6")
+      .setTitle(tituloEmbed)
+      .setDescription(
+        `🏆 **Vencedor(es):** ${winnersText}\n` +
+        `🎁 **Prêmio:** ${gw.premio}\n` +
+        `${gw.patrocinador ? `🤝 **Patrocínio:** <@${gw.patrocinador}>\n` : ""}` +
+        `👥 **Total de Participantes:** ${gw.participantes.length}`
+      );
+
+    const disabledButton = new ButtonBuilder()
+      .setCustomId("evento_participar")
+      .setLabel(`Encerrado (${gw.participantes.length})`)
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(true);
+
+    await message.edit({ embeds: [embed], components: [new ActionRowBuilder().addComponents(disabledButton)] });
+
+    // Anuncia os vencedores no chat
+    if (winArray.length > 0) {
+      await channel.send({ content: `🎊 Parabéns ${winnersText}! Vocês ganharam **${gw.premio}**! ${isReroll ? "(Resultado do Reroll)" : ""}\n[Ir para o Sorteio](https://discord.com/channels/${message.guild.id}/${channelId}/${messageId})` });
+    } else {
+      if (!isReroll) await channel.send({ content: `O sorteio de **${gw.premio}** foi encerrado sem participantes suficientes.` });
+    }
+
+  } catch (e) {
+    console.error(`Erro ao encerrar sorteio ${messageId}:`, e);
+  }
+
+  if (!isReroll) {
+    await giveawayStore.update(messageId, (info) => ({ ...info, ended: true }));
+  }
+}
 
 module.exports = {
+  // ==========================================
+  // O CORAÇÃO DO ANTI-CRASH (Chamado pelo index.js)
+  // ==========================================
+  async checkSorteios(client) {
+    const dados = await giveawayStore.load();
+    const now = Date.now();
+    
+    for (const [msgId, gw] of Object.entries(dados)) {
+      if (msgId === "counters") continue;
+      // Se não acabou, o tempo passou e não é um DROP (drop não tem tempo)
+      if (!gw.ended && gw.endTime <= now && gw.tipo !== "drop") {
+        await encerrarSorteio(client, msgId, gw.channelId, false);
+      }
+    }
+  },
+
   data: new SlashCommandBuilder()
     .setName("evento")
-    .setDescription("Sistema da equipe de Eventos")
+    .setDescription("Sistema avançado da equipe de Eventos")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
+    
     .addSubcommand(sub => 
-      sub.setName("painel")
-      .setDescription("Cria o painel de criação rápida de eventos")
+      sub.setName("painel").setDescription("Cria o painel de criação rápida de anúncios")
     )
+
     .addSubcommand(sub => 
       sub.setName("sortear")
-      .setDescription("Sorteia um membro aleatório que está na call com você")
+      .setDescription("Inicia um sorteio avançado no chat atual")
+      .addStringOption(opt => opt.setName("premio").setDescription("Nome do prêmio").setRequired(true))
+      .addStringOption(opt => opt.setName("duracao").setDescription("Duração (Ex: 10m, 1h, 1d)").setRequired(true))
+      .addIntegerOption(opt => opt.setName("vencedores").setDescription("Quantidade de ganhadores").setRequired(true).setMinValue(1))
+      .addRoleOption(opt => opt.setName("requisito_cargo").setDescription("Cargo obrigatório").setRequired(false))
+      .addIntegerOption(opt => opt.setName("requisito_dias").setDescription("Dias mínimos no servidor para participar").setRequired(false).setMinValue(1))
+      .addUserOption(opt => opt.setName("patrocinador").setDescription("Quem doou o prêmio?").setRequired(false))
+      .addStringOption(opt => opt.setName("imagem").setDescription("Link da imagem/banner do sorteio").setRequired(false))
+      .addRoleOption(opt => opt.setName("ping").setDescription("Cargo para mencionar ao abrir").setRequired(false))
+    )
+
+    .addSubcommand(sub => 
+      sub.setName("drop")
+      .setDescription("Solta um prêmio rápido! O primeiro a clicar ganha.")
+      .addStringOption(opt => opt.setName("premio").setDescription("Nome do prêmio").setRequired(true))
+      .addUserOption(opt => opt.setName("patrocinador").setDescription("Quem doou?").setRequired(false))
+    )
+
+    .addSubcommand(sub => 
+      sub.setName("reroll")
+      .setDescription("Sorteia um novo vencedor para um sorteio já encerrado")
+      .addStringOption(opt => opt.setName("id_mensagem").setDescription("O ID da mensagem do sorteio").setRequired(true))
+    )
+
+    .addSubcommand(sub => 
+      sub.setName("cancelar")
+      .setDescription("Cancela um sorteio que está em andamento")
+      .addStringOption(opt => opt.setName("id_mensagem").setDescription("O ID da mensagem do sorteio").setRequired(true))
     ),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
 
     // ==========================================
-    // PAINEL DE EVENTOS
+    // PAINEL DE EVENTOS (ANÚNCIOS)
     // ==========================================
     if (sub === "painel") {
       const embedPainel = new EmbedBuilder()
         .setTitle("🎉 Painel de Gestão de Eventos")
         .setColor("#2ecc71")
-        .setDescription("Utilize os botões abaixo para criar anúncios oficiais de eventos no servidor de forma padronizada.");
+        .setDescription("Utilize os botões abaixo para criar anúncios oficiais de eventos no servidor.");
 
-      const btnCriar = new ButtonBuilder()
-        .setCustomId("modal_criar_evento")
-        .setLabel("📝 Anunciar Evento")
-        .setStyle(ButtonStyle.Success)
-        .setEmoji("📢");
-
+      const btnCriar = new ButtonBuilder().setCustomId("evento_modal_criar").setLabel("📝 Anunciar Evento").setStyle(ButtonStyle.Success).setEmoji("📢");
       const row = new ActionRowBuilder().addComponents(btnCriar);
-      await interaction.reply({ embeds: [embedPainel], components: [row] });
+      
+      await interaction.reply({ embeds: [embedPainel], components: [row], ephemeral: true });
+      await interaction.channel.send({ embeds: [embedPainel], components: [row] });
     }
 
     // ==========================================
-    // SORTEIO NA CALL
+    // INICIAR SORTEIO AVANÇADO
     // ==========================================
     if (sub === "sortear") {
-      const canalDeVoz = interaction.member.voice.channel;
-      
-      if (!canalDeVoz) {
-        return interaction.reply({ content: "❌ Você precisa estar em um canal de voz para sortear alguém!", ephemeral: true });
+      const premio = interaction.options.getString("premio");
+      const duracaoStr = interaction.options.getString("duracao");
+      const vencedores = interaction.options.getInteger("vencedores");
+      const requisitoCargo = interaction.options.getRole("requisito_cargo");
+      const requisitoDias = interaction.options.getInteger("requisito_dias");
+      const patrocinador = interaction.options.getUser("patrocinador");
+      const imagem = interaction.options.getString("imagem");
+      const ping = interaction.options.getRole("ping");
+
+      const tempoMs = parseTime(duracaoStr);
+      if (!tempoMs) {
+        return interaction.reply({ content: "❌ Formato de tempo inválido! Use algo como `10m`, `2h` ou `1d`.", ephemeral: true });
       }
 
-      // Pega todos os membros na call, exceto bots
-      const membrosNaCall = canalDeVoz.members.filter(m => !m.user.bot);
-      if (membrosNaCall.size === 0) {
-        return interaction.reply({ content: "❌ Não há ninguém (além de bots) na sua call para sortear.", ephemeral: true });
-      }
+      const dataFim = Date.now() + tempoMs;
 
-      // Sorteia um aleatório
-      const ganhador = membrosNaCall.random();
-      
-      const embedSorteio = new EmbedBuilder()
-        .setTitle("🎁 Sorteio do Evento!")
-        .setColor("#2ecc71")
-        .setDescription(`A roleta girou entre os **${membrosNaCall.size}** participantes da call **${canalDeVoz.name}**...\n\n🎉 E o grande vencedor foi: ${ganhador}!`)
-        .setTimestamp();
+      let desc = `Clique no botão abaixo para participar!\n\n🏆 **Vencedores:** ${vencedores}\n⏳ **Termina em:** <t:${Math.floor(dataFim / 1000)}:R>\n\n**Requisitos:**\n`;
+      desc += requisitoCargo ? `🔸 Cargo: <@&${requisitoCargo.id}>\n` : "🔸 Cargo: Livre\n";
+      desc += requisitoDias ? `🔸 Conta no servidor: Mínimo ${requisitoDias} dias\n` : "";
+      if (patrocinador) desc += `\n🤝 **Patrocinador:** ${patrocinador}\n`;
 
-      await interaction.reply({ embeds: [embedSorteio] });
+      const embed = new EmbedBuilder()
+        .setTitle(`🎁 Sorteio: ${premio}`)
+        .setColor("#f1c40f")
+        .setDescription(desc)
+        .setFooter({ text: `Criado por ${interaction.user.username}` })
+        .setTimestamp(dataFim);
+
+      if (imagem && imagem.startsWith("http")) embed.setImage(imagem);
+
+      const btnParticipar = new ButtonBuilder().setCustomId("evento_participar").setLabel("Participar (0)").setStyle(ButtonStyle.Primary).setEmoji("🎉");
+      const row = new ActionRowBuilder().addComponents(btnParticipar);
+
+      const msgContent = ping ? `<@&${ping.id}> Novo sorteio aberto!` : null;
+
+      const msg = await interaction.reply({ content: msgContent, embeds: [embed], components: [row], fetchReply: true, withResponse: true });
+      const msgReal = msg.resource ? msg.resource.message : await interaction.fetchReply();
+
+      await giveawayStore.update(msgReal.id, () => ({
+        tipo: "sorteio",
+        channelId: interaction.channelId,
+        premio: premio,
+        vencedores: vencedores,
+        requisitoCargo: requisitoCargo ? requisitoCargo.id : null,
+        requisitoDias: requisitoDias || null,
+        patrocinador: patrocinador ? patrocinador.id : null,
+        endTime: dataFim,
+        participantes: [],
+        ended: false
+      }));
+
+      // Inicia o timer local (se o bot cair, o index.js cobre)
+      setTimeout(() => {
+        encerrarSorteio(interaction.client, msgReal.id, interaction.channelId);
+      }, tempoMs);
+    }
+
+    // ==========================================
+    // INICIAR EVENTO DROP (Rápido)
+    // ==========================================
+    if (sub === "drop") {
+      const premio = interaction.options.getString("premio");
+      const patrocinador = interaction.options.getUser("patrocinador");
+
+      const embed = new EmbedBuilder()
+        .setTitle(`⚡ DROP WDA: ${premio}`)
+        .setColor("#e74c3c")
+        .setDescription(`O primeiro a clicar no botão leva o prêmio na hora!\n\n${patrocinador ? `🤝 Patrocinador: ${patrocinador}` : ""}`)
+        .setFooter({ text: "Seja rápido!" });
+
+      const btnDrop = new ButtonBuilder().setCustomId("evento_drop_pegar").setLabel("Pegar Prêmio!").setStyle(ButtonStyle.Danger).setEmoji("🎁");
+      const row = new ActionRowBuilder().addComponents(btnDrop);
+
+      const msg = await interaction.reply({ embeds: [embed], components: [row], fetchReply: true, withResponse: true });
+      const msgReal = msg.resource ? msg.resource.message : await interaction.fetchReply();
+
+      await giveawayStore.update(msgReal.id, () => ({
+        tipo: "drop",
+        channelId: interaction.channelId,
+        premio: premio,
+        ended: false
+      }));
+    }
+
+    // ==========================================
+    // REROLL E CANCELAR
+    // ==========================================
+    if (sub === "reroll") {
+      const msgId = interaction.options.getString("id_mensagem");
+      const dados = await giveawayStore.load();
+      const gw = dados[msgId];
+
+      if (!gw) return interaction.reply({ content: "❌ Sorteio não encontrado.", ephemeral: true });
+      if (!gw.ended) return interaction.reply({ content: "❌ Este sorteio ainda está rolando!", ephemeral: true });
+      if (gw.participantes.length === 0) return interaction.reply({ content: "❌ Ninguém participou.", ephemeral: true });
+
+      await interaction.reply({ content: "🎲 Girando a roleta novamente...", ephemeral: true });
+      await encerrarSorteio(interaction.client, msgId, gw.channelId, true);
+    }
+
+    if (sub === "cancelar") {
+      const msgId = interaction.options.getString("id_mensagem");
+      const dados = await giveawayStore.load();
+      const gw = dados[msgId];
+
+      if (!gw) return interaction.reply({ content: "❌ Sorteio não encontrado.", ephemeral: true });
+      if (gw.ended) return interaction.reply({ content: "❌ Este sorteio já acabou.", ephemeral: true });
+
+      await giveawayStore.update(msgId, (info) => ({ ...info, ended: true }));
+
+      try {
+        const channel = await interaction.client.channels.fetch(gw.channelId);
+        const message = await channel.messages.fetch(msgId);
+        
+        const embedCancelado = EmbedBuilder.from(message.embeds[0])
+          .setColor("#e74c3c")
+          .setTitle(`🚫 Sorteio Cancelado: ${gw.premio}`)
+          .setDescription("Este sorteio foi cancelado pela administração.");
+
+        const btnCancelado = new ButtonBuilder().setCustomId("null").setLabel("Cancelado").setStyle(ButtonStyle.Danger).setDisabled(true);
+        await message.edit({ embeds: [embedCancelado], components: [new ActionRowBuilder().addComponents(btnCancelado)] });
+      } catch (e) {}
+
+      await interaction.reply({ content: "✅ Sorteio cancelado com sucesso!", ephemeral: true });
     }
   },
 
-  // Escuta o botão do painel
+  // ==========================================
+  // HANDLERS (Botões e Modal)
+  // ==========================================
   async handleButton(interaction) {
-    if (interaction.customId === "modal_criar_evento") {
-      const modal = new ModalBuilder()
-        .setCustomId("submit_evento")
-        .setTitle("Anúncio de Evento");
+    
+    // Participar do Sorteio Normal
+    if (interaction.customId === "evento_participar") {
+      const gwData = await giveawayStore.load();
+      const gw = gwData[interaction.message.id];
 
+      if (!gw || gw.tipo !== "sorteio") return interaction.reply({ content: "❌ Sorteio inválido.", ephemeral: true });
+      if (gw.ended) return interaction.reply({ content: "❌ Este sorteio já foi encerrado!", ephemeral: true });
+
+      // Verificação de Cargo
+      if (gw.requisitoCargo && !interaction.member.roles.cache.has(gw.requisitoCargo)) {
+        return interaction.reply({ content: `❌ Você precisa do cargo <@&${gw.requisitoCargo}> para participar!`, ephemeral: true });
+      }
+
+      // Verificação de Dias no Servidor
+      if (gw.requisitoDias) {
+        const diasNoServer = Math.floor((Date.now() - interaction.member.joinedTimestamp) / (1000 * 60 * 60 * 24));
+        if (diasNoServer < gw.requisitoDias) {
+          return interaction.reply({ content: `❌ Você precisa ter no mínimo **${gw.requisitoDias} dias** no servidor para participar (Você tem ${diasNoServer} dias).`, ephemeral: true });
+        }
+      }
+
+      let novosParticipantes = [...gw.participantes];
+      let entrou = false;
+
+      if (novosParticipantes.includes(interaction.user.id)) {
+        novosParticipantes = novosParticipantes.filter(id => id !== interaction.user.id);
+      } else {
+        novosParticipantes.push(interaction.user.id);
+        entrou = true;
+      }
+
+      await giveawayStore.update(interaction.message.id, (info) => ({ ...info, participantes: novosParticipantes }));
+
+      const novoBotao = new ButtonBuilder().setCustomId("evento_participar").setLabel(`Participar (${novosParticipantes.length})`).setStyle(ButtonStyle.Primary).setEmoji("🎉");
+      await interaction.update({ components: [new ActionRowBuilder().addComponents(novoBotao)] });
+      await interaction.followUp({ content: entrou ? "✅ Você **entrou** no sorteio! Boa sorte!" : "👋 Você **saiu** do sorteio.", ephemeral: true });
+    }
+
+    // Pegar o DROP
+    if (interaction.customId === "evento_drop_pegar") {
+      const gwData = await giveawayStore.load();
+      const gw = gwData[interaction.message.id];
+
+      if (!gw || gw.tipo !== "drop") return interaction.reply({ content: "❌ Drop inválido.", ephemeral: true });
+      if (gw.ended) return interaction.reply({ content: "❌ Alguém foi mais rápido e já pegou!", ephemeral: true });
+
+      // Marca como finalizado para ninguém mais pegar
+      await giveawayStore.update(interaction.message.id, (info) => ({ ...info, ended: true }));
+
+      const embedWin = EmbedBuilder.from(interaction.message.embeds[0])
+        .setColor("#2ecc71")
+        .setTitle(`⚡ DROP RESGATADO: ${gw.premio}`)
+        .setDescription(`🏆 **Vencedor:** ${interaction.user} foi o mais rápido e levou o prêmio!`);
+
+      const btnWinner = new ButtonBuilder().setCustomId("null").setLabel(`Pego por ${interaction.user.username}`).setStyle(ButtonStyle.Secondary).setDisabled(true);
+      
+      await interaction.update({ embeds: [embedWin], components: [new ActionRowBuilder().addComponents(btnWinner)] });
+      await interaction.channel.send({ content: `🎊 O dedo mais rápido do oeste! ${interaction.user} pegou **${gw.premio}** no Drop!` });
+    }
+
+    // Abrir Modal do Painel
+    if (interaction.customId === "evento_modal_criar") {
+      const modal = new ModalBuilder().setCustomId("evento_submit").setTitle("Anúncio de Evento");
       modal.addComponents(
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("ev_titulo").setLabel("Nome do Evento").setStyle(TextInputStyle.Short).setRequired(true)),
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("ev_desc").setLabel("Descrição e Regras").setStyle(TextInputStyle.Paragraph).setRequired(true)),
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("ev_data").setLabel("Data e Horário").setStyle(TextInputStyle.Short).setRequired(true)),
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("ev_premio").setLabel("Premiação (Opcional)").setStyle(TextInputStyle.Short).setRequired(false))
       );
-
       await interaction.showModal(modal);
     }
   },
 
-  // Posta o evento após preencher o formulário
   async handleModal(interaction) {
-    if (interaction.customId === "submit_evento") {
+    if (interaction.customId === "evento_submit") {
       const titulo = interaction.fields.getTextInputValue("ev_titulo");
       const desc = interaction.fields.getTextInputValue("ev_desc");
       const data = interaction.fields.getTextInputValue("ev_data");
@@ -103,19 +387,12 @@ module.exports = {
         .setTitle(`🎉 EVENTO: ${titulo}`)
         .setColor("#2ecc71")
         .setDescription(`\n${desc}\n\n📅 **Quando:** ${data}${premio ? `\n🏆 **Prêmio:** ${premio}` : ""}`)
-        .setImage("https://i.imgur.com/YOUR_BANNER_HERE.png") // Banner opcional
+        .setImage("https://i.imgur.com/YOUR_BANNER_HERE.png") 
         .setFooter({ text: `Evento organizado por ${interaction.user.username}` });
 
-      // Aqui você coloca o ID do canal de anúncios de eventos do seu servidor
-      const canalAnuncio = interaction.guild.channels.cache.find(c => c.name.includes("avisos"));
-      
-      if (canalAnuncio) {
-        // Envia marcando Everyone ou o Cargo Ping de Eventos
-        await canalAnuncio.send({ content: "@everyone Um novo evento vai começar!", embeds: [embedEvento] });
-        await interaction.reply({ content: "✅ Evento anunciado com sucesso!", ephemeral: true });
-      } else {
-        await interaction.reply({ content: "❌ Canal de anúncios não encontrado.", ephemeral: true });
-      }
+      const canalAnuncio = interaction.guild.channels.cache.find(c => c.name.includes("avisos")) || interaction.channel;
+      await canalAnuncio.send({ content: "@everyone Um novo evento vai começar!", embeds: [embedEvento] });
+      await interaction.reply({ content: `✅ Evento anunciado com sucesso em ${canalAnuncio}!`, ephemeral: true });
     }
   }
 };
