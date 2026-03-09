@@ -139,13 +139,11 @@ module.exports = {
     // FECHAR TICKET (COMANDO)
     // ==========================================
     if (sub === "close") {
-      // Mesma lógica do botão "close_ticket_btn", que agora é o nosso sistema de Arquivamento (Passo 1).
-      // Redirecionamos para o método que já fazemos no handleButton para evitar código duplicado.
       await module.exports.archiveTicket(interaction, ticketStore, logService, ticketConfig);
     }
   },
 
-  // FUNÇÃO ISOLADA PARA ARQUIVAR O TICKET (Para ser usada pelo botão e pelo comando)
+  // FUNÇÃO ISOLADA PARA ARQUIVAR O TICKET
   async archiveTicket(interaction, ticketStore, logService, ticketConfig) {
     const tickets = await ticketStore.load();
     const ticketInfo = tickets[interaction.channelId] || (tickets["global"] && tickets["global"][interaction.channelId]);
@@ -168,15 +166,12 @@ module.exports = {
     const canal = interaction.channel;
     
     try {
-      // 1. Tira a permissão de ver o canal do membro original
       await canal.permissionOverwrites.edit(ticketInfo.userId, { ViewChannel: false });
       
-      // 2. Renomeia o canal
       const memberCreator = await interaction.guild.members.fetch(ticketInfo.userId).catch(() => null);
       const username = memberCreator ? memberCreator.user.username : "usuario";
       await canal.setName(`fechado-${username}`);
 
-      // 3. Move para a categoria de Tickets Fechados (se existir na guildConfig)
       const guildConfig = await getGuildConfig(interaction.guildId);
       if (guildConfig.closedTicketCategoryId) {
         await canal.setParent(guildConfig.closedTicketCategoryId, { lockPermissions: false });
@@ -186,7 +181,6 @@ module.exports = {
       console.log("Aviso: Permissões insuficientes para renomear/mover o canal do ticket.");
     }
 
-    // 4. Salva no banco de dados que ele foi fechado
     await ticketStore.update(interaction.channelId, (info) => {
       if (info) return { ...info, closedAt: Date.now() };
       return null;
@@ -204,7 +198,6 @@ module.exports = {
       });
     }
 
-    // 5. Envia as opções exclusivas da Staff
     const embedArquivado = createEmbed({
       title: "🔒 Ticket Arquivado",
       description: `O criador do ticket não possui mais acesso a este canal.\n\nA staff pode ler o histórico acima. Quando não for mais necessário, clique no botão abaixo para excluir o canal permanentemente.`,
@@ -219,7 +212,7 @@ module.exports = {
   },
 
   // ==========================================
-  // HANDLER DE BOTÕES (ABRIR, ASSUMIR, FECHAR E DELETAR)
+  // HANDLER DE BOTÕES
   // ==========================================
   async handleButton(interaction) {
     const logService = interaction.client.services?.log;
@@ -240,9 +233,32 @@ module.exports = {
       const tickets = await ticketStore.load();
       const allTickets = tickets["global"] || tickets;
 
-      const existingTicket = Object.entries(allTickets).find(([id, info]) => info && info.userId === interaction.user.id && !info.closedAt);
-      if (existingTicket) return interaction.reply({ content: `❌ Você já tem um ticket aberto em <#${existingTicket[0]}>. Feche-o para abrir um novo.`, ephemeral: true });
+      // ==========================================
+      // CAÇADOR DE FANTASMAS
+      // ==========================================
+      let existingTicket = null;
+      
+      for (const [id, info] of Object.entries(allTickets)) {
+        if (info && info.userId === interaction.user.id && !info.closedAt) {
+          const canalAindaExiste = interaction.guild.channels.cache.get(info.channelId);
+          
+          if (canalAindaExiste) {
+            existingTicket = [id, info];
+            break;
+          } else {
+            await ticketStore.update(id, (ghostInfo) => {
+              if (ghostInfo) return { ...ghostInfo, closedAt: Date.now() };
+              return null;
+            });
+          }
+        }
+      }
 
+      if (existingTicket) {
+        return interaction.reply({ content: `❌ Você já tem um ticket aberto em <#${existingTicket[1].channelId}>. Feche-o para abrir um novo.`, ephemeral: true });
+      }
+
+      // CRIAR CANAL NOVO
       const ticketName = await generateTicketName(interaction.guild, categoryConfig.prefix, interaction.user.username);
 
       const channel = await interaction.guild.channels.create({
@@ -311,15 +327,11 @@ module.exports = {
     if (interaction.customId === "delete_ticket_btn") {
       const member = await interaction.guild.members.fetch(interaction.user.id);
       
-      // Aqui só a staff consegue clicar no botão deletar de verdade
       if (!isStaff(member, ticketConfig.staffRoles)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Apenas membros da staff podem deletar tickets do banco de dados.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas membros da staff podem deletar tickets.")], ephemeral: true });
       }
 
       await interaction.reply({ content: "💥 O canal será destruído em 5 segundos...", ephemeral: false });
-
-      // Opcional: Se quiser limpar do banco de dados para não inchar o arquivo (recomendado)
-      // await ticketStore.update(interaction.channelId, () => null);
 
       setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     }
