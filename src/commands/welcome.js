@@ -33,7 +33,7 @@ module.exports = {
         .addStringOption((opt) =>
           opt
             .setName("cor")
-            .setDescription("Cor do embed (hexadecimal)")
+            .setDescription("Cor do embed (hexadecimal, ex: #ff0000)")
             .setRequired(false)
         )
         .addIntegerOption((opt) =>
@@ -64,7 +64,7 @@ module.exports = {
     .addSubcommand((sub) =>
       sub
         .setName("test")
-        .setDescription("Envia uma mensagem de teste")
+        .setDescription("Envia uma mensagem de teste no canal configurado")
     ),
 
   async execute(interaction) {
@@ -79,13 +79,13 @@ module.exports = {
       const deleteTime = interaction.options.getInteger("tempo_exclusao");
       const mention = interaction.options.getBoolean("mencionar");
 
-      const config = await getGuildConfig(guildId);
+      const config = await getGuildConfig(guildId) || {};
 
       // Atualizar configuração
       config.welcomeChannelId = channel.id;
-      if (message) config.welcomeMessage = message;
-      if (title) config.welcomeTitle = title;
-      if (color) config.welcomeColor = color;
+      if (message !== null) config.welcomeMessage = message;
+      if (title !== null) config.welcomeTitle = title;
+      if (color !== null) config.welcomeColor = color;
       if (deleteTime !== null) config.welcomeDeleteTime = deleteTime;
       if (mention !== null) config.welcomePing = mention;
 
@@ -94,8 +94,8 @@ module.exports = {
       const embed = createSuccessEmbed(
         `✅ Sistema de boas-vindas configurado com sucesso!\n\n` +
         `📢 Canal: ${channel}\n` +
-        `⏰ Tempo de exclusão: ${deleteTime === 0 ? "Não exclui" : `${deleteTime} segundos`}\n` +
-        `🔔 Menção: ${mention ? "Ativada" : "Desativada"}\n\n` +
+        `⏰ Tempo de exclusão: ${config.welcomeDeleteTime === 0 ? "Não exclui" : `${config.welcomeDeleteTime || 30} segundos`}\n` +
+        `🔔 Menção: ${config.welcomePing ? "Ativada" : "Desativada"}\n\n` +
         `Use \`/welcome preview\` para ver como ficará!`
       );
 
@@ -104,8 +104,8 @@ module.exports = {
 
     if (sub === "preview") {
       const config = await getGuildConfig(guildId);
-      
-      if (!config.welcomeChannelId) {
+
+      if (!config || !config.welcomeChannelId) {
         return interaction.reply({
           embeds: [createErrorEmbed("Sistema de boas-vindas não configurado! Use `/welcome setup`.")],
           ephemeral: true
@@ -114,18 +114,22 @@ module.exports = {
 
       // Simular mensagem de boas-vindas
       const message = (config.welcomeMessage || "Bem-vindo ao servidor, {user}! 🎉")
-        .replace("{user}", interaction.user.toString())
-        .replace("{username}", interaction.user.username)
-        .replace("{server}", interaction.guild.name)
-        .replace("{count}", interaction.guild.memberCount);
+        .replace(/{user}/g, interaction.user.toString())
+        .replace(/{username}/g, interaction.user.username)
+        .replace(/{server}/g, interaction.guild.name)
+        .replace(/{count}/g, interaction.guild.memberCount);
+
+      // Limpa a cor caso o admin tenha digitado com '#'
+      const rawColor = config.welcomeColor || "3498db";
+      const cleanColor = parseInt(rawColor.replace("#", ""), 16);
 
       const embed = createEmbed({
         title: config.welcomeTitle || "👋 Bem-vindo(a)!",
         description: message,
         thumbnail: interaction.user.displayAvatarURL({ dynamic: true, size: 256 }),
-        color: parseInt(config.welcomeColor || "3498db", 16),
+        color: cleanColor,
         footer: { 
-          text: `${config.welcomeFooter || `Membro #${interaction.guild.memberCount} • Esta mensagem será excluída em ${config.welcomeDeleteTime || 30} segundos`} • WDA - Todos os direitos reservados` 
+          text: `Membro #${interaction.guild.memberCount} • Exclusão em ${config.welcomeDeleteTime || 30}s • WDA` 
         },
         timestamp: new Date()
       });
@@ -138,8 +142,8 @@ module.exports = {
     }
 
     if (sub === "disable") {
-      const config = await getGuildConfig(guildId);
-      
+      const config = await getGuildConfig(guildId) || {};
+
       // Remover configurações de boas-vindas
       delete config.welcomeChannelId;
       delete config.welcomeMessage;
@@ -159,8 +163,8 @@ module.exports = {
 
     if (sub === "test") {
       const config = await getGuildConfig(guildId);
-      
-      if (!config.welcomeChannelId) {
+
+      if (!config || !config.welcomeChannelId) {
         return interaction.reply({
           embeds: [createErrorEmbed("Sistema de boas-vindas não configurado! Use `/welcome setup`.")],
           ephemeral: true
@@ -170,25 +174,28 @@ module.exports = {
       const channel = interaction.guild.channels.cache.get(config.welcomeChannelId);
       if (!channel) {
         return interaction.reply({
-          embeds: [createErrorEmbed("Canal de boas-vindas não encontrado! Configure novamente.")],
+          embeds: [createErrorEmbed("Canal de boas-vindas não encontrado! Configure novamente com `/welcome setup`.")],
           ephemeral: true
         });
       }
 
       // Enviar mensagem de teste
       const message = (config.welcomeMessage || "Bem-vindo ao servidor, {user}! 🎉")
-        .replace("{user}", interaction.user.toString())
-        .replace("{username}", interaction.user.username)
-        .replace("{server}", interaction.guild.name)
-        .replace("{count}", interaction.guild.memberCount);
+        .replace(/{user}/g, interaction.user.toString())
+        .replace(/{username}/g, interaction.user.username)
+        .replace(/{server}/g, interaction.guild.name)
+        .replace(/{count}/g, interaction.guild.memberCount);
+
+      const rawColor = config.welcomeColor || "3498db";
+      const cleanColor = parseInt(rawColor.replace("#", ""), 16);
 
       const embed = createEmbed({
         title: (config.welcomeTitle || "👋 Bem-vindo(a)!") + " (TESTE)",
         description: message,
         thumbnail: interaction.user.displayAvatarURL({ dynamic: true, size: 256 }),
-        color: parseInt(config.welcomeColor || "3498db", 16),
+        color: cleanColor,
         footer: { 
-          text: `Mensagem de teste • Esta mensagem será excluída em ${config.welcomeDeleteTime || 30} segundos • WDA - Todos os direitos reservados` 
+          text: `Mensagem de teste • Será excluída em ${config.welcomeDeleteTime || 30}s • WDA` 
         },
         timestamp: new Date()
       });
@@ -198,13 +205,13 @@ module.exports = {
         embeds: [embed] 
       });
 
-      // Apagar mensagem de teste após o tempo configurado
-      if (config.welcomeDeleteTime !== 0) {
-        const deleteTime = (config.welcomeDeleteTime || 30) * 1000;
-        
+      // Apagar mensagem de teste após o tempo configurado (se não for 0)
+      const deleteTimeSec = config.welcomeDeleteTime !== undefined ? config.welcomeDeleteTime : 30;
+      
+      if (deleteTimeSec > 0) {
         setTimeout(() => {
           testMessage.delete().catch(() => {});
-        }, deleteTime);
+        }, deleteTimeSec * 1000);
       }
 
       return interaction.reply({
