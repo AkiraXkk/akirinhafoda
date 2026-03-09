@@ -1,98 +1,44 @@
 {
   "categories": {
     "suporte": {
-      "id": null,
       "name": "suporte",
       "prefix": "suporte",
-      "title": " Central de Suporte",
-      "description": "Clique no botão abaixo para abrir um ticket de suporte.\nNossa equipe irá atendê-lo em breve.",
+      "title": "Central de Suporte",
+      "description": "Clique no botão abaixo para abrir um ticket de suporte.\nNossa equipa irá atendê-lo em breve.",
       "color": 5236395,
-      "footer": "Suporte Técnico e Geral  WDA - Todos os direitos reservados",
-      "buttonLabel": "Abrir Ticket de Suporte",
-      "buttonEmoji": "",
-      "staffRoleId": null,
-      "logChannelId": null,
-      "notificationMessage": " Novo ticket de suporte criado!"
+      "footer": "Suporte Técnico e Geral | WDA - Todos os direitos reservados"
     },
     "parceria": {
-      "id": null,
       "name": "parceria",
       "prefix": "parceria",
-      "title": " Central de Parcerias",
-      "description": "Solicite uma parceria com nosso servidor.\nPreencha as informações necessárias abaixo.",
+      "title": "Central de Parcerias",
+      "description": "Solicite uma parceria com o nosso servidor.\nPreencha as informações necessárias abaixo.",
       "color": 10181038,
-      "footer": "Parcerias e Colaborações  WDA - Todos os direitos reservados",
-      "buttonLabel": "Solicitar Parceria",
-      "buttonEmoji": "",
-      "staffRoleId": null,
-      "logChannelId": null,
-      "notificationMessage": " Nova solicitação de parceria recebida!"
+      "footer": "Parcerias e Colaborações | WDA - Todos os direitos reservados"
     },
     "denuncia": {
-      "id": null,
       "name": "denuncia",
       "prefix": "denuncia",
-      "title": " Central de Denúncias",
-      "description": "Reporte comportamentos inadequados ou infrações às regras.\nSua denúncia será analisada pela equipe.",
+      "title": "Central de Denúncias",
+      "description": "Reporte comportamentos inadequados ou infrações às regras.\nA sua denúncia será analisada pela equipa.",
       "color": 15158332,
-      "footer": "Denúncias e Reportes  WDA - Todos os direitos reservados",
-      "buttonLabel": "Fazer Denúncia",
-      "buttonEmoji": "",
-      "staffRoleId": null,
-      "logChannelId": null,
-      "notificationMessage": " Nova denúncia registrada!"
+      "footer": "Denúncias e Reportes | WDA - Todos os direitos reservados"
     },
     "sugestao": {
-      "id": null,
       "name": "sugestao",
       "prefix": "sugestao",
-      "title": " Central de Sugestões",
-      "description": "Compartilhe suas ideias para melhorar nosso servidor.\nAvaliamos todas as sugestões com atenção.",
+      "title": "Central de Sugestões",
+      "description": "Partilhe as suas ideias para melhorar o nosso servidor.\nAvaliamos todas as sugestões com atenção.",
       "color": 4617405,
-      "footer": "Sugestões e Feedback  WDA - Todos os direitos reservados",
-      "buttonLabel": "Enviar Sugestão",
-      "buttonEmoji": "",
-      "staffRoleId": null,
-      "logChannelId": null,
-      "notificationMessage": " Nova sugestão recebida!"
+      "footer": "Sugestões e Feedback | WDA - Todos os direitos reservados"
     },
     "vip": {
-      "id": null,
       "name": "vip",
       "prefix": "vip",
       "title": "👑 Central VIP",
-      "description": "Quer apoiar o servidor e ganhar vantagens exclusivas como chats privados e dobro de XP por call?\n\nClique no botão abaixo para abrir um ticket e adquirir ou renovar seu VIP com nossa equipe!",
+      "description": "Quer apoiar o servidor e ganhar vantagens exclusivas como chats privados e o dobro de XP por call?\n\nClique no botão abaixo para abrir um ticket e adquirir ou renovar o seu VIP com a nossa equipa!",
       "color": 16766720,
-      "footer": "WDA Loja VIP - Todos os direitos reservados",
-      "buttonLabel": "Adquirir VIP",
-      "buttonEmoji": "💎",
-      "staffRoleId": null,
-      "logChannelId": null,
-      "notificationMessage": "💰 Novo interesse em VIP!"
+      "footer": "WDA Loja VIP - Todos os direitos reservados"
     }
-  },
-  "channels": {
-    "suporte_channel_id": "suporte",
-    "parceria_channel_id": "parceria",
-    "denuncia_channel_id": "denuncia",
-    "sugestao_channel_id": "sugestao",
-    "vip_channel_id": "vip"
-  },
-  "staffRoles": {
-    "allowed": [
-      "1476742742704132217",
-      "722558573472776212",
-      "749523027787645000"
-    ],
-    "priority": [
-      "722558573472776212",
-      "749523027787645000"
-    ]
-  },
-  "settings": {
-    "maxTicketsPerUser": 1,
-    "autoCloseAfterInactivity": 72,
-    "enableNotifications": true,
-    "enableMentions": true
   }
 }
