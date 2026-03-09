@@ -133,6 +133,27 @@ async function main() {
     process.exitCode = 1;
   });
 
+  // =====================================================================
+  // 🌟 SISTEMA ANTI-CRASH DE EVENTOS/SORTEIOS
+  // =====================================================================
+  client.once("ready", () => {
+    logger.info("Verificador Anti-Crash de Sorteios iniciado!");
+    
+    setInterval(() => {
+      try {
+        // Altere o caminho abaixo caso o seu "evento.js" não esteja na pasta principal de comandos
+        const eventoCmd = require("./commands/evento.js"); 
+        
+        if (eventoCmd && typeof eventoCmd.checkSorteios === "function") {
+          eventoCmd.checkSorteios(client);
+        }
+      } catch (err) {
+        logger.error({ err }, "Falha ao executar o verificador de Sorteios");
+      }
+    }, 60000); // Roda a cada 60 segundos (1 minuto)
+  });
+  // =====================================================================
+
   await client.login(config.discord.token);
 }
 
