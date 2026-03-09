@@ -11,7 +11,6 @@ const { createDataStore } = require("../store/dataStore");
 
 // Banco de dados dos tickets (abertos, fechados, IDs)
 const ticketStore = createDataStore("tickets.json");
-// Banco de dados NOVO: Salva as configurações feitas no painel do administrador
 const setupStore = createDataStore("ticket_setup.json");
 
 // IDs Fixos da WDA
@@ -60,7 +59,6 @@ module.exports = {
     .setName("ticket")
     .setDescription("Sistema de Tickets Avançado")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    // O setup agora não tem NENHUMA string option, é direto para o painel!
     .addSubcommand((sub) =>
       sub
         .setName("setup")
@@ -144,7 +142,8 @@ module.exports = {
       return interaction.reply({ embeds: [createErrorEmbed("Apenas staff ou o criador do ticket pode fechá-lo.")], ephemeral: true });
     }
 
-    await interaction.reply({ content: "🔒 Arquivando ticket...", ephemeral: true });
+    // Defer para evitar o erro de timeout!
+    await interaction.deferReply({ ephemeral: true }); 
     const canal = interaction.channel;
     
     try {
@@ -176,6 +175,8 @@ module.exports = {
 
     const rowAdmin = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("delete_ticket_btn").setLabel("Deletar Canal").setStyle(ButtonStyle.Danger).setEmoji("🗑️"));
     await canal.send({ embeds: [embedArquivado], components: [rowAdmin] });
+    
+    await interaction.editReply({ content: "✅ Ticket arquivado com sucesso!" });
   },
 
   // ==========================================
@@ -298,6 +299,9 @@ module.exports = {
     }
 
     if (interaction.customId === "user_select_ticket_type") {
+      // Defer Update blinda o bot contra atrasos na API do Discord!
+      await interaction.deferUpdate(); 
+
       const ticketType = interaction.values[0];
       const categoryConfig = ticketConfig.categories[ticketType];
 
@@ -307,7 +311,7 @@ module.exports = {
       const parentCategoryId = typeSetup.categoryId;
       const mentionRoleId = typeSetup.roleId;
 
-      if (!parentCategoryId) return interaction.reply({ content: "❌ O Administrador ainda não configurou uma categoria para este tipo de ticket.", ephemeral: true });
+      if (!parentCategoryId) return interaction.editReply({ content: "❌ O Administrador ainda não configurou uma categoria para este tipo de ticket.", embeds: [], components: [] });
 
       const tickets = await ticketStore.load();
       const allTickets = tickets["global"] || tickets;
@@ -327,53 +331,58 @@ module.exports = {
         }
       }
 
-      if (existingTicket) return interaction.reply({ content: `❌ Você já tem um ticket aberto em <#${existingTicket[1].channelId}>.`, ephemeral: true });
+      if (existingTicket) return interaction.editReply({ content: `❌ Você já tem um ticket aberto em <#${existingTicket[1].channelId}>.`, embeds: [], components: [] });
 
-      const ticketId = await getNextTicketId(ticketType);
-      const cleanUsername = interaction.user.username.toLowerCase().replace(/\s+/g, "-");
-      const ticketName = `${categoryConfig.prefix}-${cleanUsername}`;
+      try {
+        const ticketId = await getNextTicketId(ticketType);
+        const cleanUsername = interaction.user.username.toLowerCase().replace(/\s+/g, "-");
+        const ticketName = `${categoryConfig.prefix}-${cleanUsername}`;
 
-      const channel = await interaction.guild.channels.create({
-        name: ticketName,
-        type: ChannelType.GuildText,
-        parent: parentCategoryId,
-        permissionOverwrites: [
-          { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-          { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] },
-          { id: interaction.client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] }
-        ]
-      });
+        const channel = await interaction.guild.channels.create({
+          name: ticketName,
+          type: ChannelType.GuildText,
+          parent: parentCategoryId,
+          permissionOverwrites: [
+            { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+            { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.AttachFiles] },
+            { id: interaction.client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] }
+          ]
+        });
 
-      for (const roleId of CARGOS_STAFF_WDA) {
-        const role = interaction.guild.roles.cache.get(roleId);
-        if (role) await channel.permissionOverwrites.create(role, { ViewChannel: true, SendMessages: true, AttachFiles: true });
+        for (const roleId of CARGOS_STAFF_WDA) {
+          const role = interaction.guild.roles.cache.get(roleId);
+          if (role) await channel.permissionOverwrites.create(role, { ViewChannel: true, SendMessages: true, AttachFiles: true });
+        }
+
+        if (mentionRoleId) {
+          const specificRole = interaction.guild.roles.cache.get(mentionRoleId);
+          if (specificRole) await channel.permissionOverwrites.create(specificRole, { ViewChannel: true, SendMessages: true, AttachFiles: true });
+        }
+
+        await ticketStore.update(channel.id, () => ({
+          userId: interaction.user.id, channelName: channel.name, channelId: channel.id,
+          ticketType: ticketType, ticketId: ticketId, openedAt: Date.now(), closedAt: null
+        }));
+
+        const embedTicket = createEmbed({
+          title: `Atendimento: ${categoryConfig.title.replace(/[^a-zA-ZÀ-ÿ\s]/g, '').trim()}`,
+          description: `Olá ${interaction.user}, sua sala foi criada com sucesso!\n\nPor favor, envie sua dúvida ou prova abaixo. Nossa equipe já foi notificada.\n\n🏷️ **Protocolo:** \`${ticketId}\``,
+          color: categoryConfig.color || 0x2ecc71
+        });
+
+        const rowActions = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId("assumir_ticket_btn").setLabel("Assumir").setStyle(ButtonStyle.Success).setEmoji("🙋"),
+          new ButtonBuilder().setCustomId("close_ticket_btn").setLabel("Fechar").setStyle(ButtonStyle.Danger).setEmoji("🔒")
+        );
+
+        const msgContent = mentionRoleId ? `${interaction.user} | <@&${mentionRoleId}>` : `${interaction.user}`;
+        await channel.send({ content: msgContent, embeds: [embedTicket], components: [rowActions] });
+        
+        await interaction.editReply({ content: `✅ Ticket criado com sucesso: ${channel}`, embeds: [], components: [] });
+      } catch (e) {
+        console.error("Erro ao criar canal do ticket:", e);
+        await interaction.editReply({ content: "❌ Ocorreu um erro ao criar o ticket. O bot tem permissão de 'Gerenciar Canais'?", embeds: [], components: [] });
       }
-
-      if (mentionRoleId) {
-        const specificRole = interaction.guild.roles.cache.get(mentionRoleId);
-        if (specificRole) await channel.permissionOverwrites.create(specificRole, { ViewChannel: true, SendMessages: true, AttachFiles: true });
-      }
-
-      await ticketStore.update(channel.id, () => ({
-        userId: interaction.user.id, channelName: channel.name, channelId: channel.id,
-        ticketType: ticketType, ticketId: ticketId, openedAt: Date.now(), closedAt: null
-      }));
-
-      const embedTicket = createEmbed({
-        title: `Atendimento: ${categoryConfig.title.replace(/[^a-zA-ZÀ-ÿ\s]/g, '').trim()}`,
-        description: `Olá ${interaction.user}, sua sala foi criada com sucesso!\n\nPor favor, envie sua dúvida ou prova abaixo. Nossa equipe já foi notificada.\n\n🏷️ **Protocolo:** \`${ticketId}\``,
-        color: categoryConfig.color || 0x2ecc71
-      });
-
-      const rowActions = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("assumir_ticket_btn").setLabel("Assumir").setStyle(ButtonStyle.Success).setEmoji("🙋"),
-        new ButtonBuilder().setCustomId("close_ticket_btn").setLabel("Fechar").setStyle(ButtonStyle.Danger).setEmoji("🔒")
-      );
-
-      const msgContent = mentionRoleId ? `${interaction.user} | <@&${mentionRoleId}>` : `${interaction.user}`;
-      await channel.send({ content: msgContent, embeds: [embedTicket], components: [rowActions] });
-      
-      await interaction.update({ content: `✅ Ticket criado com sucesso: ${channel}`, embeds: [], components: [] });
     }
 
     if (interaction.customId === "assumir_ticket_btn") {
