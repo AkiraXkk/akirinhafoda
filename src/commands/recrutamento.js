@@ -83,35 +83,74 @@ module.exports = {
           }
         }
 
-        const row = new ActionRowBuilder().addComponents(selectMenu);
-        return { embeds: [embed], components: optionsAdded > 0 ? [row] : [] };
+        const rowMenu = new ActionRowBuilder().addComponents(selectMenu);
+        
+        // NOVO: Botão de Finalizar
+        const btnFinalizar = new ButtonBuilder()
+          .setCustomId("finalizar_painel_recrutamento")
+          .setLabel("Finalizar e Anunciar")
+          .setStyle(ButtonStyle.Success)
+          .setEmoji("✅");
+          
+        const rowBtn = new ActionRowBuilder().addComponents(btnFinalizar);
+
+        return { embeds: [embed], components: optionsAdded > 0 ? [rowMenu, rowBtn] : [] };
       };
 
-      const msg = await interaction.reply({ ...buildPanel(), ephemeral: false, fetchReply: true });
-      const collector = msg.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 60000 });
+      // withResponse resolve o aviso amarelo (Warning) no terminal
+      const msg = await interaction.reply({ ...buildPanel(), ephemeral: false, withResponse: true });
+      const msgResponse = msg.resource ? msg.resource.message : await interaction.fetchReply();
+
+      // Tiramos o componentType para o coletor ouvir tanto o Menu quanto o Botão
+      const collector = msgResponse.createMessageComponentCollector({ time: 120000 });
 
       collector.on("collect", async (i) => {
         if (i.user.id !== interaction.user.id) return i.reply({ content: "❌ Este painel não é seu.", ephemeral: true });
 
-        const roleId = i.values[0];
-        const role = interaction.guild.roles.cache.get(roleId);
+        // SE CLICOU NO MENU (Dar/Tirar Cargos)
+        if (i.isStringSelectMenu() && i.customId === "select_roles_recrutamento") {
+          const roleId = i.values[0];
+          const role = interaction.guild.roles.cache.get(roleId);
 
-        if (alvo.roles.cache.has(roleId)) {
-          await alvo.roles.remove(roleId).catch(()=>{});
-          await i.reply({ content: `✅ Cargo **${role.name}** removido de ${alvo.user}.`, ephemeral: true });
-        } else {
-          await alvo.roles.add(roleId).catch(()=>{});
-          
-          // MÁGICA: Adiciona Aspirante e Staff Geral automaticamente!
-          const aspiranteId = "1097700110126809140"; 
-          const roleStaffGeral = interaction.guild.roles.cache.find(r => r.name === "Staff Geral");
-          
-          if (!alvo.roles.cache.has(aspiranteId)) alvo.roles.add(aspiranteId).catch(()=>{});
-          if (roleStaffGeral && !alvo.roles.cache.has(roleStaffGeral.id)) alvo.roles.add(roleStaffGeral.id).catch(()=>{});
+          if (alvo.roles.cache.has(roleId)) {
+            await alvo.roles.remove(roleId).catch(()=>{});
+            await i.reply({ content: `✅ Cargo **${role.name}** removido de ${alvo.user}.`, ephemeral: true });
+          } else {
+            await alvo.roles.add(roleId).catch(()=>{});
 
-          await i.reply({ content: `✅ Cargo **${role.name}** adicionado a ${alvo.user} (Aspirante e Staff Geral aplicados!).`, ephemeral: true });
+            // MÁGICA: Adiciona Aspirante e Staff Geral automaticamente!
+            const aspiranteId = "1097700110126809140"; 
+            const roleStaffGeral = interaction.guild.roles.cache.find(r => r.name === "Staff Geral");
+
+            if (!alvo.roles.cache.has(aspiranteId)) alvo.roles.add(aspiranteId).catch(()=>{});
+            if (roleStaffGeral && !alvo.roles.cache.has(roleStaffGeral.id)) alvo.roles.add(roleStaffGeral.id).catch(()=>{});
+
+            await i.reply({ content: `✅ Cargo **${role.name}** adicionado a ${alvo.user} (Aspirante e Staff Geral aplicados!).`, ephemeral: true });
+          }
+          await interaction.editReply(buildPanel());
         }
-        await interaction.editReply(buildPanel());
+
+        // SE CLICOU NO BOTÃO FINALIZAR
+        if (i.isButton() && i.customId === "finalizar_painel_recrutamento") {
+          // Filtra quais cargos da tabela o membro tem agora (excluindo os básicos de brinde para não poluir o anúncio)
+          const areasSetadas = alvo.roles.cache
+            .filter(r => HIERARQUIA[r.name] && r.name !== "Staff Geral" && r.id !== "1097700110126809140")
+            .map(r => `**${r.name}**`);
+
+          const embedAnuncio = new EmbedBuilder()
+            .setTitle("🎉 Recrutamento Finalizado!")
+            .setColor("#2ecc71")
+            .setDescription(`O processo foi concluído! O membro ${alvo.user} agora atua nas seguintes áreas da WDA:\n\n${areasSetadas.length > 0 ? areasSetadas.join("\n") : "*Nenhuma área específica setada.*"}\n\nDêem as boas-vindas e bom trabalho!`)
+            .setFooter({ text: `Recrutado por ${executor.user.username}` });
+
+          // Envia o anúncio de forma pública no canal
+          await interaction.channel.send({ content: `${alvo.user}`, embeds: [embedAnuncio] });
+          
+          // Responde ao clique e trava o painel antigo
+          await i.reply({ content: "✅ O anúncio foi enviado com sucesso!", ephemeral: true });
+          await interaction.editReply({ components: [] }); // Remove os botões do painel
+          collector.stop();
+        }
       });
 
       collector.on("end", () => { interaction.editReply({ components: [] }).catch(()=>{}); });
@@ -127,18 +166,16 @@ module.exports = {
       await interaction.reply({ content: "⏳ Montando as salas de entrevista...", ephemeral: true });
 
       try {
-        // Criação da categoria/canais trancados
         const guild = interaction.guild;
         const perms = [
-          { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] }, // Esconde de todos
-          { id: executor.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect] }, // Libera pro Recrutador
-          { id: candidato.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect] } // Libera pro Candidato
+          { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+          { id: executor.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect] },
+          { id: candidato.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.Connect] }
         ];
 
         const chatEntrevista = await guild.channels.create({ name: `💬・entrevista-${candidato.user.username}`, type: ChannelType.GuildText, permissionOverwrites: perms });
         const callEntrevista = await guild.channels.create({ name: `🔊・Call ${candidato.user.username}`, type: ChannelType.GuildVoice, permissionOverwrites: perms });
 
-        // Embed com Botão de Encerrar
         const embedSalas = new EmbedBuilder()
           .setTitle("🤝 Sala de Entrevista WDA")
           .setColor("#ff9ff3")
@@ -151,8 +188,7 @@ module.exports = {
 
         await interaction.editReply({ content: `✅ Salas criadas com sucesso! Acesse: <#${chatEntrevista.id}>` });
 
-        // Coletor para apagar os canais
-        const collector = msgSalas.createMessageComponentCollector({ componentType: ComponentType.Button, time: 86400000 }); // Dura 24h
+        const collector = msgSalas.createMessageComponentCollector({ componentType: ComponentType.Button, time: 86400000 });
         collector.on("collect", async (i) => {
           if (i.customId === "fechar_salas_entrevista") {
             if (!i.member.permissions.has("ManageChannels") && i.user.id !== executor.id) {
