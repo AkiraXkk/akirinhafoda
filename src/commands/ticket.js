@@ -8,6 +8,10 @@ const { createDataStore } = require("../store/dataStore");
 
 const ticketStore = createDataStore("tickets.json");
 
+// IDs Fixos da WDA
+const CATEGORIA_FECHADOS_ID = "1097361304756433019";
+const CARGOS_STAFF_WDA = ["1480452886755278848", "1480452884859453520"]; // Perm Atendimento & Gerência Global
+
 // Carregar configurações de categorias
 function loadTicketCategories() {
   try {
@@ -32,8 +36,12 @@ async function generateTicketName(guild, categoryPrefix, username) {
   return `${categoryPrefix}-${cleanUsername}-${paddedCount}`;
 }
 
-// Verificar se usuário tem permissão de staff
+// Verificar se usuário tem permissão de staff (Prioriza os IDs fixos da WDA)
 function isStaff(member, staffRoles) {
+  // 1. Verifica os cargos fixos da WDA primeiro
+  if (CARGOS_STAFF_WDA.some(roleId => member.roles.cache.has(roleId))) return true;
+  
+  // 2. Fallback para o JSON (se houver)
   if (!staffRoles || !staffRoles.allowed) return false;
   return staffRoles.allowed.some(roleId => member.roles.cache.has(roleId));
 }
@@ -94,7 +102,7 @@ module.exports = {
       if (!categoryConfig) return interaction.reply({ embeds: [createErrorEmbed("Tipo de ticket inválido.")], ephemeral: true });
 
       const guildConfig = await getGuildConfig(interaction.guildId);
-      if (!guildConfig.ticketCategoryId) return interaction.reply({ embeds: [createErrorEmbed("Configure a categoria de tickets primeiro.")], ephemeral: true });
+      if (!guildConfig.ticketCategoryId) return interaction.reply({ embeds: [createErrorEmbed("Configure a categoria de tickets abertos primeiro.")], ephemeral: true });
 
       const embed = createEmbed({
         title: categoryConfig.title,
@@ -166,16 +174,15 @@ module.exports = {
     const canal = interaction.channel;
     
     try {
+      // Retira permissão do membro
       await canal.permissionOverwrites.edit(ticketInfo.userId, { ViewChannel: false });
       
       const memberCreator = await interaction.guild.members.fetch(ticketInfo.userId).catch(() => null);
       const username = memberCreator ? memberCreator.user.username : "usuario";
       await canal.setName(`fechado-${username}`);
 
-      const guildConfig = await getGuildConfig(interaction.guildId);
-      if (guildConfig.closedTicketCategoryId) {
-        await canal.setParent(guildConfig.closedTicketCategoryId, { lockPermissions: false });
-      }
+      // Move para a categoria fixa da WDA
+      await canal.setParent(CATEGORIA_FECHADOS_ID, { lockPermissions: false });
 
     } catch (e) {
       console.log("Aviso: Permissões insuficientes para renomear/mover o canal do ticket.");
@@ -228,7 +235,7 @@ module.exports = {
       if (!categoryConfig) return interaction.reply({ content: "Tipo de ticket inválido.", ephemeral: true });
 
       const guildConfig = await getGuildConfig(interaction.guildId);
-      if (!guildConfig.ticketCategoryId) return interaction.reply({ content: "Falta configurar a categoria de tickets.", ephemeral: true });
+      if (!guildConfig.ticketCategoryId) return interaction.reply({ content: "Falta configurar a categoria de tickets abertos.", ephemeral: true });
 
       const tickets = await ticketStore.load();
       const allTickets = tickets["global"] || tickets;
@@ -272,6 +279,15 @@ module.exports = {
         ]
       });
 
+      // ADICIONA OS CARGOS FIXOS DA WDA AO CANAL PARA A STAFF CONSEGUIR LER E RESPONDER
+      for (const roleId of CARGOS_STAFF_WDA) {
+        const role = interaction.guild.roles.cache.get(roleId);
+        if (role) {
+          await channel.permissionOverwrites.create(role, { ViewChannel: true, SendMessages: true, AttachFiles: true });
+        }
+      }
+
+      // Adiciona do JSON caso tenha algum extra configurado lá
       if (ticketConfig.staffRoles && ticketConfig.staffRoles.allowed) {
           for (const roleId of ticketConfig.staffRoles.allowed) {
             const role = interaction.guild.roles.cache.get(roleId);
