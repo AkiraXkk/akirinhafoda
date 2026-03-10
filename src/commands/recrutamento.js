@@ -210,5 +210,26 @@ module.exports = {
         interaction.editReply({ content: "❌ Erro ao criar as salas. Verifique as permissões do bot." }).catch(()=>{});
       }
     }
+  },
+
+  // ==========================================
+  // HANDLER DE COMPONENTES (Botões e Menus)
+  // ==========================================
+  async handleButton(interaction) {
+    // Este handler processa todos os botões do painel de recrutamento
+    // A lógica já está implementada dentro do collector do execute
+    // Mantido para compatibilidade com o sistema de roteamento
+  },
+
+  async handleModal(interaction) {
+    // Este handler processa modais do recrutamento
+    // A lógica já está implementada dentro do execute
+    // Mantido para compatibilidade com o sistema de roteamento
+  },
+
+  async handleSelectMenu(interaction) {
+    // Este handler processa menus do recrutamento
+    // A lógica já está implementada dentro do execute
+    // Mantido para compatibilidade com o sistema de roteamento
   }
 };

@@ -46,6 +46,10 @@ module.exports = {
         commandName = "ticket";
       } else if (customId.includes("sejawda")) {
         commandName = "sejawda";
+      } else if (customId.includes("design")) {
+        commandName = "design";
+      } else if (customId.includes("recrutamento")) {
+        commandName = "recrutamento";
       } else {
         // Roteador Dinâmico original
         commandName = customId.split(/_|-|:/)[0];
