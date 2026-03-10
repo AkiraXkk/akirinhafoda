@@ -1,4 +1,17 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelSelectMenuBuilder, RoleSelectMenuBuilder, ChannelType } = require("discord.js");
+const { 
+  SlashCommandBuilder, 
+  ActionRowBuilder, 
+  ButtonBuilder, 
+  ButtonStyle, 
+  EmbedBuilder, 
+  ModalBuilder, 
+  TextInputBuilder, 
+  TextInputStyle, 
+  ChannelSelectMenuBuilder, 
+  RoleSelectMenuBuilder, 
+  ChannelType,
+  PermissionFlagsBits 
+} = require("discord.js");
 const { createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
 const { getGuildConfig } = require("../config/guildConfig");
@@ -6,10 +19,15 @@ const { getGuildConfig } = require("../config/guildConfig");
 const partnersStore = createDataStore("partners.json");
 const staffStatsStore = createDataStore("staff_stats.json");
 
+// Coloque os IDs dos 4 cargos permitidos para usar o comando manual
+const CARGOS_PERMITIDOS = ["ID_AQUI_1", "ID_AQUI_2", "ID_AQUI_3", "ID_AQUI_4"];
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("partnership")
     .setDescription("sistema de parcerias para membros")
+    
+    // SUBCOMANDO: SOLICITAR
     .addSubcommand(sub =>
       sub.setName("solicitar")
         .setDescription("solicite uma parceria (Bronze 350+ | Prata 500+ | Ouro 1000+)")
@@ -18,9 +36,26 @@ module.exports = {
         .addStringOption(o => o.setName("descricao").setDescription("descricao do servidor").setRequired(true))
         .addStringOption(o => o.setName("banner").setDescription("link da imagem opcional"))
     )
+    
+    // SUBCOMANDO: LISTAR
     .addSubcommand(sub =>
       sub.setName("list")
         .setDescription("lista suas parcerias ativas")
+    )
+    
+    // NOVO SUBCOMANDO: MANUAL (Exclusivo para Staff autorizada)
+    .addSubcommand(sub =>
+      sub.setName("manual")
+        .setDescription("[STAFF] Fecha e posta uma parceria manualmente sem aprovação prévia")
+        .addStringOption(o => o.setName("servidor").setDescription("Nome do servidor parceiro").setRequired(true))
+        .addStringOption(o => o.setName("convite").setDescription("Link de convite").setRequired(true))
+        .addStringOption(o => o.setName("descricao").setDescription("Descrição da parceria").setRequired(true))
+        .addUserOption(o => o.setName("representante").setDescription("O membro que é o representante").setRequired(true))
+        .addUserOption(o => o.setName("responsavel").setDescription("Staff que fechou a parceria").setRequired(true))
+        .addChannelOption(o => o.setName("canal").setDescription("Canal de postagem").addChannelTypes(ChannelType.GuildText).setRequired(true))
+        .addRoleOption(o => o.setName("ping_cargo").setDescription("Cargo para menção (opcional)").setRequired(false))
+        .addStringOption(o => o.setName("ping_padrao").setDescription("Menção Padrão (opcional)").addChoices({ name: "@everyone", value: "everyone" }, { name: "@here", value: "here" }).setRequired(false))
+        .addStringOption(o => o.setName("banner").setDescription("Link da imagem/banner opcional").setRequired(false))
     ),
 
   async execute(interaction) {
@@ -28,7 +63,127 @@ module.exports = {
     const { guildId, user, guild } = interaction;
 
     // ==========================================
-    // SUBCOMANDO: SOLICITAR
+    // SUBCOMANDO: MANUAL (POSTAGEM DIRETA STAFF)
+    // ==========================================
+    if (sub === "manual") {
+      await interaction.deferReply({ ephemeral: true });
+
+      // Verificação de segurança (Apenas os 4 cargos ou Admin)
+      const temPermissao = interaction.member.roles.cache.some(role => CARGOS_PERMITIDOS.includes(role.id)) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+      
+      if (!temPermissao) {
+        return interaction.editReply({ embeds: [createErrorEmbed("Você não possui o cargo necessário para usar o painel manual de parcerias.")] });
+      }
+
+      const servidor = interaction.options.getString("servidor");
+      const conviteInput = interaction.options.getString("convite");
+      const descricao = interaction.options.getString("descricao");
+      const representante = interaction.options.getUser("representante");
+      const responsavel = interaction.options.getUser("responsavel");
+      const canal = interaction.options.getChannel("canal");
+      const pingCargo = interaction.options.getRole("ping_cargo");
+      const pingPadrao = interaction.options.getString("ping_padrao");
+      const banner = interaction.options.getString("banner");
+
+      // Validação do Link e Cálculo de Tier
+      let inviteData;
+      let tier = "Bronze";
+      let membros = 0;
+
+      try {
+        inviteData = await interaction.client.fetchInvite(conviteInput);
+        membros = inviteData.memberCount;
+        if (membros < 350) return interaction.editReply({ embeds: [createErrorEmbed(`Este servidor tem apenas **${membros}** membros. O mínimo para o Tier Bronze é **350**.`)] });
+        if (membros >= 1000) tier = "Ouro";
+        else if (membros >= 500) tier = "Prata";
+      } catch (error) {
+        return interaction.editReply({ embeds: [createErrorEmbed("Link de convite inválido ou expirado. Certifique-se de que é um link válido do Discord.")] });
+      }
+
+      // Preparação da Menção (Ping)
+      let pingText = "Sem menção";
+      if (pingCargo) {
+        pingText = `<@&${pingCargo.id}>`;
+      } else if (pingPadrao === "everyone") {
+        pingText = "@everyone";
+      } else if (pingPadrao === "here") {
+        pingText = "@here";
+      }
+
+      // Limpeza de Links da descrição para evitar falhas do Discord
+      let finalLink = conviteInput.trim();
+      if (!finalLink.startsWith('http')) finalLink = `https://${finalLink}`;
+
+      const regexLinks = /(https?:\/\/[^\s]+)|([-a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*))/gi;
+      const cleanDesc = descricao.replace(regexLinks, "[Link Removido]").replace(/@/g, "");
+
+      // Montagem da Mensagem Oficial
+      const textoFora = `**Servidor:** ${servidor}\n**Tier:** ${tier}\n**Representante:** <@${representante.id}>\n**Responsável:** <@${responsavel.id}>\n**Ping:** ${pingText}\n**Link:** ${finalLink}`;
+      
+      const embedPost = new EmbedBuilder()
+        .setColor(0x2ecc71)
+        .setDescription(`--- {☩} NOVA PARCERIA FECHADA! {☩} ---\n\n${cleanDesc}\n\n{☩}----------{🤝}----------{☩}`);
+      
+      if (banner && banner.startsWith("http")) embedPost.setImage(banner);
+
+      // Envia no canal selecionado
+      let sentMessage;
+      try {
+        sentMessage = await canal.send({ content: textoFora, embeds: [embedPost] });
+      } catch (e) {
+        return interaction.editReply({ embeds: [createErrorEmbed(`Não consegui postar em ${canal}. Verifique as permissões do bot.`)] });
+      }
+
+      // Salva no Banco de Dados
+      const dataId = `PARC${Math.floor(Math.random() * 90000) + 10000}`;
+      const data = {
+        id: dataId,
+        requesterId: representante.id,
+        serverName: servidor,
+        inviteLink: conviteInput,
+        description: cleanDesc,
+        memberCount: membros,
+        tier: tier,
+        banner: banner,
+        status: "accepted",
+        processedBy: responsavel.id,
+        messageId: sentMessage.id,
+        channelId: canal.id,
+        date: new Date().toISOString()
+      };
+
+      await partnersStore.update(dataId, () => data);
+      await staffStatsStore.update(responsavel.id, c => ({ ...c, approved: (c?.approved || 0) + 1 }));
+
+      // Dá o cargo de Parceiro ao Representante
+      const guildConfig = await getGuildConfig(interaction.guildId);
+      const ranks = guildConfig?.partnership?.ranks;
+      if (ranks) {
+        let roleToGiveId = null;
+        if (tier === "Bronze") roleToGiveId = ranks.bronze;
+        else if (tier === "Prata") roleToGiveId = ranks.prata;
+        else if (tier === "Ouro") roleToGiveId = ranks.ouro;
+        
+        if (roleToGiveId) {
+          const member = await interaction.guild.members.fetch(representante.id).catch(() => null);
+          if (member) await member.roles.add(roleToGiveId).catch(() => null);
+        }
+      }
+
+      // Notifica o Representante via DM
+      const embedDm = new EmbedBuilder()
+        .setTitle("🤝 Parceria Aprovada!")
+        .setColor(0x00FF00)
+        .setDescription(`Sua parceria para o servidor **${servidor}** (Tier ${tier}) foi aceita e seu cargo de representação foi entregue!`)
+        .addFields({ name: "⚠️ Aviso Importante", value: "Caso você saia do nosso servidor, a parceria será encerrada e a mensagem de divulgação será apagada automaticamente." });
+      
+      await representante.send({ embeds: [embedDm] }).catch(() => null);
+
+      return interaction.editReply({ embeds: [createSuccessEmbed(`✅ Parceria (Tier ${tier}) postada com sucesso em ${canal}!`)] });
+    }
+
+    // ==========================================
+    // SUBCOMANDO: SOLICITAR (Sistema Normal)
     // ==========================================
     if (sub === "solicitar") {
       await interaction.deferReply({ ephemeral: true });
@@ -111,7 +266,6 @@ module.exports = {
       await interaction.deferReply({ ephemeral: true });
 
       const allPartners = await partnersStore.load();
-      // FILTRA APENAS AS DO USUÁRIO QUE DIGITOU
       const myPartners = Object.values(allPartners).filter(p => p.status === "accepted" && p.requesterId === interaction.user.id);
 
       if (myPartners.length === 0) {
@@ -124,8 +278,8 @@ module.exports = {
         .setDescription(`Você tem **${myPartners.length}** parceria(s) ativa(s) no nosso servidor!`);
 
       myPartners.slice(0, 25).forEach(p => {
-        const partnerDate = Math.floor(new Date(p.date).getTime() / 1000); // Data para exibir o "há X tempo"
-        
+        const partnerDate = Math.floor(new Date(p.date).getTime() / 1000);
+
         embedList.addFields({
           name: `🔰 ${p.serverName} (ID: ${p.id})`,
           value: `🔗 [Link de Convite](${p.inviteLink})\n⏳ Parceiro desde: <t:${partnerDate}:R>`,
@@ -138,7 +292,7 @@ module.exports = {
   },
 
   // ==========================================
-  // BOTÕES E MODAIS (Não precisaram de alteração)
+  // BOTÕES E MODAIS (Sistema Normal via Painel)
   // ==========================================
   async handleButton(interaction) {
     const parts = interaction.customId.split("_");
