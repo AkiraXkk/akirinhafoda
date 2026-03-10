@@ -17,18 +17,21 @@ module.exports = {
     const userId = newState.member.id;
     const guildId = newState.guild.id;
 
-    // Usuário entrou em um canal de voz
+    // 🚨 A TRAVA ABSOLUTA: Verifica se a pessoa está mutada ou ensurdecida de QUALQUER forma (Self ou Server)
+    const isMutedOrDeaf = newState.selfMute || newState.selfDeaf || newState.serverMute || newState.serverDeaf;
+
+    // 1. Usuário entrou em um canal de voz
     if (!oldState.channelId && newState.channelId) {
       const voiceChannel = newState.channel;
       
-      // Verificar se não está mutado ou sozinho
-      if (newState.selfMute || newState.selfDeaf) return;
+      // Se entrou mutado ou surdo, ignora completamente (não inicia a sessão)
+      if (isMutedOrDeaf) return;
 
       // Verificar se não está sozinho (ignorando bots)
       const nonBotMembers = voiceChannel.members.filter(m => !m.user.bot);
       if (nonBotMembers.size <= 1) return;
 
-      // Iniciar sessão
+      // Iniciar sessão de contagem de tempo e XP
       voiceSessions.set(userId, {
         guildId,
         channelId: newState.channelId,
@@ -36,24 +39,26 @@ module.exports = {
         lastXpTime: Date.now()
       });
 
-      logger.debug({ userId, guildId, channelId: newState.channelId }, "Usuário entrou em canal de voz");
+      logger.debug({ userId, guildId, channelId: newState.channelId }, "Usuário entrou em canal de voz apto para XP");
     }
-    // Usuário saiu do canal de voz
+    
+    // 2. Usuário saiu do canal de voz
     else if (oldState.channelId && !newState.channelId) {
       const session = voiceSessions.get(userId);
       if (session) {
         await finalizeVoiceSession(userId, session);
-        voiceSessions.delete(userId);
-        logger.debug({ userId, guildId: session.guildId }, "Usuário saiu de canal de voz");
+        voiceSessions.delete(userId); // Apaga a sessão da memória
+        logger.debug({ userId, guildId: session.guildId }, "Usuário saiu de canal de voz, sessão finalizada");
       }
     }
-    // Usuário mudou de canal ou estado de mute/deafen
+    
+    // 3. Usuário mudou de canal ou mudou o status (mutou/desmutou o mic/fone)
     else if (oldState.channelId && newState.channelId) {
       const session = voiceSessions.get(userId);
       
       if (!session) {
-        // Se não tinha sessão, criar uma nova se as condições forem favoráveis
-        if (!newState.selfMute && !newState.selfDeaf) {
+        // Se NÃO tinha sessão (porque estava mutado) e agora DESMUTOU, criar uma nova
+        if (!isMutedOrDeaf) {
           const voiceChannel = newState.channel;
           const nonBotMembers = voiceChannel.members.filter(m => !m.user.bot);
           if (nonBotMembers.size > 1) {
@@ -66,16 +71,16 @@ module.exports = {
           }
         }
       } else {
-        // Verificar se ficou mutado/deaf ou sozinho
+        // Se TINHA sessão (estava ganhando XP)
         const voiceChannel = newState.channel;
         const nonBotMembers = voiceChannel.members.filter(m => !m.user.bot);
         
-        if (newState.selfMute || newState.selfDeaf || nonBotMembers.size <= 1) {
-          // Pausar ou finalizar sessão
+        // 🛑 Se ele MUTOU, ENSURDECEU ou ficou SOZINHO na call: Finaliza e para de contar TUDO!
+        if (isMutedOrDeaf || nonBotMembers.size <= 1) {
           await finalizeVoiceSession(userId, session);
-          voiceSessions.delete(userId);
+          voiceSessions.delete(userId); // Mágica: Apaga a sessão e congela XP/Tempo
         } else if (session.channelId !== newState.channelId) {
-          // Mudou de canal, atualizar sessão
+          // Se apenas mudou de canal (e continuou desmutado), só atualiza o ID do canal na sessão
           session.channelId = newState.channelId;
         }
       }
@@ -83,7 +88,7 @@ module.exports = {
   }
 };
 
-// Processar XP em intervalos (A cada 1 minuto)
+// Processar XP em intervalos (A cada 1 minuto chamado pelo ready.js ou index.js)
 async function processVoiceXp() {
   if (!clientInstance) return;
   
@@ -104,12 +109,13 @@ async function processVoiceXp() {
         const voiceChannel = member.voice.channel;
         if (!voiceChannel || voiceChannel.id !== session.channelId) continue;
         
-        if (member.voice.selfMute || member.voice.selfDeaf) continue;
+        // Trava final de segurança redundante: Se estiver mutado/deaf na hora de receber, ignora
+        if (member.voice.selfMute || member.voice.selfDeaf || member.voice.serverMute || member.voice.serverDeaf) continue;
         
         const nonBotMembers = voiceChannel.members.filter(m => !m.user.bot);
         if (nonBotMembers.size <= 1) continue;
         
-        // Dispara a função do rank.js que dá XP aleatório e gerencia cargos
+        // Dispara a função do rank.js que dá XP e soma o tempo
         const { subiuNivel, novoNivel, nivelAnterior } = await rankSystem.addXpForVoiceTick(member, 1);
         session.lastXpTime = now;
         
@@ -186,5 +192,4 @@ async function finalizeVoiceSession(userId, session) {
   }
 }
 
-// O processamento de XP por voz é gerenciado pelo timer em ready.js (com cleanup adequado).
-// NÃO iniciar outro setInterval aqui para evitar XP duplicado e vazamento de memória.
+// O processamento contínuo de XP continua sendo disparado pelo timer global (ready.js)
