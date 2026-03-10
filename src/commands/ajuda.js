@@ -2,13 +2,14 @@ const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSe
 const { createEmbed } = require("../embeds");
 
 const categoryMapping = {
-  "Administração": ["botadmin", "moderation", "leveladmin", "shopadmin", "tagroleadmin", "resetconfig", "logs", "presence", "vipadmin", "sejawda", "config"],
-  "Diversão": ["fun", "dama", "enquete", "blackjack", "roleta", "velha", "bicho"],
+  "Administração": ["botadmin", "moderation", "leveladmin", "shopadmin", "tagroleadmin", "resetconfig", "logs", "presence", "vipadmin", "sejawda", "config", "metas"],
+  "Diversão": ["fun", "dama", "enquete", "blackjack", "roleta", "velha", "bicho", "pastime"],
   "Economia": ["economy", "shop", "setupcards"],
   "VIP": ["vip", "vipbuy", "vipservice"],
   "Social": ["social", "family"],
-  "Níveis": ["levels", "leaderboard"],
+  "Níveis": ["levels", "leaderboard", "voicetime"],
   "Parcerias": ["partnership", "boost", "verify"],
+  "Staff": ["staffstats", "recrutamento", "divulgacao", "eventos", "movcall", "movchat", "acolhimento", "design"],
   "Utilidade": ["utility", "ping", "ticket", "ajuda", "welcome"]
 };
 
@@ -274,6 +275,7 @@ function getCategoryEmoji(category) {
     "Diversão": "🎉",
     "Social": "👥",
     "Parcerias": "🤝",
+    "Staff": "👮",
     "Utilidade": "🛠️",
     "Outros": "📂"
   };
@@ -289,6 +291,7 @@ function getCategoryColor(category) {
     "Diversão": 0xff66cc,
     "Social": 0x00ccff,
     "Parcerias": 0x00ff88,
+    "Staff": 0x5865F2,
     "Utilidade": 0x666666,
     "Outros": 0x999999
   };

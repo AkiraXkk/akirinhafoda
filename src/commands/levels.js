@@ -195,7 +195,7 @@ async function addXp(userId, amount = 10) {
 
 async function getLevelConfig(guildId) {
   const data = await levelConfigStore.load();
-  return { xpMsgMin: 5, xpMsgMax: 15, xpVoiceMin: 20, xpVoiceMax: 40, immuneRoleIds: [], multiplierRoles: {}, ...(data[guildId] || {}) };
+  return { xpMin: 15, xpMax: 35, immuneRoleIds: [], multiplierRoles: {}, ...(data[guildId] || {}) };
 }
 
 async function setLevelConfig(guildId, patch) {
@@ -215,9 +215,15 @@ async function addXpForMessage(member) {
       for (const [rId, m] of Object.entries(config.multiplierRoles)) if (member.roles.cache.has(rId)) mult = Math.max(mult, Number(m) || 1);
   }
 
-  const min = config.xpMsgMin ?? 5;
-  const max = config.xpMsgMax ?? 15;
-  const xpBase = Math.floor(Math.random() * (max - min + 1)) + min;
+  const min = config.xpMin ?? 15;
+  const max = config.xpMax ?? 35;
+  let xpBase = Math.floor(Math.random() * (max - min + 1)) + min;
+  
+  // NERF: Se está em call, corta XP pela metade
+  if (member.voice && member.voice.channel) {
+    xpBase = Math.floor(xpBase / 2);
+  }
+  
   xpCooldowns.set(member.id, now);
 
   let res = { subiuNivel: false, novoNivel: 0, nivelAnterior: 0 };
@@ -244,8 +250,8 @@ async function addXpForVoiceTick(member, minutos = 1) {
       for (const [rId, m] of Object.entries(config.multiplierRoles)) if (member.roles.cache.has(rId)) mult = Math.max(mult, Number(m) || 1);
   }
 
-  const min = config.xpVoiceMin ?? 20;
-  const max = config.xpVoiceMax ?? 40;
+  const min = config.xpMin ?? 15;
+  const max = config.xpMax ?? 35;
   const xpBase = Math.floor(Math.random() * (max - min + 1)) + min;
   
   const finalXp = Math.max(0, Math.round(xpBase * minutos * mult));

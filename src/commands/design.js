@@ -24,8 +24,7 @@ module.exports = {
       const embedPainel = new EmbedBuilder()
         .setTitle("🎨 Central de Pedidos - WDA Design")
         .setColor("#c8d6e5")
-        .setDescription("Precisa de uma arte para um evento, jornal ou anúncio?\n\nClique no botão abaixo para preencher o formulário de pedido. Nossa equipe será notificada imediatamente!")
-        .setImage("https://i.imgur.com/YOUR_BANNER_HERE.png"); // Troque pelo banner do Design
+        .setDescription("Precisa de uma arte para um evento, jornal ou anúncio?\n\nClique no botão abaixo para preencher o formulário de pedido. Nossa equipe será notificada imediatamente!");
 
       const btnPedir = new ButtonBuilder()
         .setCustomId("modal_pedido_design")

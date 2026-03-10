@@ -98,7 +98,8 @@ module.exports = {
       };
 
       // withResponse resolve o aviso amarelo (Warning) no terminal
-      const msg = await interaction.reply({ ...buildPanel(), ephemeral: false, withResponse: true });
+      await interaction.deferReply({ ephemeral: false });
+      const msg = await interaction.editReply({ ...buildPanel(), withResponse: true });
       const msgResponse = msg.resource ? msg.resource.message : await interaction.fetchReply();
 
       // Tiramos o componentType para o coletor ouvir tanto o Menu quanto o Botão
@@ -109,12 +110,13 @@ module.exports = {
 
         // SE CLICOU NO MENU (Dar/Tirar Cargos)
         if (i.isStringSelectMenu() && i.customId === "select_roles_recrutamento") {
+          await i.deferReply({ ephemeral: true });
           const roleId = i.values[0];
           const role = interaction.guild.roles.cache.get(roleId);
 
           if (alvo.roles.cache.has(roleId)) {
             await alvo.roles.remove(roleId).catch(()=>{});
-            await i.reply({ content: `✅ Cargo **${role.name}** removido de ${alvo.user}.`, ephemeral: true });
+            await i.editReply({ content: `✅ Cargo **${role.name}** removido de ${alvo.user}.`, ephemeral: true });
           } else {
             await alvo.roles.add(roleId).catch(()=>{});
 
@@ -125,13 +127,14 @@ module.exports = {
             if (!alvo.roles.cache.has(aspiranteId)) alvo.roles.add(aspiranteId).catch(()=>{});
             if (roleStaffGeral && !alvo.roles.cache.has(roleStaffGeral.id)) alvo.roles.add(roleStaffGeral.id).catch(()=>{});
 
-            await i.reply({ content: `✅ Cargo **${role.name}** adicionado a ${alvo.user} (Aspirante e Staff Geral aplicados!).`, ephemeral: true });
+            await i.editReply({ content: `✅ Cargo **${role.name}** adicionado a ${alvo.user} (Aspirante e Staff Geral aplicados!).`, ephemeral: true });
           }
           await interaction.editReply(buildPanel());
         }
 
         // SE CLICOU NO BOTÃO FINALIZAR
         if (i.isButton() && i.customId === "finalizar_painel_recrutamento") {
+          await i.deferReply({ ephemeral: true });
           // Filtra quais cargos da tabela o membro tem agora (excluindo os básicos de brinde para não poluir o anúncio)
           const areasSetadas = alvo.roles.cache
             .filter(r => HIERARQUIA[r.name] && r.name !== "Staff Geral" && r.id !== "1097700110126809140")
@@ -147,7 +150,7 @@ module.exports = {
           await interaction.channel.send({ content: `${alvo.user}`, embeds: [embedAnuncio] });
           
           // Responde ao clique e trava o painel antigo
-          await i.reply({ content: "✅ O anúncio foi enviado com sucesso!", ephemeral: true });
+          await i.editReply({ content: "✅ O anúncio foi enviado com sucesso!", ephemeral: true });
           await interaction.editReply({ components: [] }); // Remove os botões do painel
           collector.stop();
         }

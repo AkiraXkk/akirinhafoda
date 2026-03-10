@@ -23,7 +23,10 @@ const comandosPorArea = {
     nome: "Eventos", emoji: "🎉", cor: "#2ecc71", cargo: "Equipe Eventos",
     comandos: [
       "**`/evento painel`**\nGera um painel com botão para criar e anunciar eventos oficiais de forma rápida, formatada e marcando everyone.",
-      "**`/evento sortear`**\nSorteia aleatoriamente um membro que esteja conectado na mesma call de voz que você no momento."
+      "**`/evento sortear`**\nInicia um sorteio avançado com sistema de participantes, requisitos e tempo personalizado.",
+      "**`/evento drop`**\nCria um drop rápido onde o primeiro a clicar ganha o prêmio.",
+      "**`/evento reroll`**\nSorteia um novo vencedor para um sorteio já encerrado.",
+      "**`/evento cancelar`**\nCancela um sorteio que ainda está em andamento."
     ]
   },
   movcall: {
@@ -63,6 +66,13 @@ const comandosPorArea = {
     comandos: [
       "**`/pastime correio`**\nEnvia um recado ou cantada (anônimo ou não) para um membro, em formato de carta.",
       "**`/pastime minigame`**\nLança as regras e a estrutura de um mini-game rápido (Kiss Marry Kill, Complete a Letra, Verdade ou Mentira) no chat de entretenimento."
+    ]
+  },
+  staff: {
+    nome: "Staff", emoji: "👮", cor: "#5865F2", cargo: "Staff Geral",
+    comandos: [
+      "**`/staffstats`**\nMostra suas estatísticas de produtividade como Staff, incluindo métricas por área (parcerias, mensagens, tempo em call, etc.).",
+      "**`/metas`**\n[Somente Admin] Gerencia e anuncia as metas semanais/mensais da equipe Staff com sistema de definição por área."
     ]
   }
 };

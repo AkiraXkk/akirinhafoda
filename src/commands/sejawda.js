@@ -229,6 +229,7 @@ module.exports = {
     }
 
     if (interaction.customId === "sejawda_area") {
+      await interaction.deferUpdate();
       const rainbow = getDecorEmoji(interaction, "urainbowdiamond", "💎");
       const chats = await chatStore.load();
       const chat = chats[interaction.channelId];
@@ -258,74 +259,99 @@ module.exports = {
     const chats = await chatStore.load();
     const chat = chats[interaction.channelId];
 
-    if (!chat || chat.closedAt) return interaction.reply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")], ephemeral: true });
+    const area = interaction.values[0];
+    await chatStore.update(interaction.channelId, (data) => ({ ...data, area }));
 
-    const hasStaffRole = chat.staffRoleId && interaction.member?.roles?.cache?.has(chat.staffRoleId);
-    const isGlobal = isGlobalStaff(interaction.member);
-
-    // ASSUMIR TICKET
-    if (interaction.customId === "sejawda_assumir") {
-      if (!isGlobal && !hasStaffRole) {
-        return interaction.reply({ embeds: [createErrorEmbed("Apenas membros da equipe podem assumir solicitações.")], ephemeral: true });
-      }
-
-      // Remove apenas o botão de assumir e mantém o de fechar (e o menu de área se existir)
-      const newComponents = interaction.message.components.map(row => {
-        const newRow = new ActionRowBuilder();
-        row.components.forEach(comp => {
-          if (comp.customId !== "sejawda_assumir") newRow.addComponents(comp);
-        });
-        return newRow;
-      }).filter(row => row.components.length > 0);
-
-      await interaction.message.edit({ components: newComponents });
-
-      const embedAssumir = createEmbed({ title: "🫂 Atendimento Iniciado", description: `Olá! O staff **${interaction.user.username}** assumiu sua solicitação e irá te atender a partir de agora.`, color: 0x8e44ad });
-      await interaction.reply({ embeds: [embedAssumir] });
-    }
-
-    // FECHAR TICKET (Arquivamento em 2 Passos)
-    if (interaction.customId === "sejawda_close") {
-      if (interaction.user.id !== chat.userId && !isGlobal && !hasStaffRole) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para fechar esta solicitação.")], ephemeral: true });
-      }
-
-      if (chat.tipo !== "migrado" && !chat.area) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você precisa escolher uma área no menu antes de finalizar a solicitação.")], ephemeral: true });
-      }
-
-      await interaction.deferReply({ ephemeral: true });
-      const canal = interaction.channel;
-
-      try {
-        await canal.permissionOverwrites.edit(chat.userId, { ViewChannel: false });
-        const memberCreator = await interaction.guild.members.fetch(chat.userId).catch(() => null);
-        const username = memberCreator ? memberCreator.user.username.toLowerCase().replace(/[^a-z0-9-]/g, "-") : "usuario";
-        
-        await canal.setName(`fechado-${username}-${chat.ticketId}`);
-        await canal.setParent(CATEGORIA_FECHADOS_ID, { lockPermissions: false });
-      } catch (e) {
-        console.log("Aviso: Permissões insuficientes para renomear/mover o canal do sejawda.");
-      }
-
-      await chatStore.update(interaction.channelId, (info) => (info ? { ...info, closedAt: Date.now() } : null));
-
-      const embedArquivado = createEmbed({
-        title: "🔒 Solicitação Arquivada",
-        description: `O membro não possui mais acesso a este canal.\n\nEquipe: Quando não for mais necessário manter o histórico, clique abaixo para excluir definitivamente.`,
-        color: 0x95a5a6
-      });
-
-      const rowAdmin = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("sejawda_delete").setLabel("Deletar Canal").setStyle(ButtonStyle.Danger).setEmoji("🗑️"));
-      await canal.send({ embeds: [embedArquivado], components: [rowAdmin] });
-      await interaction.editReply({ content: "✅ Solicitação arquivada com sucesso!" });
-    }
-
-    // DELETAR TICKET PERMANENTEMENTE
-    if (interaction.customId === "sejawda_delete") {
-      if (!isGlobal) return interaction.reply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de solicitações.")], ephemeral: true });
-      await interaction.reply({ content: "💥 O canal será destruído em 5 segundos...", ephemeral: false });
-      setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
-    }
+    await interaction.update({
+      embeds: [
+        createEmbed({
+          title: `${rainbow} Solicitação WDA`,
+          description: `Tipo: **${chat.tipo}**\nÁrea escolhida: **${getAreaLabel(area)}**\n\n🏷️ **Protocolo:** \`${chat.ticketId}\``,
+          color: 0x8e44ad
+        })
+      ],
+      components: interaction.message.components
+    });
   }
-};
+},
+
+// ==========================================
+// HANDLER DE BOTÕES
+// ==========================================
+async handleButton(interaction) {
+  const chats = await chatStore.load();
+  const chat = chats[interaction.channelId];
+
+  if (!chat || chat.closedAt) return interaction.reply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")], ephemeral: true });
+
+  const hasStaffRole = chat.staffRoleId && interaction.member?.roles?.cache?.has(chat.staffRoleId);
+  const isGlobal = isGlobalStaff(interaction.member);
+
+  // ASSUMIR TICKET
+  if (interaction.customId === "sejawda_assumir") {
+    if (!isGlobal && !hasStaffRole) {
+      return interaction.reply({ embeds: [createErrorEmbed("Apenas membros da equipe podem assumir solicitações.")], ephemeral: true });
+    }
+
+    await interaction.deferUpdate();
+
+    // Remove apenas o botão de assumir e mantém o de fechar (e o menu de área se existir)
+    const newComponents = interaction.message.components.map(row => {
+      const newRow = new ActionRowBuilder();
+      row.components.forEach(comp => {
+        if (comp.customId !== "sejawda_assumir") newRow.addComponents(comp);
+      });
+      return newRow;
+    }).filter(row => row.components.length > 0);
+
+    await interaction.message.edit({ components: newComponents });
+
+    const embedAssumir = createEmbed({ title: "🫂 Atendimento Iniciado", description: `Olá! O staff **${interaction.user.username}** assumiu sua solicitação e irá te atender a partir de agora.`, color: 0x8e44ad });
+    await interaction.reply({ embeds: [embedAssumir] });
+  }
+
+  // FECHAR TICKET (Arquivamento em 2 Passos)
+  if (interaction.customId === "sejawda_close") {
+    if (interaction.user.id !== chat.userId && !isGlobal && !hasStaffRole) {
+      return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para fechar esta solicitação.")], ephemeral: true });
+    }
+
+    if (chat.tipo !== "migrado" && !chat.area) {
+      return interaction.reply({ embeds: [createErrorEmbed("Você precisa escolher uma área no menu antes de finalizar a solicitação.")], ephemeral: true });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+    const canal = interaction.channel;
+
+    try {
+      await canal.permissionOverwrites.edit(chat.userId, { ViewChannel: false });
+      const memberCreator = await interaction.guild.members.fetch(chat.userId).catch(() => null);
+      const username = memberCreator ? memberCreator.user.username.toLowerCase().replace(/[^a-z0-9-]/g, "-") : "usuario";
+      
+      await canal.setName(`fechado-${username}-${chat.ticketId}`);
+      await canal.setParent(CATEGORIA_FECHADOS_ID, { lockPermissions: false });
+    } catch (e) {
+      console.log("Aviso: Permissões insuficientes para renomear/mover o canal do sejawda.");
+    }
+
+    await chatStore.update(interaction.channelId, (info) => (info ? { ...info, closedAt: Date.now() } : null));
+
+    const embedArquivado = createEmbed({
+      title: "🔒 Solicitação Arquivada",
+      description: `O membro não possui mais acesso a este canal.\n\nEquipe: Quando não for mais necessário manter o histórico, clique abaixo para excluir definitivamente.`,
+      color: 0x95a5a6
+    });
+
+    const rowAdmin = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("sejawda_delete").setLabel("Deletar Canal").setStyle(ButtonStyle.Danger).setEmoji("🗑️"));
+    await canal.send({ embeds: [embedArquivado], components: [rowAdmin] });
+    await interaction.editReply({ content: "✅ Solicitação arquivada com sucesso!" });
+  }
+
+  // DELETAR TICKET PERMANENTEMENTE
+  if (interaction.customId === "sejawda_delete") {
+    if (!isGlobal) return interaction.reply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de solicitações.")], ephemeral: true });
+    await interaction.deferReply({ ephemeral: false });
+    await interaction.reply({ content: "💥 O canal será destruído em 5 segundos...", ephemeral: false });
+    setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+  }
+}

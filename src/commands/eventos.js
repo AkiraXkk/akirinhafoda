@@ -125,7 +125,6 @@ module.exports = {
       .addRoleOption(opt => opt.setName("requisito_cargo").setDescription("Cargo obrigatório").setRequired(false))
       .addIntegerOption(opt => opt.setName("requisito_dias").setDescription("Dias mínimos no servidor para participar").setRequired(false).setMinValue(1))
       .addUserOption(opt => opt.setName("patrocinador").setDescription("Quem doou o prêmio?").setRequired(false))
-      .addStringOption(opt => opt.setName("imagem").setDescription("Link da imagem/banner do sorteio").setRequired(false))
       .addRoleOption(opt => opt.setName("ping").setDescription("Cargo para mencionar ao abrir").setRequired(false))
     )
 
@@ -177,7 +176,6 @@ module.exports = {
       const requisitoCargo = interaction.options.getRole("requisito_cargo");
       const requisitoDias = interaction.options.getInteger("requisito_dias");
       const patrocinador = interaction.options.getUser("patrocinador");
-      const imagem = interaction.options.getString("imagem");
       const ping = interaction.options.getRole("ping");
 
       const tempoMs = parseTime(duracaoStr);
@@ -198,8 +196,6 @@ module.exports = {
         .setDescription(desc)
         .setFooter({ text: `Criado por ${interaction.user.username}` })
         .setTimestamp(dataFim);
-
-      if (imagem && imagem.startsWith("http")) embed.setImage(imagem);
 
       const btnParticipar = new ButtonBuilder().setCustomId("evento_participar").setLabel("Participar (0)").setStyle(ButtonStyle.Primary).setEmoji("🎉");
       const row = new ActionRowBuilder().addComponents(btnParticipar);
@@ -305,6 +301,7 @@ module.exports = {
     
     // Participar do Sorteio Normal
     if (interaction.customId === "evento_participar") {
+      await interaction.deferReply({ ephemeral: true });
       const gwData = await giveawayStore.load();
       const gw = gwData[interaction.message.id];
 
@@ -343,6 +340,7 @@ module.exports = {
 
     // Pegar o DROP
     if (interaction.customId === "evento_drop_pegar") {
+      await interaction.deferReply({ ephemeral: true });
       const gwData = await giveawayStore.load();
       const gw = gwData[interaction.message.id];
 
@@ -365,6 +363,7 @@ module.exports = {
 
     // Abrir Modal do Painel
     if (interaction.customId === "evento_modal_criar") {
+      await interaction.deferUpdate();
       const modal = new ModalBuilder().setCustomId("evento_submit").setTitle("Anúncio de Evento");
       modal.addComponents(
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("ev_titulo").setLabel("Nome do Evento").setStyle(TextInputStyle.Short).setRequired(true)),
@@ -387,7 +386,6 @@ module.exports = {
         .setTitle(`🎉 EVENTO: ${titulo}`)
         .setColor("#2ecc71")
         .setDescription(`\n${desc}\n\n📅 **Quando:** ${data}${premio ? `\n🏆 **Prêmio:** ${premio}` : ""}`)
-        .setImage("https://i.imgur.com/YOUR_BANNER_HERE.png") 
         .setFooter({ text: `Evento organizado por ${interaction.user.username}` });
 
       const canalAnuncio = interaction.guild.channels.cache.find(c => c.name.includes("avisos")) || interaction.channel;

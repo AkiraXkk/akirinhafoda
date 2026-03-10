@@ -18,7 +18,6 @@ module.exports = {
         )
       )
       .addIntegerOption(opt => opt.setName("quantidade").setDescription("Quantos membros entraram? (Aproximado)").setRequired(true))
-      .addAttachmentOption(opt => opt.setName("prova").setDescription("Envie o print confirmando").setRequired(true))
     ),
 
   async execute(interaction) {
@@ -37,7 +36,6 @@ module.exports = {
           { name: "📌 Tipo", value: tipo, inline: true },
           { name: "📈 Membros Trazidos", value: `${quantidade} membro(s)`, inline: true }
         )
-        .setImage(prova.url)
         .setTimestamp();
 
       // Envia para o canal de provas da divulgação
