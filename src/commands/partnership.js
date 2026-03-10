@@ -20,7 +20,7 @@ const partnersStore = createDataStore("partners.json");
 const staffStatsStore = createDataStore("staff_stats.json");
 
 // Coloque os IDs dos 4 cargos permitidos para usar o comando manual
-const CARGOS_PERMITIDOS = ["ID_AQUI_1", "ID_AQUI_2", "ID_AQUI_3", "ID_AQUI_4"];
+const CARGOS_PERMITIDOS = ["749461684313260102", "1476742742704132217", "1475286829447249942", "1480452915083739176"];
 
 module.exports = {
   data: new SlashCommandBuilder()
