@@ -1,17 +1,22 @@
+const { Events } = require("discord.js");
 const { EmbedBuilder } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
 const { getGuildConfig } = require("../config/guildConfig");
 
 const partnersStore = createDataStore("partners.json");
 
-module.exports = (client) => {
-  setInterval(async () => {
-    try {
-      const partners = await partnersStore.load();
-      const now = new Date();
-      let changed = false;
+module.exports = {
+  name: Events.ClientReady,
+  once: true,
+  async execute(client) {
+    setInterval(async () => {
+      try {
+        const partners = await partnersStore.load();
+        const now = new Date();
+        let changed = false;
 
-      for (const [id, data] of Object.entries(partners)) {
+        for (const [id, data] of Object.entries(partners)) {
+          if (data.status !== "accepted" || !data.acceptedAt) continue;
         if (data.status !== "accepted" || !data.acceptedAt) continue;
 
         const acceptedDate = new Date(data.acceptedAt);

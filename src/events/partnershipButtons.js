@@ -1,8 +1,10 @@
+const { Events } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
 
 const partnersStore = createDataStore("partners.json");
 
 module.exports = {
+  name: Events.InteractionCreate,
   async execute(interaction) {
     if (!interaction.customId.includes("reject_all")) return;
 
