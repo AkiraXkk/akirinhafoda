@@ -54,6 +54,12 @@ module.exports = {
         commandName = "design";
       } else if (customId.includes("recrutamento")) {
         commandName = "recrutamento";
+      } else if (customId.includes("reject_all")) {
+        // 🆕 Roteamento: botões de recusa em massa de parcerias → partnership.handleButton
+        commandName = "partnership";
+      } else if (customId.includes("avisos")) {
+        // 🆕 Roteamento: painel de anúncios → avisos.handleButton / handleModal
+        commandName = "avisos";
       } else {
         // Roteador Dinâmico original
         commandName = customId.split(/_|-|:/)[0];

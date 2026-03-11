@@ -301,23 +301,25 @@ module.exports = {
     
     // Participar do Sorteio Normal
     if (interaction.customId === "evento_participar") {
-      await interaction.deferReply({ ephemeral: true });
+      // 🛠️ BUG FIX: deferUpdate() permite atualizar a mensagem E usar followUp() ephemeral.
+      // deferReply() era incompatível com o interaction.update() e os interaction.reply() de erro subsequentes.
+      await interaction.deferUpdate();
       const gwData = await giveawayStore.load();
       const gw = gwData[interaction.message.id];
 
-      if (!gw || gw.tipo !== "sorteio") return interaction.reply({ content: "❌ Sorteio inválido.", ephemeral: true });
-      if (gw.ended) return interaction.reply({ content: "❌ Este sorteio já foi encerrado!", ephemeral: true });
+      if (!gw || gw.tipo !== "sorteio") return interaction.followUp({ content: "❌ Sorteio inválido.", ephemeral: true });
+      if (gw.ended) return interaction.followUp({ content: "❌ Este sorteio já foi encerrado!", ephemeral: true });
 
       // Verificação de Cargo
       if (gw.requisitoCargo && !interaction.member.roles.cache.has(gw.requisitoCargo)) {
-        return interaction.reply({ content: `❌ Você precisa do cargo <@&${gw.requisitoCargo}> para participar!`, ephemeral: true });
+        return interaction.followUp({ content: `❌ Você precisa do cargo <@&${gw.requisitoCargo}> para participar!`, ephemeral: true });
       }
 
       // Verificação de Dias no Servidor
       if (gw.requisitoDias) {
         const diasNoServer = Math.floor((Date.now() - interaction.member.joinedTimestamp) / (1000 * 60 * 60 * 24));
         if (diasNoServer < gw.requisitoDias) {
-          return interaction.reply({ content: `❌ Você precisa ter no mínimo **${gw.requisitoDias} dias** no servidor para participar (Você tem ${diasNoServer} dias).`, ephemeral: true });
+          return interaction.followUp({ content: `❌ Você precisa ter no mínimo **${gw.requisitoDias} dias** no servidor para participar (Você tem ${diasNoServer} dias).`, ephemeral: true });
         }
       }
 
@@ -334,18 +336,20 @@ module.exports = {
       await giveawayStore.update(interaction.message.id, (info) => ({ ...info, participantes: novosParticipantes }));
 
       const novoBotao = new ButtonBuilder().setCustomId("evento_participar").setLabel(`Participar (${novosParticipantes.length})`).setStyle(ButtonStyle.Primary).setEmoji("🎉");
-      await interaction.update({ components: [new ActionRowBuilder().addComponents(novoBotao)] });
+      // 🛠️ BUG FIX: editReply() após deferUpdate() atualiza a mensagem original corretamente.
+      await interaction.editReply({ components: [new ActionRowBuilder().addComponents(novoBotao)] });
       await interaction.followUp({ content: entrou ? "✅ Você **entrou** no sorteio! Boa sorte!" : "👋 Você **saiu** do sorteio.", ephemeral: true });
     }
 
     // Pegar o DROP
     if (interaction.customId === "evento_drop_pegar") {
-      await interaction.deferReply({ ephemeral: true });
+      // 🛠️ BUG FIX: deferUpdate() para poder atualizar a mensagem pública E usar followUp() para erros.
+      await interaction.deferUpdate();
       const gwData = await giveawayStore.load();
       const gw = gwData[interaction.message.id];
 
-      if (!gw || gw.tipo !== "drop") return interaction.reply({ content: "❌ Drop inválido.", ephemeral: true });
-      if (gw.ended) return interaction.reply({ content: "❌ Alguém foi mais rápido e já pegou!", ephemeral: true });
+      if (!gw || gw.tipo !== "drop") return interaction.followUp({ content: "❌ Drop inválido.", ephemeral: true });
+      if (gw.ended) return interaction.followUp({ content: "❌ Alguém foi mais rápido e já pegou!", ephemeral: true });
 
       // Marca como finalizado para ninguém mais pegar
       await giveawayStore.update(interaction.message.id, (info) => ({ ...info, ended: true }));
@@ -357,13 +361,15 @@ module.exports = {
 
       const btnWinner = new ButtonBuilder().setCustomId("null").setLabel(`Pego por ${interaction.user.username}`).setStyle(ButtonStyle.Secondary).setDisabled(true);
       
-      await interaction.update({ embeds: [embedWin], components: [new ActionRowBuilder().addComponents(btnWinner)] });
+      // 🛠️ BUG FIX: editReply() após deferUpdate() atualiza a mensagem do drop corretamente.
+      await interaction.editReply({ embeds: [embedWin], components: [new ActionRowBuilder().addComponents(btnWinner)] });
       await interaction.channel.send({ content: `🎊 O dedo mais rápido do oeste! ${interaction.user} pegou **${gw.premio}** no Drop!` });
     }
 
     // Abrir Modal do Painel
     if (interaction.customId === "evento_modal_criar") {
-      await interaction.deferUpdate();
+      // 🛠️ BUG FIX: Removido o deferUpdate() que impedia o showModal() de funcionar.
+      // showModal() DEVE ser a primeira (e única) resposta à interação.
       const modal = new ModalBuilder().setCustomId("evento_submit").setTitle("Anúncio de Evento");
       modal.addComponents(
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("ev_titulo").setLabel("Nome do Evento").setStyle(TextInputStyle.Short).setRequired(true)),
