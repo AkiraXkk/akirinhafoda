@@ -214,9 +214,13 @@ async function finalizeSorteio(msgId, client) {
       return;
     }
 
-    // Seleciona vencedores aleatoriamente
-    const shuffled = participants.sort(() => Math.random() - 0.5);
-    const winners = shuffled.slice(0, Math.min(sorteio.numVencedores, participants.length));
+    // Seleciona vencedores aleatoriamente (Fisher-Yates parcial)
+    const count = Math.min(sorteio.numVencedores, participants.length);
+    for (let i = participants.length - 1; i > participants.length - 1 - count && i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [participants[i], participants[j]] = [participants[j], participants[i]];
+    }
+    const winners = participants.slice(participants.length - count);
 
     const winnerMentions = winners.map((id) => `<@${id}>`).join(", ");
     const embed = createEmbed({
