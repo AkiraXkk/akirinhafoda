@@ -6,6 +6,14 @@ module.exports = {
   async execute(message, client) {
     if (message.author.bot || !message.guild) return;
 
+    // AFK: verifica menções a usuários AFK e auto-remove AFK de quem falar
+    const afkCommand = client.commands.get("afk");
+    if (afkCommand?.handleMessage) {
+      afkCommand.handleMessage(message).catch((err) =>
+        logger.error({ err }, "Erro ao processar AFK no messageCreate")
+      );
+    }
+
     const levelsCommand = client.commands.get("rank");
     if (!levelsCommand?.addXpForMessage) return;
 

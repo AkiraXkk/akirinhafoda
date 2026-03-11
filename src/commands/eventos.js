@@ -46,11 +46,16 @@ async function encerrarSorteio(client, messageId, channelId, isReroll = false) {
     let winnersText = "Ninguém participou 😢";
     let winArray = [];
 
-    // Lógica de Sorteio
+    // Lógica de Sorteio (Fisher-Yates parcial)
     if (gw.participantes.length > 0) {
-      const shuffled = gw.participantes.sort(() => 0.5 - Math.random());
-      const numGanhadores = Math.min(gw.vencedores, gw.participantes.length);
-      winArray = shuffled.slice(0, numGanhadores);
+      const pool = [...gw.participantes];
+      const numGanhadores = Math.min(gw.vencedores, pool.length);
+      const minIndex = pool.length - numGanhadores;
+      for (let i = pool.length - 1; i >= minIndex && i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      winArray = pool.slice(minIndex);
       winnersText = winArray.map(id => `<@${id}>`).join(", ");
     }
 
