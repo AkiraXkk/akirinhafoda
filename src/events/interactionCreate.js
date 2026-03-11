@@ -64,6 +64,9 @@ module.exports = {
         // 🆕 Roteamento: avaliações NPS via DM → avaliacao.handleButton / handleModal
         // ⚠️  Interações de DM não possuem interaction.guild — o handler usa o guildId embutido no customId
         commandName = "avaliacao";
+      } else if (customId.startsWith("tellonym_")) {
+        // 🆕 Roteamento: Correio Anônimo → tellonym.handleButton / handleModal
+        commandName = "tellonym";
       } else {
         // Roteador Dinâmico original
         commandName = customId.split(/_|-|:/)[0];
