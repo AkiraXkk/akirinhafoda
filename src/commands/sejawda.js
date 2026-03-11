@@ -47,7 +47,7 @@ async function getNextSejaId(tipo) {
   const chats = await chatStore.load();
   const counters = chats["counters"] || {};
   const nextCount = (counters[tipo] || 0) + 1;
-  
+
   await chatStore.update("counters", (data) => ({ ...data, [tipo]: nextCount }));
 
   const prefix = tipo === "migrado" ? "mig" : "rec";
@@ -63,7 +63,6 @@ module.exports = {
     .setName("sejawda")
     .setDescription("Envia o painel de recrutamento da equipe WDA")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    // A opção de anexo foi removida, a imagem agora é fixa!
     .addChannelOption((opt) => opt.setName("canal").setDescription("Canal onde enviar o painel").addChannelTypes(ChannelType.GuildText).setRequired(false))
     .addChannelOption((opt) => opt.setName("categoria").setDescription("Categoria para criar os chats").addChannelTypes(ChannelType.GuildCategory).setRequired(false))
     .addRoleOption((opt) => opt.setName("cargo_equipe").setDescription("Cargo da equipe para acesso aos chats").setRequired(false)),
@@ -91,7 +90,7 @@ module.exports = {
         "<a:y_catt:856598066940215336> Acolhimento\n" +
         "<a:y_catt:856598066940215336> Design\n" +
         "<a:y_catt:856598066940215336> Passtime",
-      image: imagemFixa, // Puxando a imagem diretamente do link
+      image: imagemFixa,
       color: 0x8e44ad
     });
 
@@ -121,7 +120,7 @@ module.exports = {
   // ==========================================
   async handleSelectMenu(interaction) {
     if (interaction.customId === "sejawda_tipo") {
-      await interaction.deferReply({ ephemeral: true }); // Evita erro de interação falhou
+      await interaction.deferReply({ ephemeral: true }); 
 
       const tipo = interaction.values[0];
       const rainbow = getDecorEmoji(interaction, "urainbowdiamond", "💎");
@@ -136,8 +135,7 @@ module.exports = {
 
       try {
         const chats = await chatStore.load();
-        
-        // Caçador de Fantasmas
+
         let existingChat = null;
         for (const [id, info] of Object.entries(chats)) {
           if (id === "counters") continue;
@@ -154,11 +152,10 @@ module.exports = {
 
         if (existingChat) return interaction.editReply({ embeds: [createErrorEmbed(`Você já possui um chat aberto: <#${existingChat[0]}>`)] });
 
-        // Gera ID e Nome
         const ticketId = await getNextSejaId(tipo);
         const cleanName = interaction.user.username.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-");
         const prefixName = tipo === "migrado" ? "migracao" : "recrutamento";
-        
+
         const channel = await interaction.guild.channels.create({
           name: `${prefixName}-${cleanName}`,
           type: ChannelType.GuildText,
@@ -170,18 +167,15 @@ module.exports = {
           ]
         });
 
-        // Permissões Fixas da Staff WDA
         for (const roleId of CARGOS_STAFF_WDA) {
           const role = interaction.guild.roles.cache.get(roleId);
           if (role) await channel.permissionOverwrites.create(role, { ViewChannel: true, SendMessages: true });
         }
 
-        // Permissão do cargo específico (se configurado no comando)
         if (panelConfig.staffRoleId) {
           await channel.permissionOverwrites.create(panelConfig.staffRoleId, { ViewChannel: true, SendMessages: true });
         }
 
-        // Monta a mensagem do Ticket
         const areaSelect = new StringSelectMenuBuilder()
           .setCustomId("sejawda_area")
           .setPlaceholder("Selecione a área de interesse")
@@ -189,10 +183,10 @@ module.exports = {
 
         const btnAssumir = new ButtonBuilder().setCustomId("sejawda_assumir").setLabel("Assumir").setStyle(ButtonStyle.Success).setEmoji("🙋");
         const btnFechar = new ButtonBuilder().setCustomId("sejawda_close").setLabel("Fechar").setStyle(ButtonStyle.Danger).setEmoji("🔒");
-        
+
         const rowBtns = new ActionRowBuilder().addComponents(btnAssumir, btnFechar);
         const components = [rowBtns];
-        
+
         let description = `Tipo selecionado: **${tipo === "migrado" ? "Migração" : "Recrutamento"}**\n`;
         let areaValue = null;
 
@@ -205,7 +199,7 @@ module.exports = {
         }
 
         const msgContent = panelConfig.staffRoleId ? `<@&${panelConfig.staffRoleId}> <@${interaction.user.id}>` : `<@${interaction.user.id}>`;
-        
+
         await channel.send({
           content: msgContent,
           embeds: [createEmbed({ title: `${rainbow} Solicitação WDA`, description, color: 0x8e44ad })],
@@ -233,13 +227,13 @@ module.exports = {
       const rainbow = getDecorEmoji(interaction, "urainbowdiamond", "💎");
       const chats = await chatStore.load();
       const chat = chats[interaction.channelId];
-      
-      if (!chat || chat.closedAt) return interaction.reply({ embeds: [createErrorEmbed("Este chat não é uma solicitação ativa.")], ephemeral: true });
+
+      if (!chat || chat.closedAt) return interaction.followUp({ embeds: [createErrorEmbed("Este chat não é uma solicitação ativa.")], ephemeral: true });
 
       const area = interaction.values[0];
       await chatStore.update(interaction.channelId, (data) => ({ ...data, area }));
 
-      await interaction.update({
+      await interaction.message.edit({
         embeds: [
           createEmbed({
             title: `${rainbow} Solicitação WDA`,
@@ -259,99 +253,76 @@ module.exports = {
     const chats = await chatStore.load();
     const chat = chats[interaction.channelId];
 
-    const area = interaction.values[0];
-    await chatStore.update(interaction.channelId, (data) => ({ ...data, area }));
+    if (!chat || chat.closedAt) return interaction.reply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")], ephemeral: true });
 
-    await interaction.update({
-      embeds: [
-        createEmbed({
-          title: `${rainbow} Solicitação WDA`,
-          description: `Tipo: **${chat.tipo}**\nÁrea escolhida: **${getAreaLabel(area)}**\n\n🏷️ **Protocolo:** \`${chat.ticketId}\``,
-          color: 0x8e44ad
-        })
-      ],
-      components: interaction.message.components
-    });
-  }
-},
+    const hasStaffRole = chat.staffRoleId && interaction.member?.roles?.cache?.has(chat.staffRoleId);
+    const isGlobal = isGlobalStaff(interaction.member);
 
-// ==========================================
-// HANDLER DE BOTÕES
-// ==========================================
-async handleButton(interaction) {
-  const chats = await chatStore.load();
-  const chat = chats[interaction.channelId];
+    // ASSUMIR TICKET
+    if (interaction.customId === "sejawda_assumir") {
+      if (!isGlobal && !hasStaffRole) {
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas membros da equipe podem assumir solicitações.")], ephemeral: true });
+      }
 
-  if (!chat || chat.closedAt) return interaction.reply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")], ephemeral: true });
+      await interaction.deferUpdate();
 
-  const hasStaffRole = chat.staffRoleId && interaction.member?.roles?.cache?.has(chat.staffRoleId);
-  const isGlobal = isGlobalStaff(interaction.member);
+      const newComponents = interaction.message.components.map(row => {
+        const newRow = new ActionRowBuilder();
+        row.components.forEach(comp => {
+          if (comp.customId !== "sejawda_assumir") newRow.addComponents(comp);
+        });
+        return newRow;
+      }).filter(row => row.components.length > 0);
 
-  // ASSUMIR TICKET
-  if (interaction.customId === "sejawda_assumir") {
-    if (!isGlobal && !hasStaffRole) {
-      return interaction.reply({ embeds: [createErrorEmbed("Apenas membros da equipe podem assumir solicitações.")], ephemeral: true });
+      await interaction.message.edit({ components: newComponents });
+
+      const embedAssumir = createEmbed({ title: "🫂 Atendimento Iniciado", description: `Olá! O staff **${interaction.user.username}** assumiu sua solicitação e irá te atender a partir de agora.`, color: 0x8e44ad });
+      await interaction.followUp({ embeds: [embedAssumir] });
     }
 
-    await interaction.deferUpdate();
+    // FECHAR TICKET
+    if (interaction.customId === "sejawda_close") {
+      if (interaction.user.id !== chat.userId && !isGlobal && !hasStaffRole) {
+        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para fechar esta solicitação.")], ephemeral: true });
+      }
 
-    // Remove apenas o botão de assumir e mantém o de fechar (e o menu de área se existir)
-    const newComponents = interaction.message.components.map(row => {
-      const newRow = new ActionRowBuilder();
-      row.components.forEach(comp => {
-        if (comp.customId !== "sejawda_assumir") newRow.addComponents(comp);
+      if (chat.tipo !== "migrado" && !chat.area) {
+        return interaction.reply({ embeds: [createErrorEmbed("Você precisa escolher uma área no menu antes de finalizar a solicitação.")], ephemeral: true });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+      const canal = interaction.channel;
+
+      try {
+        await canal.permissionOverwrites.edit(chat.userId, { ViewChannel: false });
+        const memberCreator = await interaction.guild.members.fetch(chat.userId).catch(() => null);
+        const username = memberCreator ? memberCreator.user.username.toLowerCase().replace(/[^a-z0-9-]/g, "-") : "usuario";
+
+        await canal.setName(`fechado-${username}-${chat.ticketId}`);
+        await canal.setParent(CATEGORIA_FECHADOS_ID, { lockPermissions: false });
+      } catch (e) {
+        console.log("Aviso: Permissões insuficientes para renomear/mover o canal do sejawda.");
+      }
+
+      await chatStore.update(interaction.channelId, (info) => (info ? { ...info, closedAt: Date.now() } : null));
+
+      const embedArquivado = createEmbed({
+        title: "🔒 Solicitação Arquivada",
+        description: `O membro não possui mais acesso a este canal.\n\nEquipe: Quando não for mais necessário manter o histórico, clique abaixo para excluir definitivamente.`,
+        color: 0x95a5a6
       });
-      return newRow;
-    }).filter(row => row.components.length > 0);
 
-    await interaction.message.edit({ components: newComponents });
-
-    const embedAssumir = createEmbed({ title: "🫂 Atendimento Iniciado", description: `Olá! O staff **${interaction.user.username}** assumiu sua solicitação e irá te atender a partir de agora.`, color: 0x8e44ad });
-    await interaction.reply({ embeds: [embedAssumir] });
-  }
-
-  // FECHAR TICKET (Arquivamento em 2 Passos)
-  if (interaction.customId === "sejawda_close") {
-    if (interaction.user.id !== chat.userId && !isGlobal && !hasStaffRole) {
-      return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para fechar esta solicitação.")], ephemeral: true });
+      const rowAdmin = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("sejawda_delete").setLabel("Deletar Canal").setStyle(ButtonStyle.Danger).setEmoji("🗑️"));
+      await canal.send({ embeds: [embedArquivado], components: [rowAdmin] });
+      await interaction.editReply({ content: "✅ Solicitação arquivada com sucesso!" });
     }
 
-    if (chat.tipo !== "migrado" && !chat.area) {
-      return interaction.reply({ embeds: [createErrorEmbed("Você precisa escolher uma área no menu antes de finalizar a solicitação.")], ephemeral: true });
+    // DELETAR TICKET PERMANENTEMENTE
+    if (interaction.customId === "sejawda_delete") {
+      if (!isGlobal) return interaction.reply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de solicitações.")], ephemeral: true });
+      await interaction.deferReply({ ephemeral: false });
+      await interaction.followUp({ content: "💥 O canal será destruído em 5 segundos...", ephemeral: false });
+      setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     }
-
-    await interaction.deferReply({ ephemeral: true });
-    const canal = interaction.channel;
-
-    try {
-      await canal.permissionOverwrites.edit(chat.userId, { ViewChannel: false });
-      const memberCreator = await interaction.guild.members.fetch(chat.userId).catch(() => null);
-      const username = memberCreator ? memberCreator.user.username.toLowerCase().replace(/[^a-z0-9-]/g, "-") : "usuario";
-      
-      await canal.setName(`fechado-${username}-${chat.ticketId}`);
-      await canal.setParent(CATEGORIA_FECHADOS_ID, { lockPermissions: false });
-    } catch (e) {
-      console.log("Aviso: Permissões insuficientes para renomear/mover o canal do sejawda.");
-    }
-
-    await chatStore.update(interaction.channelId, (info) => (info ? { ...info, closedAt: Date.now() } : null));
-
-    const embedArquivado = createEmbed({
-      title: "🔒 Solicitação Arquivada",
-      description: `O membro não possui mais acesso a este canal.\n\nEquipe: Quando não for mais necessário manter o histórico, clique abaixo para excluir definitivamente.`,
-      color: 0x95a5a6
-    });
-
-    const rowAdmin = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("sejawda_delete").setLabel("Deletar Canal").setStyle(ButtonStyle.Danger).setEmoji("🗑️"));
-    await canal.send({ embeds: [embedArquivado], components: [rowAdmin] });
-    await interaction.editReply({ content: "✅ Solicitação arquivada com sucesso!" });
   }
-
-  // DELETAR TICKET PERMANENTEMENTE
-  if (interaction.customId === "sejawda_delete") {
-    if (!isGlobal) return interaction.reply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de solicitações.")], ephemeral: true });
-    await interaction.deferReply({ ephemeral: false });
-    await interaction.reply({ content: "💥 O canal será destruído em 5 segundos...", ephemeral: false });
-    setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
-  }
-}
+};
