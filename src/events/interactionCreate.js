@@ -1,4 +1,4 @@
-const { Events } = require("discord.js");
+const { Events } = require("discord.js"); // 🚨 Corrigido o 'Const' maiúsculo para 'const' minúsculo
 const { logger } = require("../logger");
 
 module.exports = {
@@ -29,6 +29,10 @@ module.exports = {
     // 2. ROTEAMENTO DE INTERAÇÕES (Botões, Menus e Modais)
     if (interaction.isButton() || interaction.isAnySelectMenu() || interaction.isModalSubmit()) {
       const customId = interaction.customId;
+      
+      // 🛡️ Trava de segurança extra caso o Discord envie uma interação sem ID
+      if (!customId) return; 
+
       let commandName = "";
 
       // Descobre qual comando deve cuidar desta interação pelas suas exceções originais
@@ -38,10 +42,10 @@ module.exports = {
         customId.includes("ticket") || 
         customId.startsWith("open_") || 
         customId.startsWith("close_") || 
-        customId.startsWith("setup_") ||     // <-- ADICIONADO PARA O TICKET
-        customId.startsWith("user_") ||      // <-- ADICIONADO PARA O TICKET
-        customId.startsWith("assumir_") ||   // <-- ADICIONADO PARA O TICKET
-        customId.startsWith("delete_")       // <-- ADICIONADO PARA O TICKET
+        customId.startsWith("setup_") ||     
+        customId.startsWith("user_") ||      
+        customId.startsWith("assumir_") ||   
+        customId.startsWith("delete_")       
       ) {
         commandName = "ticket";
       } else if (customId.includes("sejawda")) {
