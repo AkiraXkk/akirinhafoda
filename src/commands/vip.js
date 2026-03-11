@@ -12,6 +12,7 @@ const {
   TextInputStyle,
 } = require("discord.js");
 const { getGuildConfig } = require("../config/guildConfig");
+const { logger } = require("../logger");
 
 function parseCustomId(customId) {
   return String(customId || "").split("_");
@@ -101,7 +102,9 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
 
     if (sub === "info") {
-      await vipChannel.ensureVipChannels(interaction.user.id, { guildId: interaction.guildId }).catch(() => {});
+      await vipChannel.ensureVipChannels(interaction.user.id, { guildId: interaction.guildId }).catch((err) => {
+        logger.warn({ err, userId: interaction.user.id }, "Falha ao garantir canais VIP no /vip info");
+      });
 
       const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
       const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};

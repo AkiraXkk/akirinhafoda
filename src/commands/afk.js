@@ -89,7 +89,7 @@ module.exports = {
         const elapsed = Math.floor((Date.now() - afkData.since) / 60000);
         const timeText = elapsed < 1 ? "menos de 1 minuto" : `${elapsed} minuto(s)`;
         const reply = await message.reply({
-          content: `💤 **${mentioned.displayName || mentioned.username}** está AFK: *${afkData.reason}* (há **${timeText}**)`,
+          content: `💤 **${mentioned.username}** está AFK: *${afkData.reason}* (há **${timeText}**)`,
           allowedMentions: { repliedUser: false },
         }).catch(() => null);
         if (reply) setTimeout(() => reply.delete().catch(() => {}), 15000);
