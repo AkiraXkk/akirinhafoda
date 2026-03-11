@@ -8,6 +8,8 @@ const path = require("path");
 
 const { createEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
+const { enviarAvaliacaoDM } = require("../utils/avaliacaoDM");
+const { logger } = require("../logger");
 
 // Banco de dados dos tickets (abertos, fechados, IDs)
 const ticketStore = createDataStore("tickets.json");
@@ -177,6 +179,17 @@ module.exports = {
     await canal.send({ embeds: [embedArquivado], components: [rowAdmin] });
     
     await interaction.editReply({ content: "✅ Ticket arquivado com sucesso!" });
+
+    // 🆕 NPS: Enviar avaliação de atendimento ao usuário via DM
+    // O staff avaliado é quem fechou o ticket (interaction.user)
+    try {
+      const userToRate = await interaction.client.users.fetch(ticketInfo.userId).catch(() => null);
+      if (userToRate) {
+        await enviarAvaliacaoDM(userToRate, interaction.user.id, interaction.guildId);
+      }
+    } catch (npsErr) {
+      logger.warn({ err: npsErr }, "[ticket] Não foi possível enviar DM de avaliação NPS ao usuário");
+    }
   },
 
   // ==========================================

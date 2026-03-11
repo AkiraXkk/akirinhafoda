@@ -60,6 +60,10 @@ module.exports = {
       } else if (customId.includes("avisos")) {
         // 🆕 Roteamento: painel de anúncios → avisos.handleButton / handleModal
         commandName = "avisos";
+      } else if (customId.startsWith("aval_")) {
+        // 🆕 Roteamento: avaliações NPS via DM → avaliacao.handleButton / handleModal
+        // ⚠️  Interações de DM não possuem interaction.guild — o handler usa o guildId embutido no customId
+        commandName = "avaliacao";
       } else if (customId.startsWith("tellonym_")) {
         // 🆕 Roteamento: Correio Anônimo → tellonym.handleButton / handleModal
         commandName = "tellonym";

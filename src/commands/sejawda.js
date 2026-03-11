@@ -12,6 +12,8 @@ const {
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
 const { getGuildConfig } = require("../config/guildConfig");
+const { enviarAvaliacaoDM } = require("../utils/avaliacaoDM");
+const { logger } = require("../logger");
 
 const panelStore = createDataStore("sejawda_panels.json");
 const chatStore = createDataStore("sejawda_chats.json");
@@ -315,6 +317,17 @@ module.exports = {
       const rowAdmin = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("sejawda_delete").setLabel("Deletar Canal").setStyle(ButtonStyle.Danger).setEmoji("🗑️"));
       await canal.send({ embeds: [embedArquivado], components: [rowAdmin] });
       await interaction.editReply({ content: "✅ Solicitação arquivada com sucesso!" });
+
+      // 🆕 NPS: Enviar avaliação de atendimento ao usuário via DM
+      // O staff avaliado é quem fechou a solicitação (interaction.user)
+      try {
+        const userToRate = await interaction.client.users.fetch(chat.userId).catch(() => null);
+        if (userToRate) {
+          await enviarAvaliacaoDM(userToRate, interaction.user.id, interaction.guildId);
+        }
+      } catch (npsErr) {
+        logger.warn({ err: npsErr }, "[sejawda] Não foi possível enviar DM de avaliação NPS ao usuário");
+      }
     }
 
     // DELETAR TICKET PERMANENTEMENTE
