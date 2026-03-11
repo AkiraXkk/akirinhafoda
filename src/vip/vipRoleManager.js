@@ -56,7 +56,9 @@ module.exports = {
         if (roleColor) await role.setColor(parsedColor).catch(() => {});
       }
 
-      await member.roles.add(role);
+      await member.roles.add(role).catch((err) =>
+        logger?.error?.({ err, userId, roleId: role.id }, "Falha ao adicionar cargo personalizado VIP — verifique a hierarquia de cargos do bot")
+      );
       await vipService.setSettings(guildId, userId, { roleId: role.id });
       return { ok: true };
     }
