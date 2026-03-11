@@ -37,18 +37,30 @@ module.exports = {
         : 0;
 
       if (!role) {
-        role = await guild.roles.create({
-          name:   roleName || `VIP | ${member.user.username}`,
-          color:  parsedColor,
-          reason: "Cargo personalizado VIP criado",
-        });
+        try {
+          role = await guild.roles.create({
+            name:   roleName || `VIP | ${member.user.username}`,
+            color:  parsedColor,
+            reason: "Cargo personalizado VIP criado",
+          });
+        } catch (err) {
+          console.error(`[VIP] Falha ao criar cargo personalizado para userId=${userId} guildId=${guildId}:`, err.message, `(code: ${err.code})`);
+          logger?.error?.({ err, userId, guildId }, "Falha ao criar cargo personalizado VIP");
+          return { ok: false, reason: `Não foi possível criar o cargo: ${err.message}` };
+        }
 
         if (separatorId) {
           const sep = await guild.roles.fetch(separatorId).catch(() => null);
           if (sep) {
-            await role.setPosition(sep.position - 1).catch((err) =>
-              logger?.error?.({ err, roleId: role.id }, "Falha ao posicionar cargo personalizado")
-            );
+            // Garante que o bot não tente posicionar o cargo acima do seu próprio cargo mais alto
+            const botMember = await guild.members.fetchMe().catch(() => null);
+            const botHighestPos = botMember?.roles?.highest?.position ?? 0;
+            const targetPos = sep.position - 1;
+            const safePos = Math.min(targetPos, botHighestPos - 1);
+            await role.setPosition(safePos).catch((err) => {
+              console.error(`[VIP] Falha ao posicionar cargo personalizado roleId=${role.id}:`, err.message);
+              logger?.error?.({ err, roleId: role.id }, "Falha ao posicionar cargo personalizado");
+            });
           }
         }
       } else {
@@ -100,7 +112,12 @@ module.exports = {
         const sep      = await guild.roles.fetch(separatorId).catch(() => null);
         const tierRole = await guild.roles.fetch(tier.roleId).catch(() => null);
         if (sep && tierRole) {
-          await tierRole.setPosition(sep.position - 1).catch(() => {});
+          const botMember = await guild.members.fetchMe().catch(() => null);
+          const botHighestPos = botMember?.roles?.highest?.position ?? 0;
+          const safePos = Math.min(sep.position - 1, botHighestPos - 1);
+          await tierRole.setPosition(safePos).catch((err) => {
+            console.error(`[VIP] Falha ao posicionar cargo de tier tierId=${tierId}:`, err.message);
+          });
         }
       }
 

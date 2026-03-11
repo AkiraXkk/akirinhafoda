@@ -86,6 +86,14 @@ function createVipChannelManager({ client, vipService, logger }) {
       return { ok: false, reason: "Categoria VIP não configurada. Use /vipadmin infra setup." };
     }
 
+    // Valida se a categoria pai realmente existe no servidor
+    const category = await guild.channels.fetch(gConfig.vipCategoryId).catch(() => null);
+    if (!category) {
+      console.error(`[VIP] vipCategoryId=${gConfig.vipCategoryId} não encontrado no servidor guildId=${guild.id}. Reconfigure via /vipadmin infra setup.`);
+      logger?.error?.({ guildId: guild.id, categoryId: gConfig.vipCategoryId }, "Categoria VIP não encontrada no servidor");
+      return { ok: false, reason: "Categoria VIP não encontrada. Reconfigure via /vipadmin infra setup." };
+    }
+
     const settings           = vipService.getSettings(guild.id, userId) || {};
     const permissionOverwrites = buildChannelPerms(guild, userId, settings, gConfig);
 
@@ -93,30 +101,34 @@ function createVipChannelManager({ client, vipService, logger }) {
     let voiceId = settings.voiceChannelId;
 
     if (tier.chat_privado && !textId) {
-      const ch = await guild.channels.create({
-        name:   `💬-${member.user.username}`,
-        type:   ChannelType.GuildText,
-        parent: gConfig.vipCategoryId,
-        permissionOverwrites,
-      }).catch((err) => {
-        logger?.error?.({ err, userId }, "Falha ao criar canal de texto VIP");
-        return null;
-      });
-      if (ch) textId = ch.id;
+      try {
+        const ch = await guild.channels.create({
+          name:   `💬-${member.user.username}`,
+          type:   ChannelType.GuildText,
+          parent: gConfig.vipCategoryId,
+          permissionOverwrites,
+        });
+        if (ch) textId = ch.id;
+      } catch (err) {
+        console.error(`[VIP] Falha ao criar canal de texto para userId=${userId} guildId=${guild.id}:`, err.message, `(code: ${err.code})`);
+        logger?.error?.({ err, userId, categoryId: gConfig.vipCategoryId }, "Falha ao criar canal de texto VIP — verifique permissões e hierarquia");
+      }
     }
 
     if (tier.canCall && !voiceId) {
-      const ch = await guild.channels.create({
-        name:    `🔊 ${member.user.username}`,
-        type:    ChannelType.GuildVoice,
-        parent:  gConfig.vipCategoryId,
-        permissionOverwrites,
-        bitrate: tier.high_quality_voice ? 96000 : 64000,
-      }).catch((err) => {
-        logger?.error?.({ err, userId }, "Falha ao criar canal de voz VIP");
-        return null;
-      });
-      if (ch) voiceId = ch.id;
+      try {
+        const ch = await guild.channels.create({
+          name:    `🔊 ${member.user.username}`,
+          type:    ChannelType.GuildVoice,
+          parent:  gConfig.vipCategoryId,
+          permissionOverwrites,
+          bitrate: tier.high_quality_voice ? 96000 : 64000,
+        });
+        if (ch) voiceId = ch.id;
+      } catch (err) {
+        console.error(`[VIP] Falha ao criar canal de voz para userId=${userId} guildId=${guild.id}:`, err.message, `(code: ${err.code})`);
+        logger?.error?.({ err, userId, categoryId: gConfig.vipCategoryId }, "Falha ao criar canal de voz VIP — verifique permissões e hierarquia");
+      }
     }
 
     await vipService.setSettings(guild.id, userId, { textChannelId: textId, voiceChannelId: voiceId });
