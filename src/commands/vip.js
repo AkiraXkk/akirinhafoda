@@ -2,6 +2,8 @@ const {
   SlashCommandBuilder,
   EmbedBuilder,
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   UserSelectMenuBuilder,
@@ -9,6 +11,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
 } = require("discord.js");
+const { getGuildConfig } = require("../config/guildConfig");
 
 function parseCustomId(customId) {
   return String(customId || "").split("_");
@@ -137,9 +140,18 @@ module.exports = {
           new StringSelectMenuOptionBuilder().setLabel("Compartilhar Cargo Personalizado").setValue("share_role").setEmoji("🤝")
         );
 
+      const btnPrimeiraDama = new ButtonBuilder()
+        .setCustomId(`vip_btn_primeiradama_${interaction.guildId}_${interaction.user.id}`)
+        .setLabel("Primeira Dama")
+        .setEmoji("👑")
+        .setStyle(ButtonStyle.Secondary);
+
       return interaction.reply({
         embeds: [embed],
-        components: [new ActionRowBuilder().addComponents(menu)],
+        components: [
+          new ActionRowBuilder().addComponents(menu),
+          new ActionRowBuilder().addComponents(btnPrimeiraDama),
+        ],
         ephemeral: true,
       });
     }
@@ -466,6 +478,82 @@ module.exports = {
       } catch {
         return interaction.editReply({ content: "❌ Não foi possível adicionar o cargo. Verifique se o cargo do bot tem permissão suficiente na hierarquia do servidor." });
       }
+    }
+
+    // ── Seleção de Primeira Dama ──
+    if (interaction.customId.startsWith("vip_select_primeiradama_")) {
+      const parts = parseCustomId(interaction.customId);
+      // ["vip", "select", "primeiradama", guildId, ownerId]
+      const guildId = parts[3];
+      const ownerId = parts[4];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este menu pertence a outro servidor.", ephemeral: true });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", ephemeral: true });
+
+      const tier = await vipService.getMemberTier(interaction.member);
+      if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+      const selectedUserId = interaction.values?.[0];
+      if (!selectedUserId) return interaction.reply({ content: "Seleção inválida.", ephemeral: true });
+      if (selectedUserId === interaction.user.id) return interaction.reply({ content: "❌ Você não pode se definir como sua própria Primeira Dama.", ephemeral: true });
+
+      const targetMember = await interaction.guild.members.fetch(selectedUserId).catch(() => null);
+      if (!targetMember) return interaction.reply({ content: "❌ Membro não encontrado no servidor.", ephemeral: true });
+      if (targetMember.user?.bot) return interaction.reply({ content: "❌ Você não pode definir um bot como Primeira Dama.", ephemeral: true });
+
+      // Recupera o cargo de Primeira Dama das configurações do servidor
+      const gConfig = await getGuildConfig(guildId);
+      const damaRoleId = gConfig?.damaRoleId;
+
+      if (!damaRoleId) {
+        return interaction.reply({ content: "❌ O cargo de Primeira Dama não está configurado neste servidor. Peça a um administrador para usar `/dama config`.", ephemeral: true });
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+
+      try {
+        await targetMember.roles.add(damaRoleId);
+        return interaction.editReply({ content: `👑 **${targetMember.user.username}** agora é sua Primeira Dama! 💍` });
+      } catch (err) {
+        console.error(`[VIP] Falha ao adicionar cargo de Primeira Dama userId=${selectedUserId}:`, err.message);
+        return interaction.editReply({ content: "❌ Não foi possível adicionar o cargo. Verifique se o cargo do bot tem permissão suficiente na hierarquia do servidor." });
+      }
+    }
+  },
+
+  async handleButton(interaction) {
+    if (!interaction.inGuild()) return;
+    if (!interaction.customId?.startsWith("vip_btn_")) return;
+
+    const { vip: vipService } = interaction.client.services;
+
+    // ── Botão: Primeira Dama ──
+    if (interaction.customId.startsWith("vip_btn_primeiradama_")) {
+      const parts = parseCustomId(interaction.customId);
+      // ["vip", "btn", "primeiradama", guildId, ownerId]
+      const guildId = parts[3];
+      const ownerId = parts[4];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este painel pertence a outro servidor.", ephemeral: true });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", ephemeral: true });
+
+      const tier = await vipService.getMemberTier(interaction.member);
+      if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", ephemeral: true });
+
+      if (!(tier.primeiras_damas > 0)) {
+        return interaction.reply({ content: "❌ Seu plano VIP não inclui o benefício de Primeira Dama.", ephemeral: true });
+      }
+
+      const userSelect = new UserSelectMenuBuilder()
+        .setCustomId(`vip_select_primeiradama_${interaction.guildId}_${interaction.user.id}`)
+        .setPlaceholder("Quem será a sua Primeira Dama? 👑")
+        .setMinValues(1)
+        .setMaxValues(1);
+
+      return interaction.reply({
+        components: [new ActionRowBuilder().addComponents(userSelect)],
+        ephemeral: true,
+      });
     }
   },
 
