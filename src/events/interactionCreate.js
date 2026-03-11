@@ -60,6 +60,9 @@ module.exports = {
       } else if (customId.includes("avisos")) {
         // 🆕 Roteamento: painel de anúncios → avisos.handleButton / handleModal
         commandName = "avisos";
+      } else if (customId.startsWith("tellonym_")) {
+        // 🆕 Roteamento: Correio Anônimo → tellonym.handleButton / handleModal
+        commandName = "tellonym";
       } else {
         // Roteador Dinâmico original
         commandName = customId.split(/_|-|:/)[0];
