@@ -19,16 +19,15 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    // 1. Cria o Painel Fixo com o Botão
     if (interaction.options.getSubcommand() === "painel") {
       const embedPainel = new EmbedBuilder()
         .setTitle("🎨 Central de Pedidos - WDA Design")
         .setColor("#c8d6e5")
         .setDescription("Precisa de uma arte para um evento, jornal ou anúncio?\n\nClique no botão abaixo para preencher o formulário de pedido. Nossa equipe será notificada imediatamente!");
 
-      // 🚨 MUDANÇA: O ID agora tem 'design_' no começo para o interactionCreate achar ele!
+      // 🔄 REVERTIDO: Voltamos para o ID original. Os painéis antigos vão funcionar de novo!
       const btnPedir = new ButtonBuilder()
-        .setCustomId("design_modal_pedido")
+        .setCustomId("modal_pedido_design")
         .setLabel("📝 Fazer um Pedido")
         .setStyle(ButtonStyle.Primary)
         .setEmoji("🖋️");
@@ -39,29 +38,29 @@ module.exports = {
     }
   },
 
-  // Essa parte escuta quando alguém clica nos botões
   async handleButton(interaction) {
-    // 1. Botão de abrir o formulário
-    if (interaction.customId === "design_modal_pedido") {
-      // Cria a janelinha Pop-up (Modal)
+    // 🛡️ MÁGICA: Ele aceita o clique do painel original E do painel novo que criamos antes
+    if (interaction.customId === "modal_pedido_design" || interaction.customId === "design_modal_pedido") {
+      
+      // Modal original ressuscitado
       const modal = new ModalBuilder()
-        .setCustomId("design_submit_pedido")
+        .setCustomId("submit_pedido_design")
         .setTitle("Formulário de Arte");
 
       const inputTipo = new TextInputBuilder()
-        .setCustomId("design_tipo_arte")
+        .setCustomId("tipo_arte")
         .setLabel("Qual o tipo de arte? (Banner, Ícone, etc)")
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
 
       const inputDetalhes = new TextInputBuilder()
-        .setCustomId("design_detalhes_arte")
+        .setCustomId("detalhes_arte")
         .setLabel("Descreva como você quer a arte (Cores, texto)")
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(true);
 
       const inputPrazo = new TextInputBuilder()
-        .setCustomId("design_prazo_arte")
+        .setCustomId("prazo_arte")
         .setLabel("Para quando você precisa?")
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
@@ -72,45 +71,44 @@ module.exports = {
         new ActionRowBuilder().addComponents(inputPrazo)
       );
 
-      // Mostra o formulário na tela do membro
       await interaction.showModal(modal);
     }
 
-    // 🚨 AQUI ESTAVA O SEGREDO: A lógica de Aceitar e Recusar foi implementada!
-    if (interaction.customId === "design_aceitar") {
-      await interaction.deferUpdate(); // Avisa o Discord que estamos processando
-      
-      const embedAtualizada = EmbedBuilder.from(interaction.message.embeds[0])
-        .setColor("#2ecc71") // Fica verde
-        .setTitle("✅ Pedido de Design Aceito")
-        .addFields({ name: "🛠️ Status", value: `Aceito e em produção por ${interaction.user}` });
-
-      // Atualiza a mensagem original mudando a cor do embed e sumindo com os botões
-      await interaction.message.edit({ embeds: [embedAtualizada], components: [] }); 
-      
-      await interaction.followUp({ content: `Você assumiu o pedido de arte! Bom trabalho.`, ephemeral: true });
-    }
-
-    if (interaction.customId === "design_recusar") {
+    // ✅ AQUI É A CORREÇÃO REAL: Os botões de aceitar e recusar ganharam "_design" no nome
+    // para o seu roteador (interactionCreate) conseguir achar eles e não dar "Interação Falhou".
+    if (interaction.customId === "aceitar_pedido_design") {
       await interaction.deferUpdate(); 
       
       const embedAtualizada = EmbedBuilder.from(interaction.message.embeds[0])
-        .setColor("#e74c3c") // Fica vermelho
+        .setColor("#2ecc71") // Verde
+        .setTitle("✅ Pedido de Design Aceito")
+        .addFields({ name: "🛠️ Status", value: `Aceito e em produção por ${interaction.user}` });
+
+      await interaction.message.edit({ embeds: [embedAtualizada], components: [] }); 
+      await interaction.followUp({ content: `Você assumiu o pedido de arte! Bom trabalho.`, ephemeral: true });
+    }
+
+    if (interaction.customId === "recusar_pedido_design") {
+      await interaction.deferUpdate(); 
+      
+      const embedAtualizada = EmbedBuilder.from(interaction.message.embeds[0])
+        .setColor("#e74c3c") // Vermelho
         .setTitle("❌ Pedido de Design Recusado")
         .addFields({ name: "🛠️ Status", value: `Recusado por ${interaction.user}` });
 
       await interaction.message.edit({ embeds: [embedAtualizada], components: [] });
-      
       await interaction.followUp({ content: `Você recusou o pedido de arte.`, ephemeral: true });
     }
   },
 
-  // Essa parte escuta quando a pessoa clica em "Enviar" no formulário
   async handleModal(interaction) {
-    if (interaction.customId === "design_submit_pedido") {
-      const tipo = interaction.fields.getTextInputValue("design_tipo_arte");
-      const detalhes = interaction.fields.getTextInputValue("design_detalhes_arte");
-      const prazo = interaction.fields.getTextInputValue("design_prazo_arte");
+    // Aceita o envio do modal original ou do novo
+    if (interaction.customId === "submit_pedido_design" || interaction.customId === "design_submit_pedido") {
+      
+      // Pega o valor independente de qual modal a pessoa enviou
+      const tipo = interaction.fields.getTextInputValue("tipo_arte") || interaction.fields.getTextInputValue("design_tipo_arte");
+      const detalhes = interaction.fields.getTextInputValue("detalhes_arte") || interaction.fields.getTextInputValue("design_detalhes_arte");
+      const prazo = interaction.fields.getTextInputValue("prazo_arte") || interaction.fields.getTextInputValue("design_prazo_arte");
 
       const embedPedido = new EmbedBuilder()
         .setTitle("🔔 Novo Pedido de Design")
@@ -123,13 +121,12 @@ module.exports = {
         )
         .setTimestamp();
 
-      // 🚨 MUDANÇA: Colocando 'design_' na frente para o roteador achar!
+      // Botões para os Designers com a tag "_design" para funcionar sem dar falha
       const botoesGestao = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("design_aceitar").setLabel("Aceitar").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("design_recusar").setLabel("Recusar").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId("aceitar_pedido_design").setLabel("Aceitar").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("recusar_pedido_design").setLabel("Recusar").setStyle(ButtonStyle.Danger)
       );
 
-      // Manda o pedido para o canal de bate-papo do Design
       const canalDesign = interaction.guild.channels.cache.find(c => c.name.includes("chat-design"));
 
       if (canalDesign) {
