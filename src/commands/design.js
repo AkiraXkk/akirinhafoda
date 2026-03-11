@@ -26,8 +26,9 @@ module.exports = {
         .setColor("#c8d6e5")
         .setDescription("Precisa de uma arte para um evento, jornal ou anúncio?\n\nClique no botão abaixo para preencher o formulário de pedido. Nossa equipe será notificada imediatamente!");
 
+      // 🚨 MUDANÇA: O ID agora tem 'design_' no começo para o interactionCreate achar ele!
       const btnPedir = new ButtonBuilder()
-        .setCustomId("modal_pedido_design")
+        .setCustomId("design_modal_pedido")
         .setLabel("📝 Fazer um Pedido")
         .setStyle(ButtonStyle.Primary)
         .setEmoji("🖋️");
@@ -38,28 +39,29 @@ module.exports = {
     }
   },
 
-  // Essa parte escuta quando alguém clica no botão "Fazer um Pedido" em qualquer lugar do servidor
+  // Essa parte escuta quando alguém clica nos botões
   async handleButton(interaction) {
-    if (interaction.customId === "modal_pedido_design") {
+    // 1. Botão de abrir o formulário
+    if (interaction.customId === "design_modal_pedido") {
       // Cria a janelinha Pop-up (Modal)
       const modal = new ModalBuilder()
-        .setCustomId("submit_pedido_design")
+        .setCustomId("design_submit_pedido")
         .setTitle("Formulário de Arte");
 
       const inputTipo = new TextInputBuilder()
-        .setCustomId("tipo_arte")
+        .setCustomId("design_tipo_arte")
         .setLabel("Qual o tipo de arte? (Banner, Ícone, etc)")
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
 
       const inputDetalhes = new TextInputBuilder()
-        .setCustomId("detalhes_arte")
+        .setCustomId("design_detalhes_arte")
         .setLabel("Descreva como você quer a arte (Cores, texto)")
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(true);
 
       const inputPrazo = new TextInputBuilder()
-        .setCustomId("prazo_arte")
+        .setCustomId("design_prazo_arte")
         .setLabel("Para quando você precisa?")
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
@@ -73,14 +75,42 @@ module.exports = {
       // Mostra o formulário na tela do membro
       await interaction.showModal(modal);
     }
+
+    // 🚨 AQUI ESTAVA O SEGREDO: A lógica de Aceitar e Recusar foi implementada!
+    if (interaction.customId === "design_aceitar") {
+      await interaction.deferUpdate(); // Avisa o Discord que estamos processando
+      
+      const embedAtualizada = EmbedBuilder.from(interaction.message.embeds[0])
+        .setColor("#2ecc71") // Fica verde
+        .setTitle("✅ Pedido de Design Aceito")
+        .addFields({ name: "🛠️ Status", value: `Aceito e em produção por ${interaction.user}` });
+
+      // Atualiza a mensagem original mudando a cor do embed e sumindo com os botões
+      await interaction.message.edit({ embeds: [embedAtualizada], components: [] }); 
+      
+      await interaction.followUp({ content: `Você assumiu o pedido de arte! Bom trabalho.`, ephemeral: true });
+    }
+
+    if (interaction.customId === "design_recusar") {
+      await interaction.deferUpdate(); 
+      
+      const embedAtualizada = EmbedBuilder.from(interaction.message.embeds[0])
+        .setColor("#e74c3c") // Fica vermelho
+        .setTitle("❌ Pedido de Design Recusado")
+        .addFields({ name: "🛠️ Status", value: `Recusado por ${interaction.user}` });
+
+      await interaction.message.edit({ embeds: [embedAtualizada], components: [] });
+      
+      await interaction.followUp({ content: `Você recusou o pedido de arte.`, ephemeral: true });
+    }
   },
 
   // Essa parte escuta quando a pessoa clica em "Enviar" no formulário
   async handleModal(interaction) {
-    if (interaction.customId === "submit_pedido_design") {
-      const tipo = interaction.fields.getTextInputValue("tipo_arte");
-      const detalhes = interaction.fields.getTextInputValue("detalhes_arte");
-      const prazo = interaction.fields.getTextInputValue("prazo_arte");
+    if (interaction.customId === "design_submit_pedido") {
+      const tipo = interaction.fields.getTextInputValue("design_tipo_arte");
+      const detalhes = interaction.fields.getTextInputValue("design_detalhes_arte");
+      const prazo = interaction.fields.getTextInputValue("design_prazo_arte");
 
       const embedPedido = new EmbedBuilder()
         .setTitle("🔔 Novo Pedido de Design")
@@ -93,20 +123,20 @@ module.exports = {
         )
         .setTimestamp();
 
-      // Botões para os Designers Aceitarem/Recusarem (A lógica de clique pode ser feita depois!)
+      // 🚨 MUDANÇA: Colocando 'design_' na frente para o roteador achar!
       const botoesGestao = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("aceitar_pedido").setLabel("Aceitar").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId("recusar_pedido").setLabel("Recusar").setStyle(ButtonStyle.Danger)
+        new ButtonBuilder().setCustomId("design_aceitar").setLabel("Aceitar").setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId("design_recusar").setLabel("Recusar").setStyle(ButtonStyle.Danger)
       );
 
       // Manda o pedido para o canal de bate-papo do Design
       const canalDesign = interaction.guild.channels.cache.find(c => c.name.includes("chat-design"));
-      
+
       if (canalDesign) {
         await canalDesign.send({ content: "<@&1480453030410457158> Novo pedido recebido!", embeds: [embedPedido], components: [botoesGestao] });
         await interaction.reply({ content: "✅ O seu pedido foi enviado com sucesso para a equipe de Design!", ephemeral: true });
       } else {
-        await interaction.reply({ content: "❌ Canal da equipe de Design não encontrado.", ephemeral: true });
+        await interaction.reply({ content: "❌ Canal da equipe de Design não encontrado. Verifique se existe um canal com 'chat-design' no nome.", ephemeral: true });
       }
     }
   }
