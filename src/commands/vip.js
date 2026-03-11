@@ -133,7 +133,8 @@ module.exports = {
           new StringSelectMenuOptionBuilder().setLabel("Renomear Call Privada").setValue("call_rename").setEmoji("✏️"),
           new StringSelectMenuOptionBuilder().setLabel("Customizar Cargo Pessoal").setValue("custom_role").setEmoji("🎨"),
           new StringSelectMenuOptionBuilder().setLabel("Dar VIP da sua cota").setValue("give_quota").setEmoji("🎁"),
-          new StringSelectMenuOptionBuilder().setLabel("Gerenciar cotas dadas").setValue("manage_quota").setEmoji("⚙️")
+          new StringSelectMenuOptionBuilder().setLabel("Gerenciar cotas dadas").setValue("manage_quota").setEmoji("⚙️"),
+          new StringSelectMenuOptionBuilder().setLabel("Compartilhar Cargo Personalizado").setValue("share_role").setEmoji("🤝")
         );
 
       return interaction.reply({
@@ -263,12 +264,14 @@ module.exports = {
       const removeUserId = interaction.values?.[0];
       if (!removeUserId) return interaction.reply({ content: "Seleção inválida.", ephemeral: true });
 
+      await interaction.deferReply({ ephemeral: true });
+
       const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
       let dados = settings.vipsDados || [];
 
       // Localiza o registro (aceita o formato antigo string e o novo object)
       const removedEntry = dados.find(d => (typeof d === "string" ? d : d.userId) === removeUserId);
-      if (!removedEntry) return interaction.reply({ content: "Registro não encontrado.", ephemeral: true });
+      if (!removedEntry) return interaction.editReply({ content: "Registro não encontrado." });
 
       dados = dados.filter((d) => (typeof d === "string" ? d : d.userId) !== removeUserId);
       await vipService.setSettings(interaction.guildId, interaction.user.id, { vipsDados: dados });
@@ -297,7 +300,7 @@ module.exports = {
           }
       }
 
-      return interaction.reply({ content: `✅ VIP revogado de <@${removeUserId}> e sua cota foi restaurada.`, ephemeral: true });
+      return interaction.editReply({ content: `✅ VIP revogado de <@${removeUserId}> e sua cota foi restaurada.` });
     }
 
     // ── Resposta ao Menu Principal do Painel /vip info ──
@@ -340,6 +343,7 @@ module.exports = {
       }
 
       if (action === "give_quota") {
+        await interaction.deferReply({ ephemeral: true });
         const validTiers = [];
         const orderedTiers = await vipService.getOrderedTiers(interaction.guildId);
         for (const t of orderedTiers) {
@@ -347,10 +351,10 @@ module.exports = {
            if (check.ok) validTiers.push(t);
         }
 
-        if (validTiers.length === 0) return interaction.reply({ content: "❌ Você não possui cotas disponíveis ou esgotou seu limite.", ephemeral: true });
+        if (validTiers.length === 0) return interaction.editReply({ content: "❌ Você não possui cotas disponíveis ou esgotou seu limite." });
 
         const userPick = new UserSelectMenuBuilder().setCustomId(`vip_give_${interaction.guildId}_${interaction.user.id}`).setPlaceholder("Selecione quem vai receber").setMinValues(1).setMaxValues(1);
-        return interaction.reply({ content: "Selecione o usuário para receber o VIP da sua cota:", components: [new ActionRowBuilder().addComponents(userPick)], ephemeral: true });
+        return interaction.editReply({ content: "Selecione o usuário para receber o VIP da sua cota:", components: [new ActionRowBuilder().addComponents(userPick)] });
       }
 
       if (action === "manage_quota") {
@@ -359,6 +363,7 @@ module.exports = {
 
         if (!dados.length) return interaction.reply({ content: "Você ainda não deu VIP para ninguém.", ephemeral: true });
 
+        await interaction.deferReply({ ephemeral: true });
         const userOptions = await Promise.all(
           dados.slice(0, 25).map(async (data) => {
             const uid = typeof data === "string" ? data : data.userId;
@@ -374,7 +379,92 @@ module.exports = {
         );
 
         const menu = new StringSelectMenuBuilder().setCustomId(`vip_quota_remove_${interaction.guildId}_${interaction.user.id}`).setPlaceholder("Selecione quem remover da sua cota").addOptions(userOptions);
-        return interaction.reply({ content: "Remover VIP e recuperar sua cota:", components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
+        return interaction.editReply({ content: "Remover VIP e recuperar sua cota:", components: [new ActionRowBuilder().addComponents(menu)] });
+      }
+
+      if (action === "share_role") {
+        const settings = await vipService.getSettings(interaction.guildId, interaction.user.id);
+        if (!settings?.roleId) return interaction.reply({ content: "❌ Você ainda não possui um cargo personalizado configurado. Use a opção 'Customizar Cargo Pessoal' primeiro.", ephemeral: true });
+
+        const userPick = new UserSelectMenuBuilder()
+          .setCustomId(`vip_share_role_${interaction.guildId}_${interaction.user.id}`)
+          .setPlaceholder("Selecione quem vai receber o cargo")
+          .setMinValues(1).setMaxValues(1);
+        return interaction.reply({ content: "Selecione o membro que vai receber seu cargo personalizado:", components: [new ActionRowBuilder().addComponents(userPick)], ephemeral: true });
+      }
+    }
+  },
+
+  async handleUserSelectMenu(interaction) {
+    if (!interaction.inGuild()) return;
+    if (!interaction.customId?.startsWith("vip_")) return;
+
+    const { vip: vipService } = interaction.client.services;
+
+    // ── Resposta ao selecionar a pessoa que vai receber o VIP (cota) ──
+    if (interaction.customId.startsWith("vip_give_")) {
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[2];
+      const ownerId = parts[3];
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este menu pertence a outro servidor.", ephemeral: true });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas quem abriu o painel pode usar.", ephemeral: true });
+
+      const selectedUserId = interaction.values?.[0];
+      if (!selectedUserId) return interaction.reply({ content: "Seleção inválida.", ephemeral: true });
+
+      const target = await interaction.guild.members.fetch(selectedUserId).catch(() => null);
+      if (!target) return interaction.reply({ content: "Usuário não encontrado no servidor.", ephemeral: true });
+      if (target.id === interaction.user.id) return interaction.reply({ content: "❌ Você não pode dar VIP para si mesmo.", ephemeral: true });
+      if (target.user?.bot) return interaction.reply({ content: "❌ Você não pode dar VIP para bots.", ephemeral: true });
+
+      const validTiers = [];
+      const orderedTiers = await vipService.getOrderedTiers(interaction.guildId);
+      for (const t of orderedTiers) {
+         const check = await vipService.verificarCota(interaction.guildId, interaction.user.id, t.id);
+         if (check.ok) validTiers.push(t);
+      }
+
+      if (validTiers.length === 0) return interaction.reply({ content: "❌ Você esgotou suas cotas.", ephemeral: true });
+      if (validTiers.length === 1) return processGiveVip(interaction, selectedUserId, validTiers[0].id);
+
+      const menu = new StringSelectMenuBuilder()
+          .setCustomId(`vip_give_tier_${interaction.guildId}_${interaction.user.id}_${selectedUserId}`)
+          .setPlaceholder("Selecione qual VIP deseja dar")
+          .addOptions(validTiers.map(t => new StringSelectMenuOptionBuilder().setLabel(t.name || t.id).setValue(t.id)));
+
+      return interaction.reply({
+          content: `Você tem opções de cota. Qual VIP deseja dar para <@${selectedUserId}>?`,
+          components: [new ActionRowBuilder().addComponents(menu)],
+          ephemeral: true
+      });
+    }
+
+    // ── Compartilhar cargo personalizado com outro membro ──
+    if (interaction.customId.startsWith("vip_share_role_")) {
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[3];
+      const ownerId = parts[4];
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este menu pertence a outro servidor.", ephemeral: true });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", ephemeral: true });
+
+      const targetUserId = interaction.values?.[0];
+      if (!targetUserId) return interaction.reply({ content: "Seleção inválida.", ephemeral: true });
+      if (targetUserId === interaction.user.id) return interaction.reply({ content: "❌ Você não pode compartilhar o cargo consigo mesmo.", ephemeral: true });
+
+      const settings = await vipService.getSettings(guildId, ownerId);
+      if (!settings?.roleId) return interaction.reply({ content: "❌ Você não possui um cargo personalizado configurado. Use 'Customizar Cargo Pessoal' primeiro.", ephemeral: true });
+
+      await interaction.deferReply({ ephemeral: true });
+
+      const targetMember = await interaction.guild.members.fetch(targetUserId).catch(() => null);
+      if (!targetMember) return interaction.editReply({ content: "❌ Membro não encontrado no servidor." });
+      if (targetMember.user?.bot) return interaction.editReply({ content: "❌ Você não pode compartilhar o cargo com um bot." });
+
+      try {
+        await targetMember.roles.add(settings.roleId);
+        return interaction.editReply({ content: `✅ Seu cargo personalizado foi compartilhado com <@${targetUserId}> com sucesso!` });
+      } catch {
+        return interaction.editReply({ content: "❌ Não foi possível adicionar o cargo. Verifique se o cargo do bot tem permissão suficiente na hierarquia do servidor." });
       }
     }
   },
