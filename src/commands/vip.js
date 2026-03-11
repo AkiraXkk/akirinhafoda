@@ -101,7 +101,7 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
 
     if (sub === "info") {
-      await vipChannel.ensureVipChannels(interaction.user.id, { guildId: interaction.guildId });
+      await vipChannel.ensureVipChannels(interaction.user.id, { guildId: interaction.guildId }).catch(() => {});
 
       const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
       const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
@@ -121,10 +121,11 @@ module.exports = {
 
       if (!cotasText) cotasText = "Nenhuma cota configurada para o seu plano.";
 
+      const expiresAt = data?.expiresAt;
       const embed = new EmbedBuilder().setTitle("💎 Painel VIP").setColor("Gold")
         .addFields(
           { name: "👑 Seu Plano", value: `\`${tier.name || tier.id}\``, inline: true },
-          { name: "⏳ Expiração", value: data.expiresAt ? `<t:${Math.floor(data.expiresAt/1000)}:R>` : "Permanente", inline: true },
+          { name: "⏳ Expiração", value: expiresAt ? `<t:${Math.floor(expiresAt/1000)}:R>` : "Permanente", inline: true },
           { name: "🎁 Minhas Cotas", value: cotasText, inline: false }
         );
 
