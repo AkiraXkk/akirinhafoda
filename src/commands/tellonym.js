@@ -6,6 +6,7 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
+  UserSelectMenuBuilder,
   PermissionFlagsBits,
   ChannelType
 } = require("discord.js");
@@ -37,17 +38,17 @@ const PINK_LIGHT = 0xff9ff3;
 
 function buildPanelEmbed() {
   return createEmbed({
-    title: "💌 WDA Tellonym • Correio Anônimo",
+    title: "💌 WDA Tellonym • Correio Elegante",
     description: [
-      "**Tem algo no coração que quer dizer, mas tem vergonha? 🥺**",
+      "**Tem algo no coração que quer dizer? 🥺**",
       "",
-      "Aqui você pode enviar uma cartinha anônima para alguém especial!",
-      "Ninguém vai saber que foi você — só o amor vai chegar. 💖",
+      "Aqui você pode enviar uma cartinha para alguém especial!",
+      "Escolha como você quer se identificar. 💖",
       "",
       "**Como funciona?**",
-      "🤫 Clique no botão abaixo",
-      "✍️ Escreva para quem é e o que sente",
-      "📮 O bot entrega de forma completamente anônima!",
+      "👻 **Anônimo** — O destinatário não saberá quem enviou",
+      "✍️ **Assinado** — Sua identidade aparece na cartinha",
+      "📮 Clique em um dos botões abaixo para começar!",
       "",
       "> *Seja gentil. Uma palavra pode mudar o dia de alguém.* 🌸"
     ].join("\n"),
@@ -63,16 +64,16 @@ function buildPanelEmbed() {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("tellonym")
-    .setDescription("Sistema de Correio Anônimo do WDA 💌")
+    .setDescription("Sistema de Correio Elegante do WDA 💌")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand(sub =>
       sub
         .setName("painel")
-        .setDescription("Envia o painel do Correio Anônimo no canal atual")
+        .setDescription("Envia o painel do Correio Elegante no canal atual")
         .addChannelOption(opt =>
           opt
             .setName("canal_destino")
-            .setDescription("Canal onde as cartinhas anônimas serão postadas publicamente")
+            .setDescription("Canal onde as cartinhas serão postadas publicamente")
             .addChannelTypes(ChannelType.GuildText)
             .setRequired(true)
         )
@@ -94,14 +95,17 @@ module.exports = {
       "Tellonym: painel configurado"
     );
 
-    const embedPainel = buildPanelEmbed();
-
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId("tellonym_abrir_modal")
-        .setLabel("💌 Enviar Cartinha Anônima")
+        .setCustomId("tellonym_btn_anonimo")
+        .setLabel("Enviar Anônimo")
+        .setStyle(ButtonStyle.Secondary)
+        .setEmoji("👻"),
+      new ButtonBuilder()
+        .setCustomId("tellonym_btn_assinado")
+        .setLabel("Enviar Assinado")
         .setStyle(ButtonStyle.Primary)
-        .setEmoji("💖")
+        .setEmoji("✍️")
     );
 
     // O painel é permanente — enviamos no canal atual (não efêmero)
@@ -110,37 +114,55 @@ module.exports = {
       ephemeral: true
     });
 
-    await interaction.channel.send({ embeds: [embedPainel], components: [row] });
+    await interaction.channel.send({ embeds: [buildPanelEmbed()], components: [row] });
   },
 
   // ────────────────────────────────────────────
-  // HANDLER DE BOTÃO  tellonym_abrir_modal
+  // HANDLER DE BOTÃO  tellonym_btn_anonimo / tellonym_btn_assinado
   // ────────────────────────────────────────────
   async handleButton(interaction) {
-    if (interaction.customId !== "tellonym_abrir_modal") return;
+    const { customId } = interaction;
+    if (!customId.startsWith("tellonym_btn_")) return;
+
+    const tipo = customId === "tellonym_btn_anonimo" ? "anonimo" : "assinado";
+
+    const selectMenu = new UserSelectMenuBuilder()
+      .setCustomId(`tellonym_select_${tipo}`)
+      .setPlaceholder("Para quem é a cartinha? 💌")
+      .setMinValues(1)
+      .setMaxValues(1);
+
+    const row = new ActionRowBuilder().addComponents(selectMenu);
+
+    await interaction.reply({
+      content: "💌 Escolha o destinatário da sua cartinha:",
+      components: [row],
+      ephemeral: true
+    });
+  },
+
+  // ────────────────────────────────────────────
+  // HANDLER DE USER SELECT MENU  tellonym_select_<tipo>
+  // ────────────────────────────────────────────
+  async handleUserSelectMenu(interaction) {
+    if (!interaction.customId.startsWith("tellonym_select_")) return;
+
+    const tipo = interaction.customId.replace("tellonym_select_", "");
+    const userId = interaction.values[0];
 
     const modal = new ModalBuilder()
-      .setCustomId("tellonym_submit_modal")
-      .setTitle("💌 Enviar Cartinha Anônima");
+      .setCustomId(`tellonym_modal_${tipo}_${userId}`)
+      .setTitle(tipo === "anonimo" ? "💌 Cartinha Anônima" : "💌 Cartinha Assinada");
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
-          .setCustomId("tellonym_para")
-          .setLabel("Para quem é a mensagem? (ID ou @Nome)")
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder("Ex: 123456789012345678 ou Akira")
-          .setRequired(true)
-          .setMaxLength(100)
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
           .setCustomId("tellonym_mensagem")
-          .setLabel("Sua mensagem anônima 💬")
+          .setLabel("Sua mensagem 💬")
           .setStyle(TextInputStyle.Paragraph)
           .setPlaceholder("Escreva o que está no coração... 🌸")
           .setRequired(true)
-          .setMaxLength(1800)
+          .setMaxLength(550)
       ),
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
@@ -153,17 +175,22 @@ module.exports = {
       )
     );
 
-    // showModal() DEVE ser a única resposta a esta interação
     await interaction.showModal(modal);
   },
 
   // ────────────────────────────────────────────
-  // HANDLER DE MODAL  tellonym_submit_modal
+  // HANDLER DE MODAL  tellonym_modal_<tipo>_<userId>
   // ────────────────────────────────────────────
   async handleModal(interaction) {
-    if (interaction.customId !== "tellonym_submit_modal") return;
+    if (!interaction.customId.startsWith("tellonym_modal_")) return;
 
     await interaction.deferReply({ ephemeral: true });
+
+    // customId format: tellonym_modal_<tipo>_<userId>
+    // userId é um Snowflake numérico — não contém "_", então split seguro
+    const parts = interaction.customId.split("_");
+    const tipo = parts[2];          // "anonimo" ou "assinado"
+    const destinatarioId = parts[3]; // Snowflake do destinatário
 
     // Recupera o canal de destino configurado para esta guilda
     const config = await configStore.get(interaction.guildId);
@@ -180,8 +207,6 @@ module.exports = {
       });
     }
 
-    // Lê os campos do modal
-    const para      = interaction.fields.getTextInputValue("tellonym_para").trim();
     const mensagem  = interaction.fields.getTextInputValue("tellonym_mensagem").trim();
     const imagemRaw = interaction.fields.getTextInputValue("tellonym_imagem").trim();
 
@@ -198,39 +223,32 @@ module.exports = {
       }
     }
 
-    // Tenta resolver menção: se for um Snowflake do Discord (17-20 dígitos), busca o membro
-    let mencao = para;
-    // Discord Snowflake IDs are 17-20 digit numbers
-    const ID_REGEX = /^\d{17,20}$/;
-    if (ID_REGEX.test(para)) {
-      try {
-        const membro = await interaction.guild.members.fetch(para);
-        mencao = `<@${membro.id}>`;
-      } catch {
-        // ID não encontrado — usa o texto literal mesmo
-      }
-    }
+    const isAnonimo = tipo === "anonimo";
 
-    // Monta o embed fofo da cartinha
     const embedCartinha = createEmbed({
-      title: "💌 Uma Cartinha Anônima chegou para você!",
+      title: isAnonimo ? "💌 Uma Cartinha Anônima chegou para você!" : "💌 Uma Cartinha chegou para você!",
       description: [
         `> ${mensagem.split("\n").join("\n> ")}`,
         "",
-        "🤫 *O remetente preferiu manter o anonimato...*"
-      ].join("\n"),
+        isAnonimo ? "🤫 *O remetente preferiu manter o anonimato...*" : ""
+      ].join("\n").trimEnd(),
       color: PINK_LIGHT,
-      footer: {
-        text: "WDA — Tellonym • Correio Anônimo 💌",
-        iconURL: interaction.client.user.displayAvatarURL()
-      },
+      footer: isAnonimo
+        ? { text: "WDA - Tellonym 👻 | Mensagem Anônima", iconURL: interaction.client.user.displayAvatarURL() }
+        : { text: "WDA - Tellonym ✍️", iconURL: interaction.client.user.displayAvatarURL() },
+      ...(!isAnonimo && {
+        author: {
+          name: interaction.user.displayName || interaction.user.username,
+          iconURL: interaction.user.displayAvatarURL()
+        }
+      }),
       ...(imagemUrl && { image: imagemUrl })
     });
 
     // Envia a cartinha no canal de destino com menção fora do embed
     try {
       await canalDestino.send({
-        content: `💌 Tem uma nova cartinha para você, ${mencao}!`,
+        content: `💌 Tem uma nova cartinha para você, <@${destinatarioId}>!`,
         embeds: [embedCartinha]
       });
     } catch (err) {
@@ -247,7 +265,8 @@ module.exports = {
         guildId: interaction.guildId,
         autorId: interaction.user.id,
         autorTag: interaction.user.tag,
-        para,
+        tipo,
+        destinatarioId,
         canalDestinoId: config.canalDestinoId
       });
     } catch (err) {
@@ -256,7 +275,7 @@ module.exports = {
     }
 
     logger.info(
-      { guildId: interaction.guildId, autorId: interaction.user.id, canalDestinoId: config.canalDestinoId },
+      { guildId: interaction.guildId, autorId: interaction.user.id, tipo, destinatarioId },
       "Tellonym: cartinha enviada com sucesso"
     );
 
