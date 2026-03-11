@@ -9,6 +9,10 @@ module.exports = {
     // Adicionada trava para impedir que o bot leia comandos de barra vazios
     if (!interaction.customId || !interaction.customId.includes("reject_all")) return;
 
+    // 🛠️ BUG FIX: Se a interação já foi respondida pelo roteador central (interactionCreate.js),
+    // este listener isolado deve sair sem tentar responder novamente.
+    if (interaction.replied || interaction.deferred) return;
+
     const action = interaction.customId.split("_")[0];
 
     if (action === "cancel") {

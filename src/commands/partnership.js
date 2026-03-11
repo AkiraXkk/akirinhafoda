@@ -295,6 +295,41 @@ module.exports = {
   // BOTÕES E MODAIS (Sistema Normal via Painel)
   // ==========================================
   async handleButton(interaction) {
+    // ─── Bloco: Recusa em Massa (Migrado do partnershipButtons.js para o roteador central) ───
+    if (interaction.customId.includes("reject_all")) {
+      const action = interaction.customId.split("_")[0]; // "cancel" ou "confirm"
+
+      if (action === "cancel") {
+        return interaction.update({ content: "Ação de recusa em massa cancelada.", components: [], embeds: [] }).catch(() => null);
+      }
+
+      if (action === "confirm") {
+        await interaction.deferUpdate();
+        try {
+          const partners = await partnersStore.load();
+          let count = 0;
+
+          for (const id in partners) {
+            if (partners[id].status === "pending") {
+              partners[id].status = "rejected";
+              partners[id].processedBy = interaction.user.id;
+              count++;
+            }
+          }
+
+          if (count > 0) {
+            await partnersStore.save(partners);
+            return interaction.editReply({ content: `Foram recusadas ${count} solicitações pendentes.`, components: [], embeds: [] }).catch(() => null);
+          } else {
+            return interaction.editReply({ content: "Não havia solicitações pendentes para recusar.", components: [], embeds: [] }).catch(() => null);
+          }
+        } catch (error) {
+          return interaction.followUp({ content: "Erro ao processar a recusa em massa.", ephemeral: true }).catch(() => null);
+        }
+      }
+      return; // Evita cair na lógica de parceria individual abaixo
+    }
+
     const parts = interaction.customId.split("_");
     const action = parts[1];
     const id = parts[2];
