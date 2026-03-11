@@ -50,11 +50,12 @@ async function encerrarSorteio(client, messageId, channelId, isReroll = false) {
     if (gw.participantes.length > 0) {
       const pool = [...gw.participantes];
       const numGanhadores = Math.min(gw.vencedores, pool.length);
-      for (let i = pool.length - 1; i > pool.length - 1 - numGanhadores && i > 0; i--) {
+      const minIndex = pool.length - numGanhadores;
+      for (let i = pool.length - 1; i >= minIndex && i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [pool[i], pool[j]] = [pool[j], pool[i]];
       }
-      winArray = pool.slice(pool.length - numGanhadores);
+      winArray = pool.slice(minIndex);
       winnersText = winArray.map(id => `<@${id}>`).join(", ");
     }
 
