@@ -103,7 +103,7 @@ module.exports = {
       const canalDesign = interaction.guild.channels.cache.find(c => c.name.includes("chat-design"));
       
       if (canalDesign) {
-        await canalDesign.send({ content: "<@&ID_DO_CARGO_DESIGN> Novo pedido recebido!", embeds: [embedPedido], components: [botoesGestao] });
+        await canalDesign.send({ content: "<@&1480453030410457158> Novo pedido recebido!", embeds: [embedPedido], components: [botoesGestao] });
         await interaction.reply({ content: "✅ O seu pedido foi enviado com sucesso para a equipe de Design!", ephemeral: true });
       } else {
         await interaction.reply({ content: "❌ Canal da equipe de Design não encontrado.", ephemeral: true });
