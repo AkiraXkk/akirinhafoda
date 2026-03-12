@@ -3,6 +3,9 @@ const { logger } = require("../logger");
 
 const inviteStore = createDataStore("invites.json");
 
+// Conta criada há menos de 7 dias = fake
+const FAKE_ACCOUNT_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
+
 // Cache em memória: Map<guildId, Map<inviteCode, uses>>
 const inviteCache = new Map();
 
@@ -105,15 +108,13 @@ async function trackInvite(member) {
   const inviterId = usedInvite.inviter.id;
   const storeKey = `${guild.id}:${inviterId}`;
 
-  // Conta criada há menos de 7 dias = fake
   const accountAge = Date.now() - member.user.createdTimestamp;
-  const isFake = accountAge < 7 * 24 * 60 * 60 * 1000;
+  const isFake = accountAge < FAKE_ACCOUNT_THRESHOLD_MS;
 
   await inviteStore.update(storeKey, (current) => {
     const data = current || { total: 0, leaves: 0, fake: 0, invitedMembers: {} };
-    data.total = (data.total || 0) + 1;
-    if (isFake) data.fake = (data.fake || 0) + 1;
-    data.invitedMembers = data.invitedMembers || {};
+    data.total += 1;
+    if (isFake) data.fake += 1;
     data.invitedMembers[member.id] = { joinedAt: Date.now(), fake: isFake };
     return data;
   });

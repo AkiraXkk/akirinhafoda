@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require("discord.js");
 const { createEmbed } = require("../embeds");
 const { getInviteData, getAllInviteData } = require("../services/inviteTracker");
+const { logger } = require("../logger");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -65,7 +66,6 @@ module.exports = {
           ],
         });
       } catch (err) {
-        const { logger } = require("../logger");
         logger.error({ err }, "[invites] Erro ao buscar dados de convite");
         return interaction.reply({
           content: "❌ Ocorreu um erro ao buscar os dados de convite.",
@@ -128,7 +128,6 @@ module.exports = {
           ],
         });
       } catch (err) {
-        const { logger } = require("../logger");
         logger.error({ err }, "[invites] Erro ao gerar ranking");
         return interaction.reply({
           content: "❌ Ocorreu um erro ao gerar o ranking de convites.",
