@@ -613,7 +613,7 @@ module.exports = {
         })],
         components: [row],
       });
-    } catch {
+    } catch (error) {
       return interaction.editReply({ embeds: [createErrorEmbed("Erro ao enviar a apelação para a equipa. Tente novamente mais tarde.")] });
     }
 
