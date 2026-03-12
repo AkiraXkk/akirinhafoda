@@ -2,7 +2,8 @@ const {
   SlashCommandBuilder, 
   EmbedBuilder, 
   PermissionFlagsBits,
-  ChannelType
+  ChannelType,
+  MessageFlags,
 } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
 
@@ -90,7 +91,7 @@ module.exports = {
     // DEFINIR META GERAL
     // ==========================================
     if (sub === "definir_geral") {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       
       const texto = interaction.options.getString("texto");
       
@@ -110,7 +111,7 @@ module.exports = {
     // DEFINIR META POR ÁREA
     // ==========================================
     if (sub === "definir_area") {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       
       const area = interaction.options.getString("area");
       const texto = interaction.options.getString("texto");
@@ -136,7 +137,7 @@ module.exports = {
     // VISUALIZAR METAS
     // ==========================================
     if (sub === "visualizar") {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       
       const metas = await metasStore.load();
       
@@ -197,7 +198,7 @@ module.exports = {
     // ANUNCIAR METAS
     // ==========================================
     if (sub === "anunciar") {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       
       const canal = interaction.options.getChannel("canal");
       const pingRole = interaction.options.getRole("ping");

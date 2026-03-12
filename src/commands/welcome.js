@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { getGuildConfig, setGuildConfig } = require("../config/guildConfig");
 
@@ -99,7 +100,7 @@ module.exports = {
         `Use \`/welcome preview\` para ver como ficará!`
       );
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "preview") {
@@ -108,7 +109,7 @@ module.exports = {
       if (!config || !config.welcomeChannelId) {
         return interaction.reply({
           embeds: [createErrorEmbed("Sistema de boas-vindas não configurado! Use `/welcome setup`.")],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -137,7 +138,7 @@ module.exports = {
       return interaction.reply({
         content: "📋 **Prévia da mensagem de boas-vindas:**",
         embeds: [embed],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -157,7 +158,7 @@ module.exports = {
 
       return interaction.reply({
         embeds: [createSuccessEmbed("❌ Sistema de boas-vindas desativado com sucesso!")],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -167,7 +168,7 @@ module.exports = {
       if (!config || !config.welcomeChannelId) {
         return interaction.reply({
           embeds: [createErrorEmbed("Sistema de boas-vindas não configurado! Use `/welcome setup`.")],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -175,7 +176,7 @@ module.exports = {
       if (!channel) {
         return interaction.reply({
           embeds: [createErrorEmbed("Canal de boas-vindas não encontrado! Configure novamente com `/welcome setup`.")],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -216,7 +217,7 @@ module.exports = {
 
       return interaction.reply({
         embeds: [createSuccessEmbed(`✅ Mensagem de teste enviada para ${channel}!`)],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
   }

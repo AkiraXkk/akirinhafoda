@@ -7,7 +7,8 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  PermissionFlagsBits
+  PermissionFlagsBits,
+  MessageFlags,
 } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
 
@@ -189,7 +190,7 @@ module.exports = {
 
       const tempoMs = parseTime(duracaoStr);
       if (!tempoMs) {
-        return interaction.reply({ content: "❌ Formato de tempo inválido! Use algo como `10m`, `2h` ou `1d`.", ephemeral: true });
+        return interaction.reply({ content: "❌ Formato de tempo inválido! Use algo como `10m`, `2h` ou `1d`.", flags: MessageFlags.Ephemeral });
       }
 
       const dataFim = Date.now() + tempoMs;
@@ -275,11 +276,11 @@ module.exports = {
       const dados = await giveawayStore.load();
       const gw = dados[msgId];
 
-      if (!gw) return interaction.reply({ content: "❌ Sorteio não encontrado.", ephemeral: true });
-      if (!gw.ended) return interaction.reply({ content: "❌ Este sorteio ainda está rolando!", ephemeral: true });
-      if (gw.participantes.length === 0) return interaction.reply({ content: "❌ Ninguém participou.", ephemeral: true });
+      if (!gw) return interaction.reply({ content: "❌ Sorteio não encontrado.", flags: MessageFlags.Ephemeral });
+      if (!gw.ended) return interaction.reply({ content: "❌ Este sorteio ainda está rolando!", flags: MessageFlags.Ephemeral });
+      if (gw.participantes.length === 0) return interaction.reply({ content: "❌ Ninguém participou.", flags: MessageFlags.Ephemeral });
 
-      await interaction.reply({ content: "🎲 Girando a roleta novamente...", ephemeral: true });
+      await interaction.reply({ content: "🎲 Girando a roleta novamente...", flags: MessageFlags.Ephemeral });
       await encerrarSorteio(interaction.client, msgId, gw.channelId, true);
     }
 
@@ -288,8 +289,8 @@ module.exports = {
       const dados = await giveawayStore.load();
       const gw = dados[msgId];
 
-      if (!gw) return interaction.reply({ content: "❌ Sorteio não encontrado.", ephemeral: true });
-      if (gw.ended) return interaction.reply({ content: "❌ Este sorteio já acabou.", ephemeral: true });
+      if (!gw) return interaction.reply({ content: "❌ Sorteio não encontrado.", flags: MessageFlags.Ephemeral });
+      if (gw.ended) return interaction.reply({ content: "❌ Este sorteio já acabou.", flags: MessageFlags.Ephemeral });
 
       await giveawayStore.update(msgId, (info) => ({ ...info, ended: true }));
 
@@ -306,7 +307,7 @@ module.exports = {
         await message.edit({ embeds: [embedCancelado], components: [new ActionRowBuilder().addComponents(btnCancelado)] });
       } catch (e) {}
 
-      await interaction.reply({ content: "✅ Sorteio cancelado com sucesso!", ephemeral: true });
+      await interaction.reply({ content: "✅ Sorteio cancelado com sucesso!", flags: MessageFlags.Ephemeral });
     }
   },
 
@@ -322,19 +323,19 @@ module.exports = {
       const gwData = await giveawayStore.load();
       const gw = gwData[interaction.message.id];
 
-      if (!gw || gw.tipo !== "sorteio") return interaction.followUp({ content: "❌ Sorteio inválido.", ephemeral: true });
-      if (gw.ended) return interaction.followUp({ content: "❌ Este sorteio já foi encerrado!", ephemeral: true });
+      if (!gw || gw.tipo !== "sorteio") return interaction.followUp({ content: "❌ Sorteio inválido.", flags: MessageFlags.Ephemeral });
+      if (gw.ended) return interaction.followUp({ content: "❌ Este sorteio já foi encerrado!", flags: MessageFlags.Ephemeral });
 
       // Verificação de Cargo
       if (gw.requisitoCargo && !interaction.member.roles.cache.has(gw.requisitoCargo)) {
-        return interaction.followUp({ content: `❌ Você precisa do cargo <@&${gw.requisitoCargo}> para participar!`, ephemeral: true });
+        return interaction.followUp({ content: `❌ Você precisa do cargo <@&${gw.requisitoCargo}> para participar!`, flags: MessageFlags.Ephemeral });
       }
 
       // Verificação de Dias no Servidor
       if (gw.requisitoDias) {
         const diasNoServer = Math.floor((Date.now() - interaction.member.joinedTimestamp) / (1000 * 60 * 60 * 24));
         if (diasNoServer < gw.requisitoDias) {
-          return interaction.followUp({ content: `❌ Você precisa ter no mínimo **${gw.requisitoDias} dias** no servidor para participar (Você tem ${diasNoServer} dias).`, ephemeral: true });
+          return interaction.followUp({ content: `❌ Você precisa ter no mínimo **${gw.requisitoDias} dias** no servidor para participar (Você tem ${diasNoServer} dias).`, flags: MessageFlags.Ephemeral });
         }
       }
 
@@ -353,7 +354,7 @@ module.exports = {
       const novoBotao = new ButtonBuilder().setCustomId("evento_participar").setLabel(`Participar (${novosParticipantes.length})`).setStyle(ButtonStyle.Primary).setEmoji("🎉");
       // 🛠️ BUG FIX: editReply() após deferUpdate() atualiza a mensagem original corretamente.
       await interaction.editReply({ components: [new ActionRowBuilder().addComponents(novoBotao)] });
-      await interaction.followUp({ content: entrou ? "✅ Você **entrou** no sorteio! Boa sorte!" : "👋 Você **saiu** do sorteio.", ephemeral: true });
+      await interaction.followUp({ content: entrou ? "✅ Você **entrou** no sorteio! Boa sorte!" : "👋 Você **saiu** do sorteio.", flags: MessageFlags.Ephemeral });
     }
 
     // Pegar o DROP
@@ -363,8 +364,8 @@ module.exports = {
       const gwData = await giveawayStore.load();
       const gw = gwData[interaction.message.id];
 
-      if (!gw || gw.tipo !== "drop") return interaction.followUp({ content: "❌ Drop inválido.", ephemeral: true });
-      if (gw.ended) return interaction.followUp({ content: "❌ Alguém foi mais rápido e já pegou!", ephemeral: true });
+      if (!gw || gw.tipo !== "drop") return interaction.followUp({ content: "❌ Drop inválido.", flags: MessageFlags.Ephemeral });
+      if (gw.ended) return interaction.followUp({ content: "❌ Alguém foi mais rápido e já pegou!", flags: MessageFlags.Ephemeral });
 
       // Marca como finalizado para ninguém mais pegar
       await giveawayStore.update(interaction.message.id, (info) => ({ ...info, ended: true }));
@@ -397,6 +398,8 @@ module.exports = {
 
   async handleModal(interaction) {
     if (interaction.customId === "evento_submit") {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
       const titulo = interaction.fields.getTextInputValue("ev_titulo");
       const desc = interaction.fields.getTextInputValue("ev_desc");
       const data = interaction.fields.getTextInputValue("ev_data");
@@ -410,7 +413,7 @@ module.exports = {
 
       const canalAnuncio = interaction.guild.channels.cache.find(c => c.name.includes("avisos")) || interaction.channel;
       await canalAnuncio.send({ content: "@everyone Um novo evento vai começar!", embeds: [embedEvento] });
-      await interaction.reply({ content: `✅ Evento anunciado com sucesso em ${canalAnuncio}!`, ephemeral: true });
+      await interaction.editReply({ content: `✅ Evento anunciado com sucesso em ${canalAnuncio}!` });
     }
   }
 };

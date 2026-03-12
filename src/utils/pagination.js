@@ -1,4 +1,5 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require("discord.js");
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType,
+  MessageFlags, } = require("discord.js");
 
 async function createPagination({
   interaction,
@@ -8,7 +9,7 @@ async function createPagination({
   title = "Lista",
 }) {
   if (!items.length) {
-    return interaction.reply({ content: "Nenhum item para mostrar.", ephemeral: true });
+    return interaction.reply({ content: "Nenhum item para mostrar.", flags: MessageFlags.Ephemeral });
   }
 
   const totalPages = Math.ceil(items.length / itemsPerPage);
@@ -66,7 +67,7 @@ async function createPagination({
 
   collector.on("collect", async (i) => {
     if (i.user.id !== interaction.user.id) {
-      return i.reply({ content: "Você não pode usar estes botões.", ephemeral: true });
+      return i.reply({ content: "Você não pode usar estes botões.", flags: MessageFlags.Ephemeral });
     }
 
     if (i.customId === "prev") {

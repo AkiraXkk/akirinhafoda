@@ -20,6 +20,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
   UserSelectMenuBuilder,
+  MessageFlags,
 } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
@@ -159,21 +160,21 @@ module.exports = {
         if (!tier || maxVagas < 1) {
           return interaction.reply({
             embeds: [createErrorEmbed("Apenas membros VIP com permissão de família podem criar famílias!")],
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
         }
 
         if (Object.values(families).find((f) => f.ownerId === userId)) {
           return interaction.reply({
             embeds: [createErrorEmbed("Você já tem uma família! Use `/family manage delete` primeiro.")],
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
         }
 
         if (Object.values(families).find((f) => f.name.toLowerCase() === name.toLowerCase())) {
           return interaction.reply({
             embeds: [createErrorEmbed(`Já existe uma família chamada **${name}**!`)],
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
         }
 
@@ -250,10 +251,10 @@ module.exports = {
       if (sub === "delete") {
         const family = Object.values(families).find((f) => f.ownerId === userId);
         if (!family) {
-          return interaction.reply({ embeds: [createErrorEmbed("Você não tem uma família!")], ephemeral: true });
+          return interaction.reply({ embeds: [createErrorEmbed("Você não tem uma família!")], flags: MessageFlags.Ephemeral });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         for (const memberId of family.members) {
           const member = await interaction.guild.members.fetch(memberId).catch(() => null);
@@ -279,7 +280,7 @@ module.exports = {
       if (sub === "info") {
         const family = Object.values(families).find((f) => f.members.includes(userId));
         if (!family) {
-          return interaction.reply({ embeds: [createErrorEmbed("Você não está em nenhuma família!")], ephemeral: true });
+          return interaction.reply({ embeds: [createErrorEmbed("Você não está em nenhuma família!")], flags: MessageFlags.Ephemeral });
         }
 
         const isOwner = family.ownerId === userId;
@@ -304,8 +305,8 @@ module.exports = {
       // ── leave ────────────────────────────────────────────────────────────────
       if (sub === "leave") {
         const family = Object.values(families).find((f) => f.members.includes(userId));
-        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Você não está em nenhuma família!")], ephemeral: true });
-        if (family.ownerId === userId) return interaction.reply({ embeds: [createErrorEmbed("Você é o dono! Delete a família ou transfira a liderança primeiro.")], ephemeral: true });
+        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Você não está em nenhuma família!")], flags: MessageFlags.Ephemeral });
+        if (family.ownerId === userId) return interaction.reply({ embeds: [createErrorEmbed("Você é o dono! Delete a família ou transfira a liderança primeiro.")], flags: MessageFlags.Ephemeral });
 
         await familyStore.update(family.id, () => ({
           ...family,
@@ -326,9 +327,9 @@ module.exports = {
         const targetUser = interaction.options.getUser("usuario");
         const family     = Object.values(families).find((f) => f.ownerId === userId || f.admins.includes(userId));
 
-        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Você não tem família para convidar membros!")], ephemeral: true });
-        if (family.members.length >= family.maxMembers) return interaction.reply({ embeds: [createErrorEmbed(`A família já atingiu **${family.maxMembers}** membros!`)], ephemeral: true });
-        if (family.members.includes(targetUser.id)) return interaction.reply({ embeds: [createErrorEmbed("Este usuário já está na família!")], ephemeral: true });
+        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Você não tem família para convidar membros!")], flags: MessageFlags.Ephemeral });
+        if (family.members.length >= family.maxMembers) return interaction.reply({ embeds: [createErrorEmbed(`A família já atingiu **${family.maxMembers}** membros!`)], flags: MessageFlags.Ephemeral });
+        if (family.members.includes(targetUser.id)) return interaction.reply({ embeds: [createErrorEmbed("Este usuário já está na família!")], flags: MessageFlags.Ephemeral });
 
         await familyStore.update(family.id, () => ({ ...family, members: [...family.members, targetUser.id] }));
 
@@ -347,9 +348,9 @@ module.exports = {
         const targetUser = interaction.options.getUser("usuario");
         const family     = Object.values(families).find((f) => f.ownerId === userId || f.admins.includes(userId));
 
-        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Você não tem família!")], ephemeral: true });
-        if (targetUser.id === family.ownerId) return interaction.reply({ embeds: [createErrorEmbed("Não pode remover o dono!")], ephemeral: true });
-        if (!family.members.includes(targetUser.id)) return interaction.reply({ embeds: [createErrorEmbed("Este usuário não está na família!")], ephemeral: true });
+        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Você não tem família!")], flags: MessageFlags.Ephemeral });
+        if (targetUser.id === family.ownerId) return interaction.reply({ embeds: [createErrorEmbed("Não pode remover o dono!")], flags: MessageFlags.Ephemeral });
+        if (!family.members.includes(targetUser.id)) return interaction.reply({ embeds: [createErrorEmbed("Este usuário não está na família!")], flags: MessageFlags.Ephemeral });
 
         await familyStore.update(family.id, () => ({
           ...family,
@@ -370,9 +371,9 @@ module.exports = {
         const targetUser = interaction.options.getUser("usuario");
         const family     = Object.values(families).find((f) => f.ownerId === userId);
 
-        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Apenas o dono pode promover membros!")], ephemeral: true });
-        if (!family.members.includes(targetUser.id)) return interaction.reply({ embeds: [createErrorEmbed("Usuário não está na família!")], ephemeral: true });
-        if (family.admins.includes(targetUser.id)) return interaction.reply({ embeds: [createErrorEmbed("Já é admin!")], ephemeral: true });
+        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Apenas o dono pode promover membros!")], flags: MessageFlags.Ephemeral });
+        if (!family.members.includes(targetUser.id)) return interaction.reply({ embeds: [createErrorEmbed("Usuário não está na família!")], flags: MessageFlags.Ephemeral });
+        if (family.admins.includes(targetUser.id)) return interaction.reply({ embeds: [createErrorEmbed("Já é admin!")], flags: MessageFlags.Ephemeral });
 
         await familyStore.update(family.id, () => ({ ...family, admins: [...family.admins, targetUser.id] }));
         return interaction.reply({ embeds: [createSuccessEmbed(`✅ **${targetUser.username}** promovido a admin de **${family.name}**!`)] });
@@ -383,9 +384,9 @@ module.exports = {
         const targetUser = interaction.options.getUser("usuario");
         const family     = Object.values(families).find((f) => f.ownerId === userId);
 
-        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Apenas o dono pode rebaixar admins!")], ephemeral: true });
-        if (!family.admins.includes(targetUser.id)) return interaction.reply({ embeds: [createErrorEmbed("Não é admin!")], ephemeral: true });
-        if (targetUser.id === family.ownerId) return interaction.reply({ embeds: [createErrorEmbed("Não pode rebaixar a si mesmo!")], ephemeral: true });
+        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Apenas o dono pode rebaixar admins!")], flags: MessageFlags.Ephemeral });
+        if (!family.admins.includes(targetUser.id)) return interaction.reply({ embeds: [createErrorEmbed("Não é admin!")], flags: MessageFlags.Ephemeral });
+        if (targetUser.id === family.ownerId) return interaction.reply({ embeds: [createErrorEmbed("Não pode rebaixar a si mesmo!")], flags: MessageFlags.Ephemeral });
 
         await familyStore.update(family.id, () => ({ ...family, admins: family.admins.filter((id) => id !== targetUser.id) }));
         return interaction.reply({ embeds: [createSuccessEmbed(`✅ **${targetUser.username}** rebaixado de admin de **${family.name}**!`)] });
@@ -395,12 +396,12 @@ module.exports = {
     // ── CONFIG ────────────────────────────────────────────────────────────────
     if (group === "config") {
       const family = Object.values(families).find((f) => f.ownerId === userId);
-      if (!family) return interaction.reply({ embeds: [createErrorEmbed("Apenas o dono pode configurar a família!")], ephemeral: true });
+      if (!family) return interaction.reply({ embeds: [createErrorEmbed("Apenas o dono pode configurar a família!")], flags: MessageFlags.Ephemeral });
 
       if (sub === "rename") {
         const newName = interaction.options.getString("novo_nome");
         if (Object.values(families).find((f) => f.name.toLowerCase() === newName.toLowerCase() && f.id !== family.id)) {
-          return interaction.reply({ embeds: [createErrorEmbed(`Já existe a família **${newName}**!`)], ephemeral: true });
+          return interaction.reply({ embeds: [createErrorEmbed(`Já existe a família **${newName}**!`)], flags: MessageFlags.Ephemeral });
         }
 
         await familyStore.update(family.id, () => ({ ...family, name: newName }));
@@ -420,7 +421,7 @@ module.exports = {
       if (sub === "color") {
         const color = interaction.options.getString("cor");
         if (!/^#[0-9A-F]{6}$/i.test(color)) {
-          return interaction.reply({ embeds: [createErrorEmbed("Cor inválida! Use formato hex: #FF0000")], ephemeral: true });
+          return interaction.reply({ embeds: [createErrorEmbed("Cor inválida! Use formato hex: #FF0000")], flags: MessageFlags.Ephemeral });
         }
 
         await familyStore.update(family.id, () => ({ ...family, color }));
@@ -441,13 +442,13 @@ module.exports = {
     // ── BANK ──────────────────────────────────────────────────────────────────
     if (group === "bank") {
       const family = Object.values(families).find((f) => f.members.includes(userId));
-      if (!family) return interaction.reply({ embeds: [createErrorEmbed("Você não está em nenhuma família!")], ephemeral: true });
+      if (!family) return interaction.reply({ embeds: [createErrorEmbed("Você não está em nenhuma família!")], flags: MessageFlags.Ephemeral });
 
       if (sub === "deposit") {
         const amount      = interaction.options.getInteger("quantia");
-        if (!economyService) return interaction.reply({ embeds: [createErrorEmbed("Serviço de economia indisponível!")], ephemeral: true });
+        if (!economyService) return interaction.reply({ embeds: [createErrorEmbed("Serviço de economia indisponível!")], flags: MessageFlags.Ephemeral });
         const userBalance = await economyService.getBalance(guildId, userId);
-        if (userBalance.coins < amount) return interaction.reply({ embeds: [createErrorEmbed(`Você não tem **${amount}** moedas!`)], ephemeral: true });
+        if (userBalance.coins < amount) return interaction.reply({ embeds: [createErrorEmbed(`Você não tem **${amount}** moedas!`)], flags: MessageFlags.Ephemeral });
 
         await economyService.removeCoins(guildId, userId, amount);
         await familyStore.update(family.id, () => ({ ...family, bankBalance: (family.bankBalance || 0) + amount }));
@@ -459,9 +460,9 @@ module.exports = {
         const amount  = interaction.options.getInteger("quantia");
         const balance = family.bankBalance || 0;
 
-        if (balance < amount) return interaction.reply({ embeds: [createErrorEmbed(`Banco sem saldo suficiente! Saldo: **${balance}**`)], ephemeral: true });
+        if (balance < amount) return interaction.reply({ embeds: [createErrorEmbed(`Banco sem saldo suficiente! Saldo: **${balance}**`)], flags: MessageFlags.Ephemeral });
         if (!family.admins.includes(userId) && family.ownerId !== userId) {
-          return interaction.reply({ embeds: [createErrorEmbed("Apenas admins e o dono podem sacar!")], ephemeral: true });
+          return interaction.reply({ embeds: [createErrorEmbed("Apenas admins e o dono podem sacar!")], flags: MessageFlags.Ephemeral });
         }
 
         await familyStore.update(family.id, () => ({ ...family, bankBalance: balance - amount }));
@@ -499,8 +500,8 @@ module.exports = {
         const newLeader = interaction.options.getUser("novo_lider");
         const family    = Object.values(families).find((f) => f.ownerId === userId);
 
-        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Você não é dono de nenhuma família!")], ephemeral: true });
-        if (!family.members.includes(newLeader.id)) return interaction.reply({ embeds: [createErrorEmbed("O usuário não está na família!")], ephemeral: true });
+        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Você não é dono de nenhuma família!")], flags: MessageFlags.Ephemeral });
+        if (!family.members.includes(newLeader.id)) return interaction.reply({ embeds: [createErrorEmbed("O usuário não está na família!")], flags: MessageFlags.Ephemeral });
 
         await familyStore.update(family.id, () => ({
           ...family,
@@ -513,14 +514,14 @@ module.exports = {
 
       if (sub === "upgrade") {
         const family = Object.values(families).find((f) => f.ownerId === userId);
-        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Apenas o dono pode comprar slots!")], ephemeral: true });
+        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Apenas o dono pode comprar slots!")], flags: MessageFlags.Ephemeral });
 
         const upgradeCost = 5000;
-        if (!economyService) return interaction.reply({ embeds: [createErrorEmbed("Serviço de economia indisponível!")], ephemeral: true });
+        if (!economyService) return interaction.reply({ embeds: [createErrorEmbed("Serviço de economia indisponível!")], flags: MessageFlags.Ephemeral });
 
         const userBalance = await economyService.getBalance(guildId, userId);
         if (userBalance.coins < upgradeCost) {
-          return interaction.reply({ embeds: [createErrorEmbed(`Você precisa de **${upgradeCost}** moedas! Saldo: **${userBalance.coins}**`)], ephemeral: true });
+          return interaction.reply({ embeds: [createErrorEmbed(`Você precisa de **${upgradeCost}** moedas! Saldo: **${userBalance.coins}**`)], flags: MessageFlags.Ephemeral });
         }
 
         await economyService.removeCoins(guildId, userId, upgradeCost);
@@ -532,7 +533,7 @@ module.exports = {
 
       if (sub === "panel") {
         const family  = Object.values(families).find((f) => f.members.includes(userId));
-        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Você não está em nenhuma família!")], ephemeral: true });
+        if (!family) return interaction.reply({ embeds: [createErrorEmbed("Você não está em nenhuma família!")], flags: MessageFlags.Ephemeral });
 
         const isOwner = family.ownerId === userId;
         const isAdmin = family.admins.includes(userId);
@@ -556,7 +557,7 @@ module.exports = {
           new ButtonBuilder().setCustomId("family_btn_leave").setLabel("Sair").setStyle(ButtonStyle.Danger).setEmoji("🚪"),
         );
 
-        return interaction.reply({ embeds: [embed], components: [row1, row2], ephemeral: true });
+        return interaction.reply({ embeds: [embed], components: [row1, row2], flags: MessageFlags.Ephemeral });
       }
     }
   },
@@ -566,11 +567,11 @@ module.exports = {
     const id = interaction.customId;
 
     if (id === "family_btn_leave") {
-      return interaction.reply({ embeds: [createErrorEmbed("Use o comando `/family manage leave` para sair da família.")], ephemeral: true });
+      return interaction.reply({ embeds: [createErrorEmbed("Use o comando `/family manage leave` para sair da família.")], flags: MessageFlags.Ephemeral });
     }
 
     if (id === "family_btn_info") {
-      return interaction.reply({ content: "Use os comandos slash para mais detalhes sobre a família.", ephemeral: true });
+      return interaction.reply({ content: "Use os comandos slash para mais detalhes sobre a família.", flags: MessageFlags.Ephemeral });
     }
 
     if (id === "family_btn_invite_menu") {
@@ -585,7 +586,7 @@ module.exports = {
         new ButtonBuilder().setCustomId("family_btn_cancel").setLabel("Cancelar").setStyle(ButtonStyle.Secondary),
       );
 
-      return interaction.reply({ content: "Selecione o usuário para convidar:", components: [row, cancelRow], ephemeral: true });
+      return interaction.reply({ content: "Selecione o usuário para convidar:", components: [row, cancelRow], flags: MessageFlags.Ephemeral });
     }
 
     if (id === "family_btn_cancel") {
@@ -599,19 +600,22 @@ module.exports = {
 
     const userId       = interaction.user.id;
     const selectedUser = interaction.users.first();
+
+    if (!selectedUser) return interaction.reply({ content: "❌ Nenhum usuário selecionado.", flags: MessageFlags.Ephemeral });
+    if (selectedUser.bot) return interaction.reply({ content: "❌ Não é possível convidar bots.", flags: MessageFlags.Ephemeral });
+    if (selectedUser.id === userId) return interaction.reply({ content: "❌ Você não pode se convidar.", flags: MessageFlags.Ephemeral });
+
+    await interaction.deferUpdate().catch(() => {});
+
     const families     = await familyStore.load();
 
-    if (!selectedUser) return interaction.reply({ content: "❌ Nenhum usuário selecionado.", ephemeral: true });
-    if (selectedUser.bot) return interaction.reply({ content: "❌ Não é possível convidar bots.", ephemeral: true });
-    if (selectedUser.id === userId) return interaction.reply({ content: "❌ Você não pode se convidar.", ephemeral: true });
-
     const userFamily = Object.values(families).find((f) => f.members.includes(selectedUser.id));
-    if (userFamily) return interaction.reply({ content: `❌ ${selectedUser.username} já está na família **${userFamily.name}**.`, ephemeral: true });
+    if (userFamily) return interaction.followUp({ content: `❌ ${selectedUser.username} já está na família **${userFamily.name}**.`, flags: MessageFlags.Ephemeral });
 
     const myFamily = Object.values(families).find((f) => f.ownerId === userId);
-    if (!myFamily) return interaction.reply({ content: "❌ Você não tem família.", ephemeral: true });
+    if (!myFamily) return interaction.followUp({ content: "❌ Você não tem família.", flags: MessageFlags.Ephemeral });
     if (myFamily.members.length >= myFamily.maxMembers) {
-      return interaction.reply({ content: `❌ Sua família já atingiu **${myFamily.maxMembers}** membros.`, ephemeral: true });
+      return interaction.followUp({ content: `❌ Sua família já atingiu **${myFamily.maxMembers}** membros.`, flags: MessageFlags.Ephemeral });
     }
 
     await familyStore.update(myFamily.id, () => ({ ...myFamily, members: [...myFamily.members, selectedUser.id] }));
@@ -621,7 +625,7 @@ module.exports = {
       if (member) await member.roles.add(myFamily.roleId).catch(() => {});
     }
 
-    await interaction.update({ content: `✅ **${selectedUser.username}** convidado!`, components: [] });
+    await interaction.editReply({ content: `✅ **${selectedUser.username}** convidado!`, components: [] });
 
     // DM de boas-vindas
     try {
@@ -639,7 +643,7 @@ module.exports = {
   // ─── HANDLE MODAL ───────────────────────────────────────────────────────────
   async handleModal(interaction) {
     if (interaction.customId === "family_invite_modal") {
-      return interaction.reply({ content: "❌ Modal descontinuado. Use o novo sistema de convite por menu.", ephemeral: true });
+      return interaction.reply({ content: "❌ Modal descontinuado. Use o novo sistema de convite por menu.", flags: MessageFlags.Ephemeral });
     }
   },
 };

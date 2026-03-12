@@ -20,6 +20,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
   RoleSelectMenuBuilder,
+  MessageFlags,
 } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
@@ -136,14 +137,14 @@ module.exports = {
     // ── config ─────────────────────────────────────────────────────────────────
     if (sub === "config") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você precisa de permissão de Gerenciar Servidor.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você precisa de permissão de Gerenciar Servidor.")], flags: MessageFlags.Ephemeral });
       }
       const config      = await getGuildConfig(guildId);
       const hasVipRoles = Object.keys(config?.damaVipRoles || {}).length > 0;
       return interaction.reply({
         embeds:     [await buildPanelEmbed(guildId)],
         components: buildPanelComponents(hasVipRoles),
-        ephemeral:  true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -152,7 +153,7 @@ module.exports = {
       const config = await getGuildConfig(guildId);
 
       if (!config?.damaPermRoleId || !config?.damaRoleId) {
-        return interaction.reply({ embeds: [createErrorEmbed("O sistema de Dama não está configurado. Use `/dama config`.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("O sistema de Dama não está configurado. Use `/dama config`.")], flags: MessageFlags.Ephemeral });
       }
 
       const damaVipRoles = config?.damaVipRoles || {};
@@ -168,28 +169,28 @@ module.exports = {
       if (!hasPermission) {
         return interaction.reply({
           embeds: [createErrorEmbed(`Você precisa ter o cargo <@&${config.damaPermRoleId}> ou um cargo VIP.`)],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
       const target = interaction.options.getUser("usuario");
 
-      if (target.id === userId) return interaction.reply({ embeds: [createErrorEmbed("Você não pode se definir como sua própria dama.")], ephemeral: true });
-      if (target.bot)          return interaction.reply({ embeds: [createErrorEmbed("Você não pode definir um bot como dama.")], ephemeral: true });
+      if (target.id === userId) return interaction.reply({ embeds: [createErrorEmbed("Você não pode se definir como sua própria dama.")], flags: MessageFlags.Ephemeral });
+      if (target.bot)          return interaction.reply({ embeds: [createErrorEmbed("Você não pode definir um bot como dama.")], flags: MessageFlags.Ephemeral });
 
       const maxDamas     = await resolveMaxDamas(interaction.member, guildId);
       const currentCouples = await couplesStore.load();
       const userCouples  = Object.entries(currentCouples).filter(([_, couple]) => couple.manId === userId);
 
       if (userCouples.length >= maxDamas) {
-        return interaction.reply({ embeds: [createErrorEmbed(`Você já atingiu o limite de **${maxDamas}** dama(s).`)], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed(`Você já atingiu o limite de **${maxDamas}** dama(s).`)], flags: MessageFlags.Ephemeral });
       }
 
       const existingCouple = Object.values(currentCouples).find(
         (c) => c.manId === userId && c.womanId === target.id
       );
       if (existingCouple) {
-        return interaction.reply({ embeds: [createErrorEmbed("Esta pessoa já é sua dama.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Esta pessoa já é sua dama.")], flags: MessageFlags.Ephemeral });
       }
 
       await couplesStore.update(`${userId}_${target.id}`, () => ({
@@ -204,7 +205,7 @@ module.exports = {
         if (targetMember) await targetMember.roles.add(config.damaRoleId).catch(() => {});
       }
 
-      return interaction.reply({ embeds: [createSuccessEmbed(`**${target.username}** agora é sua primeira dama! 💍`)], ephemeral: true });
+      return interaction.reply({ embeds: [createSuccessEmbed(`**${target.username}** agora é sua primeira dama! 💍`)], flags: MessageFlags.Ephemeral });
     }
 
     // ── remove ─────────────────────────────────────────────────────────────────
@@ -218,7 +219,7 @@ module.exports = {
         const couple    = currentCouples[coupleKey];
 
         if (!couple || couple.manId !== userId) {
-          return interaction.reply({ embeds: [createErrorEmbed("Esta pessoa não é sua dama.")], ephemeral: true });
+          return interaction.reply({ embeds: [createErrorEmbed("Esta pessoa não é sua dama.")], flags: MessageFlags.Ephemeral });
         }
 
         await couplesStore.update(coupleKey, () => null);
@@ -228,13 +229,13 @@ module.exports = {
           if (targetMember) await targetMember.roles.remove(config.damaRoleId).catch(() => {});
         }
 
-        return interaction.reply({ embeds: [createSuccessEmbed(`**${target.username}** foi removida de suas damas.`)], ephemeral: true });
+        return interaction.reply({ embeds: [createSuccessEmbed(`**${target.username}** foi removida de suas damas.`)], flags: MessageFlags.Ephemeral });
       }
 
       // Remove todas
       const userCouples = Object.entries(currentCouples).filter(([_, couple]) => couple.manId === userId);
       if (userCouples.length === 0) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não tem damas para remover.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não tem damas para remover.")], flags: MessageFlags.Ephemeral });
       }
 
       for (const [key, couple] of userCouples) {
@@ -245,7 +246,7 @@ module.exports = {
         }
       }
 
-      return interaction.reply({ embeds: [createSuccessEmbed(`Todas as suas **${userCouples.length}** dama(s) foram removidas.`)], ephemeral: true });
+      return interaction.reply({ embeds: [createSuccessEmbed(`Todas as suas **${userCouples.length}** dama(s) foram removidas.`)], flags: MessageFlags.Ephemeral });
     }
   },
 
@@ -254,7 +255,7 @@ module.exports = {
     const customId = interaction.customId;
 
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      return interaction.reply({ embeds: [createErrorEmbed("Sem permissão.")], ephemeral: true });
+      return interaction.reply({ embeds: [createErrorEmbed("Sem permissão.")], flags: MessageFlags.Ephemeral });
     }
 
     // ── Fechar ─────────────────────────────────────────────────────────────────
@@ -308,7 +309,7 @@ module.exports = {
       return interaction.reply({
         content:    "Selecione o cargo VIP:",
         components: [new ActionRowBuilder().addComponents(roleSelect)],
-        ephemeral:  true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -318,7 +319,7 @@ module.exports = {
       const damaVipRoles = config?.damaVipRoles || {};
 
       if (Object.keys(damaVipRoles).length === 0) {
-        return interaction.reply({ embeds: [createErrorEmbed("Nenhum cargo VIP configurado.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Nenhum cargo VIP configurado.")], flags: MessageFlags.Ephemeral });
       }
 
       const roleSelect = new RoleSelectMenuBuilder()
@@ -328,7 +329,7 @@ module.exports = {
       return interaction.reply({
         content:    "Selecione o cargo VIP que deseja remover:",
         components: [new ActionRowBuilder().addComponents(roleSelect)],
-        ephemeral:  true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -401,7 +402,7 @@ module.exports = {
       const damaVipRoles = { ...(config?.damaVipRoles || {}) };
 
       if (!damaVipRoles[roleId]) {
-        return interaction.reply({ embeds: [createErrorEmbed(`O cargo <@&${roleId}> não está na lista de cargos VIP.`)], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed(`O cargo <@&${roleId}> não está na lista de cargos VIP.`)], flags: MessageFlags.Ephemeral });
       }
 
       delete damaVipRoles[roleId];
@@ -409,7 +410,7 @@ module.exports = {
 
       return interaction.reply({
         embeds:    [createSuccessEmbed(`✅ Cargo <@&${roleId}> removido da lista de cargos VIP com damas.`)],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   },
@@ -417,7 +418,7 @@ module.exports = {
   // ─── HANDLE MODAL ───────────────────────────────────────────────────────────
   async handleModal(interaction) {
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      return interaction.reply({ embeds: [createErrorEmbed("Sem permissão.")], ephemeral: true });
+      return interaction.reply({ embeds: [createErrorEmbed("Sem permissão.")], flags: MessageFlags.Ephemeral });
     }
 
     const guildId  = interaction.guildId;
@@ -429,25 +430,26 @@ module.exports = {
       const damaPermRoleId = interaction.fields.getTextInputValue("damaPermRoleId").trim();
       const vipBaseRoleId  = interaction.fields.getTextInputValue("vipBaseRoleId").trim() || null;
 
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
       const damaRole = await interaction.guild.roles.fetch(damaRoleId).catch(() => null);
       const permRole = await interaction.guild.roles.fetch(damaPermRoleId).catch(() => null);
 
-      if (!damaRole) return interaction.reply({ embeds: [createErrorEmbed(`Cargo de dama com ID \`${damaRoleId}\` não encontrado.`)], ephemeral: true });
-      if (!permRole) return interaction.reply({ embeds: [createErrorEmbed(`Cargo de permissão com ID \`${damaPermRoleId}\` não encontrado.`)], ephemeral: true });
+      if (!damaRole) return interaction.editReply({ embeds: [createErrorEmbed(`Cargo de dama com ID \`${damaRoleId}\` não encontrado.`)] });
+      if (!permRole) return interaction.editReply({ embeds: [createErrorEmbed(`Cargo de permissão com ID \`${damaPermRoleId}\` não encontrado.`)] });
 
       if (vipBaseRoleId) {
         const baseRole = await interaction.guild.roles.fetch(vipBaseRoleId).catch(() => null);
-        if (!baseRole) return interaction.reply({ embeds: [createErrorEmbed(`Cargo Base VIP com ID \`${vipBaseRoleId}\` não encontrado.`)], ephemeral: true });
+        if (!baseRole) return interaction.editReply({ embeds: [createErrorEmbed(`Cargo Base VIP com ID \`${vipBaseRoleId}\` não encontrado.`)] });
       }
 
       await setGuildConfig(guildId, { damaRoleId, damaPermRoleId, vipBaseRoleId });
 
-      return interaction.reply({
+      return interaction.editReply({
         embeds: [createSuccessEmbed(
           `✅ Cargos definidos!\n\n🎭 Dama: <@&${damaRoleId}>\n🔑 Permissão: <@&${damaPermRoleId}>` +
           (vipBaseRoleId ? `\n🌐 Base VIP Global: <@&${vipBaseRoleId}>` : "")
         )],
-        ephemeral: true,
       });
     }
 
@@ -456,20 +458,21 @@ module.exports = {
       const vipSepId = interaction.fields.getTextInputValue("vipRoleSeparatorId").trim()    || null;
       const famSepId = interaction.fields.getTextInputValue("familyRoleSeparatorId").trim() || null;
 
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
       for (const [label, id] of [["Separador VIP", vipSepId], ["Separador Família", famSepId]]) {
         if (id) {
           const role = await interaction.guild.roles.fetch(id).catch(() => null);
-          if (!role) return interaction.reply({ embeds: [createErrorEmbed(`${label}: cargo com ID \`${id}\` não encontrado.`)], ephemeral: true });
+          if (!role) return interaction.editReply({ embeds: [createErrorEmbed(`${label}: cargo com ID \`${id}\` não encontrado.`)] });
         }
       }
 
       await setGuildConfig(guildId, { vipRoleSeparatorId: vipSepId, familyRoleSeparatorId: famSepId });
 
-      return interaction.reply({
+      return interaction.editReply({
         embeds: [createSuccessEmbed(
           `✅ Separadores atualizados!\n\n📌 VIP: ${vipSepId ? `<@&${vipSepId}>` : "—"}\n📌 Família: ${famSepId ? `<@&${famSepId}>` : "—"}`
         )],
-        ephemeral: true,
       });
     }
 
@@ -480,8 +483,10 @@ module.exports = {
       const maxDamas  = parseInt(maxDamasRaw, 10);
 
       if (!Number.isFinite(maxDamas) || maxDamas < 1) {
-        return interaction.reply({ embeds: [createErrorEmbed("Número inválido. Insira um inteiro maior que 0.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Número inválido. Insira um inteiro maior que 0.")], flags: MessageFlags.Ephemeral });
       }
+
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
 
       const config       = await getGuildConfig(guildId);
       const damaVipRoles = { ...(config?.damaVipRoles || {}) };
@@ -489,9 +494,8 @@ module.exports = {
 
       await setGuildConfig(guildId, { damaVipRoles });
 
-      return interaction.reply({
+      return interaction.editReply({
         embeds: [createSuccessEmbed(`Cargo <@&${roleId}> agora pode ter **${maxDamas}** dama(s).`)],
-        ephemeral: true,
       });
     }
   },

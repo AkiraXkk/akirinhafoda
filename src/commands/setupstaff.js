@@ -5,7 +5,8 @@ const {
   EmbedBuilder, 
   ActionRowBuilder, 
   ButtonBuilder, 
-  ButtonStyle 
+  ButtonStyle,
+  MessageFlags, 
 } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
 
@@ -28,7 +29,7 @@ module.exports = {
       new ButtonBuilder().setCustomId("cancel_setup").setLabel("❌ Cancelar").setStyle(ButtonStyle.Danger)
     );
 
-    const msg = await interaction.reply({ embeds: [embedAviso], components: [row], ephemeral: true });
+    const msg = await interaction.reply({ embeds: [embedAviso], components: [row], flags: MessageFlags.Ephemeral });
 
     try {
       const btnInteraction = await msg.awaitMessageComponent({ filter: i => i.user.id === interaction.user.id, time: 30000 });

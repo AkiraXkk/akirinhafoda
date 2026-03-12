@@ -3,6 +3,7 @@ const {
   PermissionFlagsBits,
   EmbedBuilder,
   ChannelType,
+  MessageFlags,
 } = require("discord.js");
 
 module.exports = {
@@ -74,14 +75,14 @@ module.exports = {
 
   async execute(interaction) {
     if (!interaction.inGuild()) {
-      return interaction.reply({ content: "Use este comando em um servidor.", ephemeral: true });
+      return interaction.reply({ content: "Use este comando em um servidor.", flags: MessageFlags.Ephemeral });
     }
 
     const shopService = interaction.client.services?.shop;
     const economyService = interaction.client.services?.economy;
 
     if (!shopService) {
-      return interaction.reply({ content: "Serviço shop indisponível.", ephemeral: true });
+      return interaction.reply({ content: "Serviço shop indisponível.", flags: MessageFlags.Ephemeral });
     }
 
     const guildId = interaction.guildId;
@@ -96,32 +97,32 @@ module.exports = {
           .setTitle("🏦 Banco do Bot")
           .setDescription(`Saldo: **${bank.balance || 0} 🪙**`)
           .addFields({ name: "Cargo de saque", value: bank.staffWithdrawRoleId ? `<@&${bank.staffWithdrawRoleId}>` : "Não configurado" });
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+        return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       }
 
       if (action === "set_staff_role") {
         const role = interaction.options.getRole("role");
-        if (!role) return interaction.reply({ content: "Informe o cargo.", ephemeral: true });
+        if (!role) return interaction.reply({ content: "Informe o cargo.", flags: MessageFlags.Ephemeral });
         await shopService.setStaffWithdrawRole(guildId, role.id);
-        return interaction.reply({ content: `✅ Cargo de saque definido: ${role}`, ephemeral: true });
+        return interaction.reply({ content: `✅ Cargo de saque definido: ${role}`, flags: MessageFlags.Ephemeral });
       }
 
-      return interaction.reply({ content: "Ação inválida.", ephemeral: true });
+      return interaction.reply({ content: "Ação inválida.", flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "withdraw") {
       const bank = await shopService.getBank(guildId);
       const staffRoleId = bank.staffWithdrawRoleId;
       if (!staffRoleId) {
-        return interaction.reply({ content: "Cargo de saque não configurado. Use /shopadmin bank action:set_staff_role", ephemeral: true });
+        return interaction.reply({ content: "Cargo de saque não configurado. Use /shopadmin bank action:set_staff_role", flags: MessageFlags.Ephemeral });
       }
       const hasRole = interaction.member?.roles?.cache?.has(staffRoleId);
       if (!hasRole) {
-        return interaction.reply({ content: "Você não tem permissão para sacar.", ephemeral: true });
+        return interaction.reply({ content: "Você não tem permissão para sacar.", flags: MessageFlags.Ephemeral });
       }
 
       if (!economyService) {
-        return interaction.reply({ content: "Serviço economy indisponível.", ephemeral: true });
+        return interaction.reply({ content: "Serviço economy indisponível.", flags: MessageFlags.Ephemeral });
       }
 
       const target = interaction.options.getUser("user");
@@ -133,11 +134,11 @@ module.exports = {
       });
 
       if (!w.ok) {
-        return interaction.reply({ content: `❌ Falha ao sacar: ${w.reason || "erro"}`, ephemeral: true });
+        return interaction.reply({ content: `❌ Falha ao sacar: ${w.reason || "erro"}`, flags: MessageFlags.Ephemeral });
       }
 
       await economyService.addCoins(guildId, target.id, amount);
-      return interaction.reply({ content: `✅ Sacado **${amount} 🪙** para ${target}. Saldo do banco: **${w.balance} 🪙**`, ephemeral: true });
+      return interaction.reply({ content: `✅ Sacado **${amount} 🪙** para ${target}. Saldo do banco: **${w.balance} 🪙**`, flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "item_add") {
@@ -151,10 +152,10 @@ module.exports = {
       const enabled = interaction.options.getBoolean("enabled");
 
       if (type === "temporary_role" && !role) {
-        return interaction.reply({ content: "Para temporary_role, informe o cargo.", ephemeral: true });
+        return interaction.reply({ content: "Para temporary_role, informe o cargo.", flags: MessageFlags.Ephemeral });
       }
       if (type === "channel_access" && !channel) {
-        return interaction.reply({ content: "Para channel_access, informe o canal.", ephemeral: true });
+        return interaction.reply({ content: "Para channel_access, informe o canal.", flags: MessageFlags.Ephemeral });
       }
 
       const res = await shopService.upsertItem(guildId, {
@@ -169,22 +170,22 @@ module.exports = {
       });
 
       if (!res.ok) {
-        return interaction.reply({ content: `❌ Falha: ${res.reason}`, ephemeral: true });
+        return interaction.reply({ content: `❌ Falha: ${res.reason}`, flags: MessageFlags.Ephemeral });
       }
 
-      return interaction.reply({ content: `✅ Item **${id}** salvo.`, ephemeral: true });
+      return interaction.reply({ content: `✅ Item **${id}** salvo.`, flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "item_remove") {
       const id = interaction.options.getString("id");
       const res = await shopService.removeItem(guildId, id);
-      return interaction.reply({ content: res.existed ? `🗑️ Item **${id}** removido.` : `Item **${id}** não existia.`, ephemeral: true });
+      return interaction.reply({ content: res.existed ? `🗑️ Item **${id}** removido.` : `Item **${id}** não existia.`, flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "item_list") {
       const items = await shopService.listItems(guildId);
       if (!items.length) {
-        return interaction.reply({ content: "Catálogo vazio.", ephemeral: true });
+        return interaction.reply({ content: "Catálogo vazio.", flags: MessageFlags.Ephemeral });
       }
 
       const lines = items
@@ -196,9 +197,9 @@ module.exports = {
         .setTitle("🛒 Catálogo da Loja")
         .setDescription(lines);
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
-    return interaction.reply({ content: "Subcomando inválido.", ephemeral: true });
+    return interaction.reply({ content: "Subcomando inválido.", flags: MessageFlags.Ephemeral });
   },
 };

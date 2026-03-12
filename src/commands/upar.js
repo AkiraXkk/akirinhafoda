@@ -4,7 +4,8 @@ const {
   ActionRowBuilder, 
   StringSelectMenuBuilder, 
   StringSelectMenuOptionBuilder,
-  ComponentType
+  ComponentType,
+  MessageFlags,
 } = require("discord.js");
 
 // Tabela Estrita de Ranks e Pesos (Do maior pro menor)
@@ -30,7 +31,7 @@ module.exports = {
     const alvo = interaction.options.getMember("membro");
     const executor = interaction.member;
 
-    if (!alvo) return interaction.reply({ content: "❌ Membro não encontrado.", ephemeral: true });
+    if (!alvo) return interaction.reply({ content: "❌ Membro não encontrado.", flags: MessageFlags.Ephemeral });
 
     // Calcula o rank máximo do Executor
     let pesoExecutor = 0;
@@ -41,7 +42,7 @@ module.exports = {
     });
 
     if (pesoExecutor === 0 && !executor.permissions.has("Administrator")) {
-      return interaction.reply({ content: "❌ **Acesso Negado:** Apenas membros da Liderança podem promover staffs.", ephemeral: true });
+      return interaction.reply({ content: "❌ **Acesso Negado:** Apenas membros da Liderança podem promover staffs.", flags: MessageFlags.Ephemeral });
     }
 
     // Calcula o rank máximo do Alvo
@@ -53,7 +54,7 @@ module.exports = {
     });
 
     if (pesoAlvo >= pesoExecutor && !executor.permissions.has("Administrator")) {
-      return interaction.reply({ content: "❌ **Hierarquia:** Você não pode alterar o rank de alguém que está no mesmo nível ou acima de você.", ephemeral: true });
+      return interaction.reply({ content: "❌ **Hierarquia:** Você não pode alterar o rank de alguém que está no mesmo nível ou acima de você.", flags: MessageFlags.Ephemeral });
     }
 
     const buildRankPanel = () => {
@@ -97,19 +98,19 @@ module.exports = {
     const collector = msg.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 60000 });
 
     collector.on("collect", async (i) => {
-      if (i.user.id !== interaction.user.id) return i.reply({ content: "❌ Você não tem permissão para usar isso.", ephemeral: true });
+      if (i.user.id !== interaction.user.id) return i.reply({ content: "❌ Você não tem permissão para usar isso.", flags: MessageFlags.Ephemeral });
 
       const roleId = i.values[0];
       const role = interaction.guild.roles.cache.get(roleId);
 
       if (alvo.roles.cache.has(roleId)) {
         await alvo.roles.remove(roleId).catch(()=>{});
-        await i.reply({ content: `✅ Rank **${role.name}** removido de ${alvo.user}.`, ephemeral: true });
+        await i.reply({ content: `✅ Rank **${role.name}** removido de ${alvo.user}.`, flags: MessageFlags.Ephemeral });
       } else {
         // DICA: Você poderia colocar uma lógica aqui para remover os ranks antigos se quisesse,
         // mas o sistema de adicionar/remover dá mais controle ao gerente!
         await alvo.roles.add(roleId).catch(()=>{});
-        await i.reply({ content: `🎉 Sucesso! ${alvo.user} acaba de ser promovido(a) ao rank de **${role.name}**!`, ephemeral: true });
+        await i.reply({ content: `🎉 Sucesso! ${alvo.user} acaba de ser promovido(a) ao rank de **${role.name}**!`, flags: MessageFlags.Ephemeral });
       }
 
       await interaction.editReply(buildRankPanel());

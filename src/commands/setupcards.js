@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createShopService } = require("../services/shopService");
 
@@ -105,7 +106,7 @@ module.exports = {
     const shopService = createShopService();
 
     if (sub === "adicionar") {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       let addedCount = 0;
       let errors = [];
@@ -147,7 +148,7 @@ module.exports = {
     }
 
     if (sub === "remover") {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       try {
         const items = await shopService.listItems(guildId);
@@ -187,7 +188,7 @@ module.exports = {
         footer: { text: "WDA - Todos os direitos reservados" }
       });
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
   }
 };

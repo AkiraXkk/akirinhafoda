@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { getGuildConfig } = require("../config/guildConfig");
 
@@ -22,7 +23,7 @@ module.exports = {
           color: 0x3498db,
           user: interaction.user,
         })],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     } catch {
       // segue o fluxo antigo abaixo
@@ -41,7 +42,7 @@ module.exports = {
       if (!tiers || Object.keys(tiers).length === 0) {
         return interaction.reply({
           embeds: [createErrorEmbed("Não há planos VIP disponíveis neste servidor. Configure os planos usando `/vipadmin tier`.")],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -105,14 +106,14 @@ module.exports = {
       await interaction.reply({
         embeds: [embed],
         components: [row],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
 
     } catch (error) {
       console.error('Erro no comando vipbuy:', error);
       return interaction.reply({
         embeds: [createErrorEmbed('Ocorreu um erro ao processar sua solicitação.')],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   },
@@ -164,16 +165,18 @@ module.exports = {
       // Parse da seleção: tierId_dias_precoTotal
       const [tierId, dias, precoTotal] = selectedValue.split('_');
       
+      await interaction.deferUpdate().catch(() => {});
+
       // Verificar configuração do tier
       const tierConfig = await vipConfig.getTierConfig(guildId, tierId);
       if (!tierConfig) {
-        return await interaction.update({
+        return await interaction.editReply({
           embeds: [createErrorEmbed('Plano VIP não encontrado.')],
           components: []
         });
       }
       if (tierConfig.shop_enabled === false) {
-        return await interaction.update({
+        return await interaction.editReply({
           embeds: [createErrorEmbed('Este plano VIP não está disponível para compra no bot.')],
           components: []
         });
@@ -183,7 +186,7 @@ module.exports = {
       const balance = await economyService.getBalance(guildId, userId);
       const coins = balance?.coins || 0;
       if (coins < parseInt(precoTotal)) {
-        return await interaction.update({
+        return await interaction.editReply({
           embeds: [createErrorEmbed(`Saldo insuficiente! Você precisa de ${precoTotal} WDA Coins, mas tem apenas ${coins}.`)],
           components: []
         });
@@ -192,7 +195,7 @@ module.exports = {
       // Processar pagamento
       const ok = await economyService.removeCoins(guildId, userId, parseInt(precoTotal));
       if (!ok) {
-        return await interaction.update({
+        return await interaction.editReply({
           embeds: [createErrorEmbed("Não foi possível debitar suas moedas. Tente novamente.")],
           components: [],
         });
@@ -238,14 +241,14 @@ module.exports = {
         user: interaction.user,
       });
 
-      await interaction.update({
+      await interaction.editReply({
         embeds: [embed],
         components: []
       });
 
     } catch (error) {
       console.error('Erro ao processar compra VIP:', error);
-      await interaction.update({
+      await interaction.editReply({
         embeds: [createErrorEmbed('Ocorreu um erro ao processar sua compra. Contate a equipe de suporte.')],
         components: []
       });
@@ -254,6 +257,8 @@ module.exports = {
 
   async handleButton(interaction) {
     if (interaction.customId === 'vipbuy_open_ticket') {
+      await interaction.deferUpdate().catch(() => {});
+
       // Verificar se existe canal de tickets configurado
       const guildConfig = await getGuildConfig(interaction.guildId);
       const ticketChannelId = guildConfig?.ticketChannelId;
@@ -265,10 +270,10 @@ module.exports = {
           color: 0x3498db,
           user: interaction.user,
         });
-        return await interaction.update({ embeds: [embed], components: [] });
+        return await interaction.editReply({ embeds: [embed], components: [] });
       } else {
         const embed = createErrorEmbed("O sistema de tickets não está configurado. Contate um administrador.");
-        return await interaction.update({ embeds: [embed], components: [] });
+        return await interaction.editReply({ embeds: [embed], components: [] });
       }
     }
   }

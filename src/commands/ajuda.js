@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, PermissionsBitField,
+  MessageFlags, } = require("discord.js");
 const { createEmbed } = require("../embeds");
 
 const categoryMapping = {
@@ -173,7 +174,7 @@ module.exports = {
     await interaction.reply({ 
       embeds: [mainEmbed], 
       components: [createCategoryMenu()], 
-      ephemeral: true 
+      flags: MessageFlags.Ephemeral 
     });
     const response = await interaction.fetchReply();
     let currentCategory = null;
@@ -186,7 +187,7 @@ module.exports = {
 
     collector.on('collect', async i => {
       if (i.user.id !== interaction.user.id) {
-        return i.reply({ content: "Este menu não é para você!", ephemeral: true });
+        return i.reply({ content: "Este menu não é para você!", flags: MessageFlags.Ephemeral });
       }
 
       if (i.isStringSelectMenu() && i.customId === "help_category_menu") {
@@ -232,7 +233,7 @@ module.exports = {
 
       if (i.isButton() && (i.customId === "help_prev" || i.customId === "help_next")) {
         if (!currentCategory || currentPages.length === 0) {
-          return i.reply({ content: "Selecione uma categoria primeiro.", ephemeral: true });
+          return i.reply({ content: "Selecione uma categoria primeiro.", flags: MessageFlags.Ephemeral });
         }
         if (i.customId === "help_prev") currentPage = Math.max(0, currentPage - 1);
         if (i.customId === "help_next") currentPage = Math.min(currentPages.length - 1, currentPage + 1);

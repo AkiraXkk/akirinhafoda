@@ -8,7 +8,8 @@ const {
   TextInputStyle,
   UserSelectMenuBuilder,
   PermissionFlagsBits,
-  ChannelType
+  ChannelType,
+  MessageFlags,
 } = require("discord.js");
 const { createEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
@@ -111,7 +112,7 @@ module.exports = {
     // O painel é permanente — enviamos no canal atual (não efêmero)
     await interaction.reply({
       content: `✅ Painel configurado! As cartinhas serão postadas em ${canalDestino}.`,
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
 
     await interaction.channel.send({ embeds: [buildPanelEmbed()], components: [row] });
@@ -137,7 +138,7 @@ module.exports = {
     await interaction.reply({
       content: "💌 Escolha o destinatário da sua cartinha:",
       components: [row],
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
   },
 
@@ -184,7 +185,7 @@ module.exports = {
   async handleModal(interaction) {
     if (!interaction.customId.startsWith("tellonym_modal_")) return;
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     // customId format: tellonym_modal_<tipo>_<userId>
     // userId é um Snowflake numérico — não contém "_", então split seguro

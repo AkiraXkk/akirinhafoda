@@ -1,4 +1,5 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createErrorEmbed } = require("../embeds");
 
 const robCooldowns = new Map();
@@ -73,7 +74,7 @@ module.exports = {
       const victim = interaction.options.getUser("vitima");
 
       if (victim.bot || victim.id === userId) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não pode roubar essa pessoa!")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não pode roubar essa pessoa!")], flags: MessageFlags.Ephemeral });
       }
 
       const cooldownKey = `${guildId}:${userId}`;
@@ -81,7 +82,7 @@ module.exports = {
       if (cd.onCooldown) {
         return interaction.reply({
           embeds: [createErrorEmbed(`Você precisa se esconder por um tempo!\n⏳ Tente novamente <t:${cd.nextTime}:R>.`)],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -89,7 +90,7 @@ module.exports = {
       if ((robberBal.coins || 0) < ROB_MIN_BALANCE) {
         return interaction.reply({
           embeds: [createErrorEmbed(`Você precisa de pelo menos **${ROB_MIN_BALANCE} 🪙** na carteira para tentar roubar.`)],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -97,7 +98,7 @@ module.exports = {
       if ((victimBal.coins || 0) < ROB_MIN_VICTIM_BALANCE) {
         return interaction.reply({
           embeds: [createErrorEmbed(`${victim.username} não tem moedas suficientes para roubar.`)],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -145,7 +146,7 @@ module.exports = {
       if (cd.onCooldown) {
         return interaction.reply({
           embeds: [createErrorEmbed(`A polícia está de olho em você!\n⏳ Tente novamente <t:${cd.nextTime}:R>.`)],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -202,7 +203,7 @@ module.exports = {
       if (cd.onCooldown) {
         return interaction.reply({
           embeds: [createErrorEmbed(`O mercado negro está fechado para você!\n⏳ Tente novamente <t:${cd.nextTime}:R>.`)],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -210,7 +211,7 @@ module.exports = {
       if ((bal.coins || 0) < investment) {
         return interaction.reply({
           embeds: [createErrorEmbed(`Saldo insuficiente! Você tem apenas **${bal.coins || 0} 🪙**.`)],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 

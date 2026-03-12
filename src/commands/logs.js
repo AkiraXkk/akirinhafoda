@@ -2,6 +2,7 @@ const {
   SlashCommandBuilder,
   PermissionFlagsBits,
   ChannelType,
+  MessageFlags,
 } = require("discord.js");
 const { createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
@@ -49,7 +50,7 @@ module.exports = {
 
       return interaction.reply({
         embeds: [createSuccessEmbed(`Canal ${channel} definido para logs de **${type}**.`)],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -61,13 +62,13 @@ module.exports = {
 
       return interaction.reply({
         embeds: [createSuccessEmbed(`Canal ${channel} definido para anúncios de novos VIPs.`)],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
     if (sub === "test") {
       if (!logManager) {
-        return interaction.reply({ embeds: [createErrorEmbed("LogManager não disponível.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("LogManager não disponível.")], flags: MessageFlags.Ephemeral });
       }
 
       const { getGuildConfig } = require("../config/guildConfig");
@@ -88,7 +89,7 @@ module.exports = {
       await Promise.allSettled(promises);
       return interaction.reply({
         embeds: [createSuccessEmbed("Mensagens de teste enviadas para todos os canais configurados.")],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   },

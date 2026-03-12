@@ -1,4 +1,5 @@
-const { Events } = require("discord.js"); // 🚨 Corrigido o 'Const' maiúsculo para 'const' minúsculo
+const { Events,
+  MessageFlags, } = require("discord.js");
 const { logger } = require("../logger");
 
 module.exports = {
@@ -16,7 +17,7 @@ module.exports = {
         await command.execute(interaction);
       } catch (error) {
         logger.error({ err: error, command: interaction.commandName }, "Erro no comando slash");
-        const errorPayload = { content: "Ocorreu um erro ao executar este comando.", ephemeral: true };
+        const errorPayload = { content: "Ocorreu um erro ao executar este comando.", flags: MessageFlags.Ephemeral };
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp(errorPayload).catch(() => {});
         } else {
@@ -26,58 +27,146 @@ module.exports = {
       return;
     }
 
-    // 2. ROTEAMENTO DE INTERAÇÕES (Botões, Menus e Modais)
+    // 2. AUTOCOMPLETE
+    if (interaction.isAutocomplete()) {
+      const command = client.commands.get(interaction.commandName);
+      if (command?.autocomplete) {
+        try {
+          await command.autocomplete(interaction);
+        } catch (error) {
+          logger.error({ err: error, command: interaction.commandName }, "Erro no autocomplete");
+        }
+      }
+      return;
+    }
+
+    // 3. ROTEAMENTO DE INTERAÇÕES (Botões, Menus e Modais)
     if (interaction.isButton() || interaction.isAnySelectMenu() || interaction.isModalSubmit()) {
       const customId = interaction.customId;
-      
+
       // 🛡️ Trava de segurança extra caso o Discord envie uma interação sem ID
-      if (!customId) return; 
+      if (!customId) return;
 
       let commandName = "";
 
-      // Descobre qual comando deve cuidar desta interação pelas suas exceções originais
-      if (customId.includes("partnership")) {
-        commandName = "partnership"; 
-      } else if (
-        customId.includes("ticket") || 
-        customId.startsWith("open_") || 
-        customId.startsWith("close_") || 
-        customId.startsWith("setup_") ||     
-        customId.startsWith("user_") ||      
-        customId.startsWith("assumir_") ||   
-        customId.startsWith("delete_")       
+      // ── Mapeamento exaustivo de prefixos ──────────────────────────────
+      // Ordem: prefixos mais específicos primeiro, famílias amplas depois,
+      // fallback dinâmico por último.
+
+      // ── Moderação ──
+      if (customId.startsWith("mod_appeal_") || customId.startsWith("mod_panel_")) {
+        commandName = "mod";
+      }
+      // ── AutoMod ──
+      else if (customId.startsWith("automod_")) {
+        commandName = "automod";
+      }
+      // ── Sejawda (ANTES de ticket para evitar conflito com motivo_fechar_sejawda) ──
+      else if (customId.startsWith("sejawda_") || customId === "motivo_fechar_sejawda") {
+        commandName = "sejawda";
+      }
+      // ── Ticket ──
+      else if (
+        customId.startsWith("setup_") ||
+        customId.startsWith("user_open_") ||
+        customId.startsWith("user_select_ticket") ||
+        customId === "user_open_menu" ||
+        customId.startsWith("assumir_ticket_") ||
+        customId === "assumir_ticket_btn" ||
+        customId.startsWith("close_ticket_") ||
+        customId === "close_ticket_btn" ||
+        customId.startsWith("delete_ticket_") ||
+        customId === "delete_ticket_btn" ||
+        customId === "motivo_fechar_ticket"
       ) {
         commandName = "ticket";
-      } else if (customId.includes("sejawda")) {
-        commandName = "sejawda";
-      } else if (customId.includes("design")) {
-        commandName = "design";
-      } else if (customId.includes("recrutamento")) {
-        commandName = "recrutamento";
-      } else if (customId.includes("reject_all")) {
-        // 🆕 Roteamento: botões de recusa em massa de parcerias → partnership.handleButton
-        commandName = "partnership";
-      } else if (customId.includes("avisos")) {
-        // 🆕 Roteamento: painel de anúncios → avisos.handleButton / handleModal
-        commandName = "avisos";
-      } else if (customId.startsWith("aval_")) {
-        // 🆕 Roteamento: avaliações NPS via DM → avaliacao.handleButton / handleModal
-        // ⚠️  Interações de DM não possuem interaction.guild — o handler usa o guildId embutido no customId
+      }
+      // ── VIP Admin (ANTES de vip para capturar vipadmin_) ──
+      else if (customId.startsWith("vipadmin_")) {
+        commandName = "vipadmin";
+      }
+      // ── VIP ──
+      else if (customId.startsWith("vip_")) {
+        commandName = "vip";
+      }
+      // ── VIP Buy ──
+      else if (customId.startsWith("vipbuy_")) {
+        commandName = "vipbuy";
+      }
+      // ── Avaliação NPS ──
+      else if (customId.startsWith("aval_")) {
         commandName = "avaliacao";
-      } else if (customId.startsWith("tellonym_")) {
-        // 🆕 Roteamento: Correio Anônimo → tellonym.handleButton / handleModal
+      }
+      // ── Tellonym (Correio Anônimo) ──
+      else if (customId.startsWith("tellonym_")) {
         commandName = "tellonym";
-      } else if (customId.startsWith("duel_")) {
-        // 🆕 Roteamento: Duelos ranqueados → duel.handleButton
+      }
+      // ── Duelos ──
+      else if (customId.startsWith("duel_")) {
         commandName = "duel";
-      } else if (customId.startsWith("cashier_")) {
-        // 🆕 Roteamento: Painel do banco → cashier.handleButton
+      }
+      // ── Cashier (Banco) ──
+      else if (customId.startsWith("cashier_")) {
         commandName = "cashier";
-      } else if (customId.startsWith("mod_appeal_")) {
-        // 🆕 Roteamento: Sistema de apelação de moderação → mod.handleButton / handleModal / handleJudgmentButton
-        commandName = "mod";
-      } else {
-        // Roteador Dinâmico original
+      }
+      // ── Avisos ──
+      else if (customId.startsWith("avisos_")) {
+        commandName = "avisos";
+      }
+      // ── Eventos (sorteios, drops) ──
+      else if (customId.startsWith("evento_")) {
+        commandName = "evento";
+      }
+      // ── Partnership ──
+      else if (customId.includes("partnership") || customId.includes("reject_all")) {
+        commandName = "partnership";
+      }
+      // ── Recrutamento ──
+      else if (customId.includes("recrutamento") || customId.startsWith("fechar_salas_entrevista") || customId.startsWith("finalizar_painel_")) {
+        commandName = "recrutamento";
+      }
+      // ── Design ──
+      else if (customId.includes("design")) {
+        commandName = "design";
+      }
+      // ── Family ──
+      else if (customId.startsWith("family_")) {
+        commandName = "family";
+      }
+      // ── Fun (jogos casuais) ──
+      else if (customId.startsWith("fun_")) {
+        commandName = "fun";
+      }
+      // ── Leaderboard ──
+      else if (customId.startsWith("leaderboard_")) {
+        commandName = "leaderboard";
+      }
+      // ── Level Admin ──
+      else if (customId.startsWith("leveladmin_")) {
+        commandName = "leveladmin";
+      }
+      // ── Reset Config ──
+      else if (customId.startsWith("resetconfig_")) {
+        commandName = "resetconfig";
+      }
+      // ── Shop ──
+      else if (customId.startsWith("shop_")) {
+        commandName = "shop";
+      }
+      // ── Social ──
+      else if (customId.startsWith("social_")) {
+        commandName = "social";
+      }
+      // ── Boost ──
+      else if (customId.startsWith("boost_")) {
+        commandName = "boost";
+      }
+      // ── Dama ──
+      else if (customId.startsWith("dama_")) {
+        commandName = "dama";
+      }
+      // ── Fallback dinâmico ──
+      else {
         commandName = customId.split(/_|-|:/)[0];
       }
 
@@ -93,25 +182,24 @@ module.exports = {
       // MÁGICA: Se for o Ticket, joga TUDO (Botões e Menus) para o handleButton
       if (commandName === "ticket") {
         handlerName = "handleButton";
-      } 
+      }
       // Lógica original para os outros comandos:
       else if (interaction.isButton()) {
         handlerName = "handleButton";
-        // Exceção do Claude para vipadmin
+        // Exceção para vipadmin
         if (commandName === "vipadmin" && (customId.startsWith("vipadmin_tier_section:") || customId.startsWith("vipadmin_cotas:"))) {
           handlerName = "handleButtonSecondary";
         }
-      } 
+      }
       else if (interaction.isModalSubmit()) {
         handlerName = "handleModal";
-      } 
+      }
       else if (interaction.isAnySelectMenu()) {
         if (interaction.isRoleSelectMenu() && typeof command.handleRoleSelectMenu === "function") {
           handlerName = "handleRoleSelectMenu";
         } else if (interaction.isUserSelectMenu() && typeof command.handleUserSelectMenu === "function") {
           handlerName = "handleUserSelectMenu";
         } else {
-          // Fallback
           handlerName = "handleSelectMenu";
         }
       }
@@ -124,6 +212,13 @@ module.exports = {
           // Se der erro 10062 (Unknown Interaction), o Discord demorou a responder
           if (e.code === 10062) return;
           logger.error({ err: e, handler: handlerName, command: commandName }, "Erro no handler de interação");
+          // Resposta de fallback para não deixar a interação sem resposta
+          const errPayload = { content: "❌ Ocorreu um erro ao processar esta interação.", flags: MessageFlags.Ephemeral };
+          if (interaction.replied || interaction.deferred) {
+            await interaction.followUp(errPayload).catch(() => {});
+          } else {
+            await interaction.reply(errPayload).catch(() => {});
+          }
         }
       } else {
         logger.debug({ commandName, handlerName }, "Handler não encontrado no comando");

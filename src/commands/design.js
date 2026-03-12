@@ -6,7 +6,8 @@ const {
   ButtonStyle,
   ModalBuilder,
   TextInputBuilder,
-  TextInputStyle
+  TextInputStyle,
+  MessageFlags,
 } = require("discord.js");
 
 module.exports = {
@@ -85,7 +86,7 @@ module.exports = {
         .addFields({ name: "🛠️ Status", value: `Aceito e em produção por ${interaction.user}` });
 
       await interaction.message.edit({ embeds: [embedAtualizada], components: [] }); 
-      await interaction.followUp({ content: `Você assumiu o pedido de arte! Bom trabalho.`, ephemeral: true });
+      await interaction.followUp({ content: `Você assumiu o pedido de arte! Bom trabalho.`, flags: MessageFlags.Ephemeral });
     }
 
     if (interaction.customId === "recusar_pedido_design") {
@@ -97,7 +98,7 @@ module.exports = {
         .addFields({ name: "🛠️ Status", value: `Recusado por ${interaction.user}` });
 
       await interaction.message.edit({ embeds: [embedAtualizada], components: [] });
-      await interaction.followUp({ content: `Você recusou o pedido de arte.`, ephemeral: true });
+      await interaction.followUp({ content: `Você recusou o pedido de arte.`, flags: MessageFlags.Ephemeral });
     }
   },
 
@@ -131,9 +132,9 @@ module.exports = {
 
       if (canalDesign) {
         await canalDesign.send({ content: "<@&1480453030410457158> Novo pedido recebido!", embeds: [embedPedido], components: [botoesGestao] });
-        await interaction.reply({ content: "✅ O seu pedido foi enviado com sucesso para a equipe de Design!", ephemeral: true });
+        await interaction.reply({ content: "✅ O seu pedido foi enviado com sucesso para a equipe de Design!", flags: MessageFlags.Ephemeral });
       } else {
-        await interaction.reply({ content: "❌ Canal da equipe de Design não encontrado. Verifique se existe um canal com 'chat-design' no nome.", ephemeral: true });
+        await interaction.reply({ content: "❌ Canal da equipe de Design não encontrado. Verifique se existe um canal com 'chat-design' no nome.", flags: MessageFlags.Ephemeral });
       }
     }
   }

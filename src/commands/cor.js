@@ -1,4 +1,5 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createErrorEmbed } = require("../embeds");
 const { logger } = require("../logger");
 
@@ -53,7 +54,7 @@ module.exports = {
         if (!/^[0-9a-fA-F]{6}$/.test(hexInput)) {
           return interaction.reply({
             embeds: [createErrorEmbed("Código hex inválido. Use o formato `#ff0000` ou `ff0000`.", interaction.user)],
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
         }
 
@@ -90,7 +91,7 @@ module.exports = {
       }
     } catch (error) {
       logger.error({ err: error, command: "cor" }, "Erro no comando /cor");
-      const msg = { content: "❌ Ocorreu um erro ao processar a cor.", ephemeral: true };
+      const msg = { content: "❌ Ocorreu um erro ao processar a cor.", flags: MessageFlags.Ephemeral };
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(msg).catch(() => {});
       } else {

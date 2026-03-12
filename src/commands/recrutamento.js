@@ -8,7 +8,8 @@ const {
   ButtonStyle,
   ComponentType,
   ChannelType,
-  PermissionFlagsBits
+  PermissionFlagsBits,
+  MessageFlags,
 } = require("discord.js");
 
 // Tabela de Hierarquia (Peso dos Cargos)
@@ -42,7 +43,7 @@ module.exports = {
     // ==========================================
     if (sub === "painel") {
       const alvo = interaction.options.getMember("membro");
-      if (!alvo) return interaction.reply({ content: "❌ Membro não encontrado.", ephemeral: true });
+      if (!alvo) return interaction.reply({ content: "❌ Membro não encontrado.", flags: MessageFlags.Ephemeral });
 
       let pesoExecutor = 0;
       executor.roles.cache.forEach(role => {
@@ -50,7 +51,7 @@ module.exports = {
       });
 
       if (pesoExecutor === 0 && !executor.permissions.has("Administrator")) {
-        return interaction.reply({ content: "❌ Você não tem permissão para usar este painel.", ephemeral: true });
+        return interaction.reply({ content: "❌ Você não tem permissão para usar este painel.", flags: MessageFlags.Ephemeral });
       }
 
       const buildPanel = () => {
@@ -98,7 +99,7 @@ module.exports = {
       };
 
       // withResponse resolve o aviso amarelo (Warning) no terminal
-      await interaction.deferReply({ ephemeral: false });
+      await interaction.deferReply();
       const msg = await interaction.editReply({ ...buildPanel(), withResponse: true });
       const msgResponse = msg.resource ? msg.resource.message : await interaction.fetchReply();
 
@@ -106,17 +107,17 @@ module.exports = {
       const collector = msgResponse.createMessageComponentCollector({ time: 120000 });
 
       collector.on("collect", async (i) => {
-        if (i.user.id !== interaction.user.id) return i.reply({ content: "❌ Este painel não é seu.", ephemeral: true });
+        if (i.user.id !== interaction.user.id) return i.reply({ content: "❌ Este painel não é seu.", flags: MessageFlags.Ephemeral });
 
         // SE CLICOU NO MENU (Dar/Tirar Cargos)
         if (i.isStringSelectMenu() && i.customId === "select_roles_recrutamento") {
-          await i.deferReply({ ephemeral: true });
+          await i.deferReply({ flags: MessageFlags.Ephemeral });
           const roleId = i.values[0];
           const role = interaction.guild.roles.cache.get(roleId);
 
           if (alvo.roles.cache.has(roleId)) {
             await alvo.roles.remove(roleId).catch(()=>{});
-            await i.editReply({ content: `✅ Cargo **${role.name}** removido de ${alvo.user}.`, ephemeral: true });
+            await i.editReply({ content: `✅ Cargo **${role.name}** removido de ${alvo.user}.`, flags: MessageFlags.Ephemeral });
           } else {
             await alvo.roles.add(roleId).catch(()=>{});
 
@@ -127,14 +128,14 @@ module.exports = {
             if (!alvo.roles.cache.has(aspiranteId)) alvo.roles.add(aspiranteId).catch(()=>{});
             if (roleStaffGeral && !alvo.roles.cache.has(roleStaffGeral.id)) alvo.roles.add(roleStaffGeral.id).catch(()=>{});
 
-            await i.editReply({ content: `✅ Cargo **${role.name}** adicionado a ${alvo.user} (Aspirante e Staff Geral aplicados!).`, ephemeral: true });
+            await i.editReply({ content: `✅ Cargo **${role.name}** adicionado a ${alvo.user} (Aspirante e Staff Geral aplicados!).`, flags: MessageFlags.Ephemeral });
           }
           await interaction.editReply(buildPanel());
         }
 
         // SE CLICOU NO BOTÃO FINALIZAR
         if (i.isButton() && i.customId === "finalizar_painel_recrutamento") {
-          await i.deferReply({ ephemeral: true });
+          await i.deferReply({ flags: MessageFlags.Ephemeral });
           // Filtra quais cargos da tabela o membro tem agora (excluindo os básicos de brinde para não poluir o anúncio)
           const areasSetadas = alvo.roles.cache
             .filter(r => HIERARQUIA[r.name] && r.name !== "Staff Geral" && r.id !== "1097700110126809140")
@@ -150,7 +151,7 @@ module.exports = {
           await interaction.channel.send({ content: `${alvo.user}`, embeds: [embedAnuncio] });
           
           // Responde ao clique e trava o painel antigo
-          await i.editReply({ content: "✅ O anúncio foi enviado com sucesso!", ephemeral: true });
+          await i.editReply({ content: "✅ O anúncio foi enviado com sucesso!", flags: MessageFlags.Ephemeral });
           await interaction.editReply({ components: [] }); // Remove os botões do painel
           collector.stop();
         }
@@ -164,9 +165,9 @@ module.exports = {
     // ==========================================
     if (sub === "entrevista") {
       const candidato = interaction.options.getMember("candidato");
-      if (!candidato) return interaction.reply({ content: "❌ Candidato não encontrado.", ephemeral: true });
+      if (!candidato) return interaction.reply({ content: "❌ Candidato não encontrado.", flags: MessageFlags.Ephemeral });
 
-      await interaction.reply({ content: "⏳ Montando as salas de entrevista...", ephemeral: true });
+      await interaction.reply({ content: "⏳ Montando as salas de entrevista...", flags: MessageFlags.Ephemeral });
 
       try {
         const guild = interaction.guild;
@@ -195,7 +196,7 @@ module.exports = {
         collector.on("collect", async (i) => {
           if (i.customId === "fechar_salas_entrevista") {
             if (!i.member.permissions.has("ManageChannels") && i.user.id !== executor.id) {
-              return i.reply({ content: "❌ Apenas o recrutador pode encerrar a entrevista.", ephemeral: true });
+              return i.reply({ content: "❌ Apenas o recrutador pode encerrar a entrevista.", flags: MessageFlags.Ephemeral });
             }
             await i.reply({ content: "🧹 Apagando salas em 5 segundos..." });
             setTimeout(() => {

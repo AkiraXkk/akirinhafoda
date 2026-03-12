@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
 const { getGuildConfig, setGuildConfig } = require("../config/guildConfig");
@@ -63,7 +64,7 @@ module.exports = {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
         return interaction.reply({
           embeds: [createErrorEmbed("Apenas administradores podem verificar servidores!")],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -78,7 +79,7 @@ module.exports = {
       if (!partnership) {
         return interaction.reply({
           embeds: [createErrorEmbed("Servidor não encontrado ou não é parceiro!")],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -91,14 +92,14 @@ module.exports = {
         `Este servidor é oficialmente parceiro e tem acesso aos benefícios!`
       );
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "canal") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
         return interaction.reply({
           embeds: [createErrorEmbed("Apenas administradores podem configurar canais!")],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -115,14 +116,14 @@ module.exports = {
         `Todas as mensagens de parceria serão enviadas para este canal!`
       );
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "cargo") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
         return interaction.reply({
           embeds: [createErrorEmbed("Apenas administradores podem configurar cargos!")],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -139,14 +140,14 @@ module.exports = {
         `Todos os membros de servidores parceiros receberão este cargo!`
       );
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "mensagem") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
         return interaction.reply({
           embeds: [createErrorEmbed("Apenas administradores podem configurar mensagens!")],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -162,14 +163,14 @@ module.exports = {
         `Esta mensagem será enviada quando novos servidores se tornarem parceiros!`
       );
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "listar") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
         return interaction.reply({
           embeds: [createErrorEmbed("Apenas administradores podem listar parceiros!")],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -184,7 +185,7 @@ module.exports = {
             color: 0x95a5a6,
             footer: { text: "WDA - Todos os direitos reservados" }
           })],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
@@ -201,7 +202,7 @@ module.exports = {
         footer: { text: "WDA - Todos os direitos reservados" }
       });
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
   }
 };

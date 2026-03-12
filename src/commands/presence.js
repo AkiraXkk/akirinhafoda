@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, ActivityType, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, ActivityType, PermissionFlagsBits,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createErrorEmbed, createSuccessEmbed } = require("../embeds");
 
 function parseActivityType(typeStr) {
@@ -51,7 +52,7 @@ module.exports = {
   async execute(interaction) {
     const ownerId = process.env.OWNER_ID;
     if (ownerId && interaction.user.id !== ownerId) {
-      return interaction.reply({ embeds: [createErrorEmbed("Apenas o dono do bot pode usar este comando.")], ephemeral: true });
+      return interaction.reply({ embeds: [createErrorEmbed("Apenas o dono do bot pode usar este comando.")], flags: MessageFlags.Ephemeral });
     }
 
     const presenceService = interaction.client.services?.presence;
@@ -67,13 +68,13 @@ module.exports = {
       if (banner && typeof interaction.client.user.setBanner === "function") {
         await interaction.client.user.setBanner(banner.url);
       }
-      return interaction.reply({ embeds: [createSuccessEmbed("Perfil global atualizado!")], ephemeral: true });
+      return interaction.reply({ embeds: [createSuccessEmbed("Perfil global atualizado!")], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "clear") {
       await presenceService.clearPresence();
       await interaction.client.user.setPresence({ activities: [], status: 'online' });
-      return interaction.reply({ embeds: [createSuccessEmbed("Status limpo no banco e no Discord.")], ephemeral: true });
+      return interaction.reply({ embeds: [createSuccessEmbed("Status limpo no banco e no Discord.")], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "set") {
@@ -93,7 +94,7 @@ module.exports = {
 
       await presenceService.setPresence(data);
       await presenceService.applyPresence(interaction.client);
-      return interaction.reply({ embeds: [createSuccessEmbed(`Status definido: **${text}**`)], ephemeral: true });
+      return interaction.reply({ embeds: [createSuccessEmbed(`Status definido: **${text}**`)], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "random") {
@@ -103,25 +104,25 @@ module.exports = {
 
       if (action === "add" && text) {
         await presenceService.addRandomText(text);
-        return interaction.reply({ embeds: [createSuccessEmbed("Frase adicionada!")], ephemeral: true });
+        return interaction.reply({ embeds: [createSuccessEmbed("Frase adicionada!")], flags: MessageFlags.Ephemeral });
       }
 
       if (action === "list") {
         const phrases = await presenceService.getPhrases();
         const lista = phrases.length ? phrases.map((p, i) => `\`${i + 1}.\` ${p}`).join("\n") : "Lista vazia.";
-        return interaction.reply({ embeds: [createEmbed({ title: "📝 Frases Salvas", description: lista })], ephemeral: true });
+        return interaction.reply({ embeds: [createEmbed({ title: "📝 Frases Salvas", description: lista })], flags: MessageFlags.Ephemeral });
       }
 
       if (action === "remove" && index) {
         const ok = await presenceService.removeRandomText(index - 1);
-        return interaction.reply({ embeds: [ok ? createSuccessEmbed("Removido.") : createErrorEmbed("Índice inválido.")], ephemeral: true });
+        return interaction.reply({ embeds: [ok ? createSuccessEmbed("Removido.") : createErrorEmbed("Índice inválido.")], flags: MessageFlags.Ephemeral });
       }
 
       if (action === "toggle") {
         const state = await presenceService.toggleRotation();
         if (state) presenceService.startRotation(interaction.client);
         else presenceService.stopRotation();
-        return interaction.reply({ embeds: [createSuccessEmbed(`Rotação: **${state ? "LIGADA" : "DESLIGADA"}**`)], ephemeral: true });
+        return interaction.reply({ embeds: [createSuccessEmbed(`Rotação: **${state ? "LIGADA" : "DESLIGADA"}**`)], flags: MessageFlags.Ephemeral });
       }
     }
 
@@ -136,7 +137,7 @@ module.exports = {
             { name: "Atividade", value: `\`${saved.activity?.name || "Nenhuma"}\``, inline: false }
           ]
         })],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
   }

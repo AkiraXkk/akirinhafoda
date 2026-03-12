@@ -1,4 +1,5 @@
-const { Events, ActionRowBuilder, ButtonBuilder } = require("discord.js");
+const { Events, ActionRowBuilder, ButtonBuilder,
+  MessageFlags, } = require("discord.js");
 const { logger } = require("../logger");
 const { createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
@@ -36,7 +37,7 @@ module.exports = {
       // Envia erro apenas para o usuário que tentou
       message.reply({
         embeds: [createErrorEmbed("Ocorreu um erro ao processar sua parceria. Tente novamente ou contate um administrador.")],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       }).catch(() => {});
     }
   }
@@ -53,7 +54,7 @@ async function processarParceriaAutomatica(message, client) {
   if (!dadosParceria.representante) {
     await message.reply({
       embeds: [createErrorEmbed("Por favor, marque o representante do servidor na mensagem (use @usuário).")],
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
     return; // Não apaga a mensagem original
   }
@@ -62,7 +63,7 @@ async function processarParceriaAutomatica(message, client) {
   if (!dadosParceria.link) {
     await message.reply({
       embeds: [createErrorEmbed("Por favor, inclua um link de convite do Discord (discord.gg/... ou discord.com/invite/...).")],
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
     return; // Não apaga a mensagem original
   }
@@ -74,7 +75,7 @@ async function processarParceriaAutomatica(message, client) {
   } catch (error) {
     await message.reply({
       embeds: [createErrorEmbed("Não foi possível validar o link de convite. Verifique se o link está correto e se o servidor não está banido.")],
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
     return; // Não apaga a mensagem original
   }
@@ -82,7 +83,7 @@ async function processarParceriaAutomatica(message, client) {
   if (!inviteData) {
     await message.reply({
       embeds: [createErrorEmbed("Convite inválido ou expirado. Por favor, verifique o link e tente novamente.")],
-      ephemeral: true
+      flags: MessageFlags.Ephemeral
     });
     return; // Não apaga a mensagem original
   }

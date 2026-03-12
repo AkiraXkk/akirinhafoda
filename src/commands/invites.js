@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { getInviteData, getAllInviteData } = require("../services/inviteTracker");
 const { createDataStore } = require("../store/dataStore");
@@ -44,7 +45,7 @@ module.exports = {
       if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.reply({
           embeds: [createErrorEmbed("Apenas administradores podem configurar o canal de logs de convites.")],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -54,7 +55,7 @@ module.exports = {
 
       return interaction.reply({
         embeds: [createSuccessEmbed(`Canal de logs de convites definido para ${canal}.`)],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -80,7 +81,7 @@ module.exports = {
                 footer: { text: "WDA - Invite Tracker" },
               }),
             ],
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
         }
 
@@ -105,7 +106,7 @@ module.exports = {
         logger.error({ err }, "[invites] Erro ao buscar dados de convite");
         return interaction.reply({
           content: "❌ Ocorreu um erro ao buscar os dados de convite.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
     }
@@ -167,7 +168,7 @@ module.exports = {
         logger.error({ err }, "[invites] Erro ao gerar ranking");
         return interaction.reply({
           content: "❌ Ocorreu um erro ao gerar o ranking de convites.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
     }

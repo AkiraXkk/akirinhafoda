@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle,
+  MessageFlags, } = require("discord.js");
 const { createEmbed } = require("../embeds");
 
 // Rastreia quais usuários já curtiram cada post: Map<messageId, Set<userId>>
@@ -188,9 +189,11 @@ module.exports = {
           const comment = interaction.fields.getTextInputValue('comment_text');
 
           if (postOwnerId === 'LEGACY') {
-              await interaction.reply({ content: "Comentário registado! 📨 (Post antigo, autor não notificado)", ephemeral: true });
+              await interaction.reply({ content: "Comentário registado! 📨 (Post antigo, autor não notificado)", flags: MessageFlags.Ephemeral });
               return;
           }
+
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
 
           try {
               const postOwner = await interaction.client.users.fetch(postOwnerId);
@@ -203,10 +206,10 @@ module.exports = {
               });
 
               await postOwner.send({ embeds: [dmEmbed] });
-              await interaction.reply({ content: "Comentário enviado com sucesso! 📨", ephemeral: true });
+              await interaction.editReply({ content: "Comentário enviado com sucesso! 📨" });
           } catch (error) {
               console.error("Erro ao enviar DM de comentário:", error);
-              await interaction.reply({ content: "Comentário registado, mas não consegui enviar DM ao autor (DM fechada ou utilizador não encontrado).", ephemeral: true });
+              await interaction.editReply({ content: "Comentário registado, mas não consegui enviar DM ao autor (DM fechada ou utilizador não encontrado)." });
           }
       }
   }
