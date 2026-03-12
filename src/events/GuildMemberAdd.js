@@ -16,10 +16,11 @@ module.exports = {
     
     // Inicializar dados de XP para o novo membro
     const levelsCommand = client.commands.get("rank");
-    if (levelsCommand) {
+    if (levelsCommand && typeof levelsCommand.getLevelsStore === 'function') {
       try {
         const levelsStore = levelsCommand.getLevelsStore?.();
-        if (levelsStore) {
+        // 🛡️ PROTEÇÃO: Validação adicional
+        if (levelsStore && typeof levelsStore.update === 'function') {
           await levelsStore.update(member.id, (current) => {
             // Se não existir dados, inicializar
             if (!current) {

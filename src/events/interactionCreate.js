@@ -67,6 +67,12 @@ module.exports = {
       } else if (customId.startsWith("tellonym_")) {
         // 🆕 Roteamento: Correio Anônimo → tellonym.handleButton / handleModal
         commandName = "tellonym";
+      } else if (customId.startsWith("duel_")) {
+        // 🆕 Roteamento: Duelos ranqueados → duel.handleButton
+        commandName = "duel";
+      } else if (customId.startsWith("cashier_")) {
+        // 🆕 Roteamento: Painel do banco → cashier.handleButton
+        commandName = "cashier";
       } else {
         // Roteador Dinâmico original
         commandName = customId.split(/_|-|:/)[0];
