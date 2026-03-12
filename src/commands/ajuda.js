@@ -6,7 +6,7 @@ const categoryMapping = {
   "Diversão": ["fun", "dama", "enquete", "blackjack", "roleta", "velha", "bicho", "pastime"],
   "Economia": ["economy", "shop", "setupcards"],
   "VIP": ["vip", "vipbuy", "vipservice"],
-  "Social": ["social", "family"],
+  "Social": ["social", "family", "tellonym"],
   "Níveis": ["levels", "leaderboard", "voicetime"],
   "Parcerias": ["partnership", "boost", "verify"],
   "Staff": ["staffstats", "recrutamento", "divulgacao", "eventos", "movcall", "movchat", "acolhimento", "design"],
@@ -167,7 +167,7 @@ module.exports = {
         { name: `${pin} Dica`, value: "Abra uma categoria para ver descrição, uso e permissões dos comandos.", inline: false }
       ],
       color: 0x8e44ad,
-      footer: { text: `Solicitado por ${interaction.user.username} • WDA - Todos os direitos reservados` }
+      footer: { text: `Solicitado por ${interaction.user.username} • WDA - Atendimento & Gestão` }
     });
 
     await interaction.reply({ 
@@ -211,7 +211,7 @@ module.exports = {
             { name: `${pin} Navegação`, value: `Página ${currentPage + 1}/${currentPages.length}`, inline: true }
           ],
           color: getCategoryColor(currentCategory),
-          footer: { text: `Categoria: ${currentCategory} • WDA - Todos os direitos reservados` }
+          footer: { text: `Categoria: ${currentCategory} • WDA - Atendimento & Gestão` }
         });
 
         return i.update({
@@ -251,7 +251,7 @@ module.exports = {
             { name: `${pin} Navegação`, value: `Página ${currentPage + 1}/${currentPages.length}`, inline: true }
           ],
           color: getCategoryColor(currentCategory),
-          footer: { text: `Categoria: ${currentCategory} • WDA - Todos os direitos reservados` }
+          footer: { text: `Categoria: ${currentCategory} • WDA - Atendimento & Gestão` }
         });
 
         return i.update({ embeds: [categoryEmbed], components: [navRow] });
