@@ -1,7 +1,9 @@
 const { createDataStore } = require("../store/dataStore");
+const { createEmbed } = require("../embeds");
 const { logger } = require("../logger");
 
 const inviteStore = createDataStore("invites.json");
+const inviteConfig = createDataStore("invite_config.json");
 
 // Conta criada há menos de 7 dias = fake
 const FAKE_ACCOUNT_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -60,7 +62,8 @@ async function processQueue() {
   const member = queue.shift();
 
   try {
-    await trackInvite(member);
+    const result = await trackInvite(member);
+    await sendInviteLog(member, result);
   } catch (err) {
     logger.error({ err, userId: member.id, guildId: member.guild.id }, "[InviteTracker] Erro ao processar membro na fila");
   }
@@ -121,6 +124,65 @@ async function trackInvite(member) {
 
   logger.info({ inviter: inviterId, invited: member.id, guildId: guild.id, fake: isFake }, "[InviteTracker] Convite rastreado");
   return { inviterId, isFake, inviteCode: usedInvite.code };
+}
+
+/**
+ * Envia o embed de log de convite no canal configurado.
+ */
+async function sendInviteLog(member, trackResult) {
+  const guild = member.guild;
+
+  try {
+    const config = await inviteConfig.get(guild.id);
+    if (!config || !config.logChannelId) return;
+
+    const channel = guild.channels.cache.get(config.logChannelId);
+    if (!channel) return;
+
+    if (!trackResult || !trackResult.inviterId) {
+      // Inviter desconhecido (link deletado, vanity URL, etc.)
+      await channel.send({
+        embeds: [
+          createEmbed({
+            title: "📥 Novo Membro!",
+            description: `Seja bem-vindo(a) <@${member.id}> ao servidor!`,
+            fields: [
+              { name: "👤 Convidado por:", value: "`Origem desconhecida`", inline: true },
+              { name: "🔗 Código usado:", value: "`N/A`", inline: true },
+            ],
+            thumbnail: member.user.displayAvatarURL({ dynamic: true, size: 128 }),
+            color: 0x8e44ad,
+            footer: { text: "WDA - Invite Tracker 🔗" },
+          }),
+        ],
+      });
+      return;
+    }
+
+    const inviterData = await inviteStore.get(`${guild.id}:${trackResult.inviterId}`);
+    const real = inviterData
+      ? Math.max((inviterData.total || 0) - (inviterData.leaves || 0) - (inviterData.fake || 0), 0)
+      : 0;
+
+    await channel.send({
+      embeds: [
+        createEmbed({
+          title: "📥 Novo Membro!",
+          description: `Seja bem-vindo(a) <@${member.id}> ao servidor!`,
+          fields: [
+            { name: "👤 Convidado por:", value: `<@${trackResult.inviterId}>`, inline: true },
+            { name: "📊 Contagem de Convites:", value: `\`${real}\` convites`, inline: true },
+            { name: "🔗 Código usado:", value: `\`${trackResult.inviteCode}\``, inline: true },
+          ],
+          thumbnail: member.user.displayAvatarURL({ dynamic: true, size: 128 }),
+          color: 0x8e44ad,
+          footer: { text: "WDA - Invite Tracker 🔗" },
+        }),
+      ],
+    });
+  } catch (err) {
+    logger.warn({ err, guildId: guild.id }, "[InviteTracker] Falha ao enviar log de convite");
+  }
 }
 
 /**

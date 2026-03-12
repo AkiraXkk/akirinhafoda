@@ -1,7 +1,10 @@
-const { SlashCommandBuilder } = require("discord.js");
-const { createEmbed } = require("../embeds");
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
+const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { getInviteData, getAllInviteData } = require("../services/inviteTracker");
+const { createDataStore } = require("../store/dataStore");
 const { logger } = require("../logger");
+
+const inviteConfig = createDataStore("invite_config.json");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -17,10 +20,43 @@ module.exports = {
     )
     .addSubcommand((sub) =>
       sub.setName("ranking").setDescription("Veja o Top 10 de quem mais convidou membros")
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("config")
+        .setDescription("Define o canal de logs de convites")
+        .addChannelOption((opt) =>
+          opt
+            .setName("canal_logs")
+            .setDescription("Canal onde as notificações de entrada serão enviadas")
+            .addChannelTypes(ChannelType.GuildText)
+            .setRequired(true)
+        )
     ),
 
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
+
+    // ==========================================
+    // /invites config
+    // ==========================================
+    if (sub === "config") {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({
+          embeds: [createErrorEmbed("Apenas administradores podem configurar o canal de logs de convites.")],
+          ephemeral: true,
+        });
+      }
+
+      const canal = interaction.options.getChannel("canal_logs");
+
+      await inviteConfig.set(interaction.guildId, { logChannelId: canal.id });
+
+      return interaction.reply({
+        embeds: [createSuccessEmbed(`Canal de logs de convites definido para ${canal}.`)],
+        ephemeral: true,
+      });
+    }
 
     // ==========================================
     // /invites user [membro]
