@@ -374,26 +374,26 @@ module.exports = {
   // HANDLER DE BOTÕES
   // ==========================================
   async handleButton(interaction) {
-    const chats = await chatStore.load();
-    const chat = chats[interaction.channelId];
-
-    if (!chat || chat.closedAt) return interaction.reply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")], flags: MessageFlags.Ephemeral });
-
-    const hasStaffRole = chat.staffRoleId && interaction.member?.roles?.cache?.has(chat.staffRoleId);
-    const isGlobal = isGlobalStaff(interaction.member);
-
     // ASSUMIR TICKET
     if (interaction.customId === "sejawda_assumir") {
+      await interaction.deferUpdate().catch(() => {});
+
+      const chats = await chatStore.load();
+      const chat = chats[interaction.channelId];
+
+      if (!chat || chat.closedAt) return interaction.followUp({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")], flags: MessageFlags.Ephemeral });
+
+      const hasStaffRole = chat.staffRoleId && interaction.member?.roles?.cache?.has(chat.staffRoleId);
+      const isGlobal = isGlobalStaff(interaction.member);
+
       // Bloqueia o autor do ticket de assumir o próprio ticket
       if (chat.userId === interaction.user.id) {
-        return interaction.reply({ embeds: [createErrorEmbed("❌ Você não pode assumir seu próprio ticket.")], flags: MessageFlags.Ephemeral });
+        return interaction.followUp({ embeds: [createErrorEmbed("❌ Você não pode assumir seu próprio ticket.")], flags: MessageFlags.Ephemeral });
       }
 
       if (!isGlobal && !hasStaffRole) {
-        return interaction.reply({ embeds: [createErrorEmbed("Apenas membros da equipe podem assumir solicitações.")], flags: MessageFlags.Ephemeral });
+        return interaction.followUp({ embeds: [createErrorEmbed("Apenas membros da equipe podem assumir solicitações.")], flags: MessageFlags.Ephemeral });
       }
-
-      await interaction.deferUpdate();
 
       // Salva quem assumiu o ticket
       await chatStore.update(interaction.channelId, (info) => (info ? { ...info, assumedBy: interaction.user.id } : null));
@@ -409,10 +409,18 @@ module.exports = {
       await interaction.message.edit({ components: newComponents });
 
       await interaction.followUp({ content: `🫂 Atendimento Iniciado por ${interaction.user}` });
+      return;
     }
 
     // FECHAR TICKET — Mostra menu de motivos
     if (interaction.customId === "sejawda_close") {
+      const chats = await chatStore.load();
+      const chat = chats[interaction.channelId];
+
+      if (!chat || chat.closedAt) return interaction.reply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")], flags: MessageFlags.Ephemeral });
+
+      const isGlobal = isGlobalStaff(interaction.member);
+
       // Permissão para fechar: autor do ticket, staff que assumiu, ou ManageGuild
       const isAuthor = chat.userId === interaction.user.id;
       const isAssumer = chat.assumedBy === interaction.user.id;
@@ -445,9 +453,16 @@ module.exports = {
 
     // DELETAR TICKET PERMANENTEMENTE
     if (interaction.customId === "sejawda_delete") {
+      const chats = await chatStore.load();
+      const chat = chats[interaction.channelId];
+
+      if (!chat || chat.closedAt) return interaction.reply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")], flags: MessageFlags.Ephemeral });
+
+      const isGlobal = isGlobalStaff(interaction.member);
       if (!isGlobal) return interaction.reply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de solicitações.")], flags: MessageFlags.Ephemeral });
-      await interaction.deferReply();
-      await interaction.followUp({ content: "💥 O canal será destruído em 5 segundos..." });
+
+      await interaction.deferReply().catch(() => {});
+      await interaction.editReply({ content: "💥 O canal será destruído em 5 segundos..." });
       setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     }
   }
