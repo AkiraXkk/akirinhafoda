@@ -43,12 +43,18 @@ module.exports = {
         customId.startsWith("open_") || 
         customId.startsWith("close_") || 
         customId.startsWith("setup_") ||     
+        customId.startsWith("user_open_") ||
+        customId.startsWith("user_select_") ||
         customId.startsWith("user_") ||      
+        customId.startsWith("assumir_ticket_") ||
         customId.startsWith("assumir_") ||   
-        customId.startsWith("delete_")       
+        customId.startsWith("delete_ticket_") ||
+        customId.startsWith("delete_") ||
+        customId.startsWith("close_ticket_") ||
+        customId.startsWith("motivo_fechar_")
       ) {
         commandName = "ticket";
-      } else if (customId.includes("sejawda")) {
+      } else if (customId.includes("sejawda") || customId.startsWith("sejawda_")) {
         commandName = "sejawda";
       } else if (customId.includes("design")) {
         commandName = "design";
@@ -62,7 +68,6 @@ module.exports = {
         commandName = "avisos";
       } else if (customId.startsWith("aval_")) {
         // 🆕 Roteamento: avaliações NPS via DM → avaliacao.handleButton / handleModal
-        // ⚠️  Interações de DM não possuem interaction.guild — o handler usa o guildId embutido no customId
         commandName = "avaliacao";
       } else if (customId.startsWith("tellonym_")) {
         // 🆕 Roteamento: Correio Anônimo → tellonym.handleButton / handleModal
@@ -73,9 +78,12 @@ module.exports = {
       } else if (customId.startsWith("cashier_")) {
         // 🆕 Roteamento: Painel do banco → cashier.handleButton
         commandName = "cashier";
-      } else if (customId.startsWith("mod_appeal_")) {
-        // 🆕 Roteamento: Sistema de apelação de moderação → mod.handleButton / handleModal / handleJudgmentButton
+      } else if (customId.startsWith("mod_appeal_") || customId.startsWith("mod_panel_")) {
+        // 🆕 Roteamento: Moderação (apelações + painel) → mod.handleButton / handleModal / handleJudgmentButton
         commandName = "mod";
+      } else if (customId.startsWith("vip_") || customId.startsWith("vipadmin_")) {
+        // 🆕 Roteamento: VIP → vip / vipadmin
+        commandName = customId.startsWith("vipadmin_") ? "vipadmin" : "vip";
       } else {
         // Roteador Dinâmico original
         commandName = customId.split(/_|-|:/)[0];
