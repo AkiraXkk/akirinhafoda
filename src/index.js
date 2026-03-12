@@ -24,6 +24,7 @@ const { createVipExpiryManager }  = require("./vip/vipExpiryManager");
 const { connectToMongo }          = require("./database/connect");
 
 const { createLogService }        = require("./services/logService");
+const { createLogManager }        = require("./services/logManager");
 const { createEconomyService }    = require("./services/economyService");
 const { createFamilyService }     = require("./services/familyService");
 const { createPresenceService }   = require("./services/presenceService");
@@ -57,7 +58,8 @@ async function main() {
   client.services  = {};
 
   // ── Serviços gerais ──────────────────────────────────────────────────────────
-  client.services.log      = createLogService({ client });
+  client.services.log        = createLogService({ client });
+  client.services.logManager = createLogManager({ client });
   client.services.economy  = createEconomyService();
   client.services.family   = createFamilyService();
   client.services.presence = createPresenceService();

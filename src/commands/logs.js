@@ -36,17 +36,9 @@ module.exports = {
     const guildId = interaction.guildId;
     const sub = interaction.options.getSubcommand();
 
-    if (!logManager) {
-      return interaction.reply({ embeds: [createErrorEmbed("LogManager não disponível.")], ephemeral: true });
-    }
-
     if (sub === "set") {
       const channel = interaction.options.getChannel("canal");
       const type = interaction.options.getString("tipo");
-
-      if (!Object.values(logManager.LOG_TYPES).includes(type)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Tipo inválido.")], ephemeral: true });
-      }
 
       // Salvar no guildConfigs (poderia usar vipConfig também)
       const { getGuildConfig, setGuildConfig } = require("../config/guildConfig");
@@ -74,6 +66,10 @@ module.exports = {
     }
 
     if (sub === "test") {
+      if (!logManager) {
+        return interaction.reply({ embeds: [createErrorEmbed("LogManager não disponível.")], ephemeral: true });
+      }
+
       const { getGuildConfig } = require("../config/guildConfig");
       const config = await getGuildConfig(guildId);
       const logChannels = config.logChannels || {};
