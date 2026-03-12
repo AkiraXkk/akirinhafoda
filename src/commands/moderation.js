@@ -5,6 +5,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  EmbedBuilder,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -93,6 +94,23 @@ module.exports = {
           opt
             .setName("cargo_mod")
             .setDescription("Cargo de moderação (opcional)")
+            .setRequired(false)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName("unban")
+        .setDescription("Desbane um utilizador")
+        .addStringOption((opt) =>
+          opt
+            .setName("id_utilizador")
+            .setDescription("ID do utilizador")
+            .setRequired(true)
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName("motivo")
+            .setDescription("Motivo")
             .setRequired(false)
         )
     ),
@@ -459,6 +477,47 @@ module.exports = {
         await interaction.editReply({ embeds: [createErrorEmbed("Erro ao salvar configuração.")] });
       }
     }
+
+    // UNBAN
+    if (sub === "unban") {
+      if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+        const config = await modConfigStore.get(interaction.guild.id);
+        const cargoMod = config?.cargo_mod;
+        if (!cargoMod || !interaction.member.roles.cache.has(cargoMod)) {
+          return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para desbanir membros.")], ephemeral: true });
+        }
+      }
+
+      const idUtilizador = interaction.options.getString("id_utilizador");
+      const motivo = interaction.options.getString("motivo") || "Sem motivo especificado";
+
+      await interaction.deferReply();
+
+      try {
+        await interaction.guild.members.unban(idUtilizador, motivo);
+
+        if (logService) {
+          const user = await interaction.client.users.fetch(idUtilizador).catch(() => null);
+          await logService.log(interaction.guild, {
+            title: "🔓 Usuário Desbanido",
+            description: `**${user?.username || idUtilizador}** foi desbanido por **${interaction.user.username}**.`,
+            color: 0x00FF00,
+            fields: [
+              { name: "👤 Moderador", value: interaction.user.username, inline: true },
+              { name: "👤 Usuário", value: user?.username || idUtilizador, inline: true },
+              { name: "📝 Motivo", value: motivo, inline: false },
+            ],
+            user: interaction.user,
+          });
+        }
+
+        await interaction.editReply({
+          embeds: [createSuccessEmbed(`O utilizador **${idUtilizador}** foi desbanido com sucesso.\n\n**Motivo:** ${motivo}`)],
+        });
+      } catch (error) {
+        await interaction.editReply({ embeds: [createErrorEmbed("Erro ao desbanir o utilizador. Verifique se o ID é válido e se o utilizador está banido.")] });
+      }
+    }
   },
 
   async handleButton(interaction) {
@@ -544,17 +603,21 @@ module.exports = {
         .setStyle(ButtonStyle.Danger)
     );
 
-    await channel.send({
-      embeds: [createEmbed({
-        title: `📋 Nova Apelação de ${tipo}`,
-        description: `**Usuário:** ${user ? `<@${userId}> (${user.username})` : userId}\n**Tipo de Punição:** ${tipo}\n**Servidor:** ${guild?.name || guildId}\n\n**Defesa:**\n${defesa}`,
-        color: tipo === "BAN" ? 0xFF0000 : 0xFF6600,
-        footer: "Moderação | © WDA - Todos os direitos reservados",
-      })],
-      components: [row],
-    });
+    try {
+      await channel.send({
+        embeds: [createEmbed({
+          title: `📋 Nova Apelação de ${tipo}`,
+          description: `**Usuário:** ${user ? `<@${userId}> (${user.username})` : userId}\n**Tipo de Punição:** ${tipo}\n**Servidor:** ${guild?.name || guildId}\n\n**Defesa:**\n${defesa}`,
+          color: tipo === "BAN" ? 0xFF0000 : 0xFF6600,
+          footer: "Moderação | © WDA - Todos os direitos reservados",
+        })],
+        components: [row],
+      });
+    } catch (error) {
+      return interaction.editReply({ embeds: [createErrorEmbed("Erro ao enviar a apelação para a equipa. Tente novamente mais tarde.")] });
+    }
 
-    await interaction.editReply({ embeds: [createSuccessEmbed("Sua apelação foi enviada com sucesso! Aguarde o julgamento da staff.")] });
+    await interaction.editReply({ embeds: [createSuccessEmbed("✅ A tua apelação foi enviada para a equipa! Aguarde o julgamento da staff.")] });
   },
 
   async handleJudgmentButton(interaction) {
@@ -604,7 +667,14 @@ module.exports = {
             .setStyle(ButtonStyle.Success)
             .setDisabled(true)
         );
-        await interaction.editReply({ components: [disabledRow] });
+        const originalEmbed = interaction.message.embeds[0];
+        const updatedEmbed = originalEmbed
+          ? EmbedBuilder.from(originalEmbed).setColor(0x00FF00)
+          : null;
+        await interaction.editReply({
+          embeds: updatedEmbed ? [updatedEmbed] : [],
+          components: [disabledRow],
+        });
       } catch (error) {
         await interaction.followUp({ embeds: [createErrorEmbed("Erro ao processar a apelação.")], ephemeral: true });
       }
@@ -637,7 +707,14 @@ module.exports = {
           .setStyle(ButtonStyle.Danger)
           .setDisabled(true)
       );
-      await interaction.editReply({ components: [disabledRow] });
+      const originalEmbed = interaction.message.embeds[0];
+      const updatedEmbed = originalEmbed
+        ? EmbedBuilder.from(originalEmbed).setColor(0xFF0000)
+        : null;
+      await interaction.editReply({
+        embeds: updatedEmbed ? [updatedEmbed] : [],
+        components: [disabledRow],
+      });
     }
   },
 };
