@@ -17,6 +17,7 @@ const { logger } = require("../logger");
 
 const panelStore = createDataStore("sejawda_panels.json");
 const chatStore = createDataStore("sejawda_chats.json");
+const rolesStore = createDataStore("sejawda_roles.json");
 const createLocks = new Set();
 
 // IDs Fixos da WDA (Sincronizado com o sistema de tickets)
@@ -63,13 +64,65 @@ function isGlobalStaff(member) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("sejawda")
-    .setDescription("Envia o painel de recrutamento da equipe WDA")
+    .setDescription("Gerencia o painel de recrutamento da equipe WDA")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
-    .addChannelOption((opt) => opt.setName("canal").setDescription("Canal onde enviar o painel").addChannelTypes(ChannelType.GuildText).setRequired(false))
-    .addChannelOption((opt) => opt.setName("categoria").setDescription("Categoria para criar os chats").addChannelTypes(ChannelType.GuildCategory).setRequired(false))
-    .addRoleOption((opt) => opt.setName("cargo_equipe").setDescription("Cargo da equipe para acesso aos chats").setRequired(false)),
+    .addSubcommand((sub) =>
+      sub.setName("painel")
+        .setDescription("Envia o painel de recrutamento da equipe WDA")
+        .addChannelOption((opt) => opt.setName("canal").setDescription("Canal onde enviar o painel").addChannelTypes(ChannelType.GuildText).setRequired(false))
+        .addChannelOption((opt) => opt.setName("categoria").setDescription("Categoria para criar os chats").addChannelTypes(ChannelType.GuildCategory).setRequired(false))
+        .addRoleOption((opt) => opt.setName("cargo_equipe").setDescription("Cargo da equipe para acesso aos chats").setRequired(false))
+    )
+    .addSubcommand((sub) =>
+      sub.setName("config")
+        .setDescription("Configura o cargo de ping para cada área de recrutamento")
+        .addStringOption((opt) =>
+          opt.setName("area")
+            .setDescription("A área a configurar")
+            .setRequired(true)
+            .addChoices(
+              { name: "Mov Call", value: "mov_call" },
+              { name: "Mov Chat", value: "mov_chat" },
+              { name: "Eventos", value: "eventos" },
+              { name: "Recrutamento", value: "recrutamento" },
+              { name: "Acolhimento", value: "acolhimento" },
+              { name: "Design", value: "design" },
+              { name: "Pastime", value: "passtime" },
+              { name: "Migração", value: "migracao" }
+            )
+        )
+        .addRoleOption((opt) =>
+          opt.setName("cargo")
+            .setDescription("O cargo responsável por esta área")
+            .setRequired(true)
+        )
+    ),
 
   async execute(interaction) {
+    const sub = interaction.options.getSubcommand();
+
+    // ==========================================
+    // SUBCOMANDO: CONFIG (Define cargo por área)
+    // ==========================================
+    if (sub === "config") {
+      const area = interaction.options.getString("area");
+      const cargo = interaction.options.getRole("cargo");
+
+      await rolesStore.update(interaction.guildId, (data) => ({
+        ...(data || {}),
+        [area]: cargo.id
+      }));
+
+      const areaLabel = area === "migracao" ? "Migração" : getAreaLabel(area);
+      return interaction.reply({
+        embeds: [createSuccessEmbed(`Cargo <@&${cargo.id}> configurado para a área **${areaLabel}**.`)],
+        ephemeral: true
+      });
+    }
+
+    // ==========================================
+    // SUBCOMANDO: PAINEL (Envia o painel ao canal)
+    // ==========================================
     const canal = interaction.options.getChannel("canal") || interaction.channel;
     const categoria = interaction.options.getChannel("categoria");
     const cargoEquipe = interaction.options.getRole("cargo_equipe");
@@ -208,6 +261,15 @@ module.exports = {
           components
         });
 
+        // Ping de área específica para Migração, se configurado
+        if (tipo === "migrado") {
+          const rolesData = await rolesStore.load();
+          const migRoleId = (rolesData[interaction.guildId] || {})["migracao"];
+          if (migRoleId) {
+            await channel.send(`<@&${migRoleId}> Nova solicitação de migração!`);
+          }
+        }
+
         await chatStore.update(channel.id, () => ({
           guildId: interaction.guildId,
           userId: interaction.user.id,
@@ -245,6 +307,13 @@ module.exports = {
         ],
         components: interaction.message.components
       });
+
+      // Ping do cargo responsável pela área escolhida
+      const rolesData = await rolesStore.load();
+      const areaRoleId = (rolesData[interaction.guildId] || {})[area];
+      if (areaRoleId) {
+        await interaction.channel.send(`<@&${areaRoleId}> Nova solicitação de recrutamento na área **${getAreaLabel(area)}** por ${interaction.user}!`);
+      }
     }
   },
 
@@ -278,14 +347,13 @@ module.exports = {
 
       await interaction.message.edit({ components: newComponents });
 
-      const embedAssumir = createEmbed({ title: "🫂 Atendimento Iniciado", description: `Olá! O staff **${interaction.user.username}** assumiu sua solicitação e irá te atender a partir de agora.`, color: 0x8e44ad });
-      await interaction.followUp({ embeds: [embedAssumir] });
+      await interaction.followUp({ content: `🫂 Atendimento Iniciado por ${interaction.user}` });
     }
 
     // FECHAR TICKET
     if (interaction.customId === "sejawda_close") {
-      if (interaction.user.id !== chat.userId && !isGlobal && !hasStaffRole) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para fechar esta solicitação.")], ephemeral: true });
+      if (!isGlobal && !hasStaffRole) {
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas membros da equipe podem fechar solicitações.")], ephemeral: true });
       }
 
       if (chat.tipo !== "migrado" && !chat.area) {
