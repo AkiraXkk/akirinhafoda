@@ -4,6 +4,7 @@ const { createVipExpiryManager } = require("../vip/vipExpiryManager");
 const { createDataStore } = require("../store/dataStore");
 const { createEmbed } = require("../embeds");
 const { enviarAvaliacaoDM } = require("../utils/avaliacaoDM");
+const { cacheAllGuilds } = require("../services/inviteTracker");
 
 // Inicializa o store de manutenção para checagem no login
 const maintenanceStore = createDataStore("maintenance.json");
@@ -38,6 +39,14 @@ module.exports = {
   once: true,
   async execute(readyClient, client) {
     logger.info({ user: readyClient.user.username }, "Bot online");
+
+    // --- 0. INVITE TRACKER — Cacheia todos os convites ---
+    try {
+      await cacheAllGuilds(client);
+      logger.info("[InviteTracker] Cache de convites inicializado com sucesso");
+    } catch (err) {
+      logger.warn({ err }, "[InviteTracker] Falha ao inicializar cache de convites");
+    }
 
     // --- 1. GESTÃO DE PRESENÇA ---
     const presenceService = client?.services?.presence;

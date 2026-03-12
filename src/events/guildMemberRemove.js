@@ -1,5 +1,6 @@
 const { Events } = require("discord.js");
 const { logger } = require("../logger");
+const { trackLeave } = require("../services/inviteTracker");
 
 module.exports = {
   name: Events.GuildMemberRemove,
@@ -7,6 +8,13 @@ module.exports = {
     try {
       const userId = member.id;
       const guildId = member.guild.id;
+
+      // 📩 Invite Tracker — registra saída e incrementa leaves do inviter
+      try {
+        await trackLeave(member);
+      } catch (invErr) {
+        logger.warn({ err: invErr, userId }, "[InviteTracker] Falha ao registrar saída");
+      }
 
       // 🛡️ Cleanup VIP
       if (client.services && client.services.vip) {

@@ -2,10 +2,17 @@ const { Events } = require("discord.js");
 const { getGuildConfig } = require("../config/guildConfig");
 const { createEmbed } = require("../embeds");
 const { logger } = require("../logger");
+const { enqueue } = require("../services/inviteTracker");
 
 module.exports = {
   name: Events.GuildMemberAdd,
   async execute(member, client) {
+    // 📩 Invite Tracker — enfileira para processamento sequencial
+    try {
+      enqueue(member);
+    } catch (err) {
+      logger.warn({ err, userId: member.id }, "[InviteTracker] Falha ao enfileirar membro");
+    }
     let guildConfig;
     try {
       guildConfig = await getGuildConfig(member.guild.id);
