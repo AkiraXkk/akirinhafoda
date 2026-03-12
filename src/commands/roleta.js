@@ -31,7 +31,6 @@ module.exports = {
       description:
         "Teste sua coragem! O revólver tem **6 câmaras** e **1 bala**.\nA cada rodada você puxa o gatilho. Quanto mais sobreviver, maior o prêmio!",
       color: 0xe74c3c,
-      footer: { text: "WDA - Todos os direitos reservados" },
       fields: [
         {
           name: "💸 Premiação",
@@ -46,7 +45,7 @@ module.exports = {
           inline: true,
         },
       ],
-      footer: "Escolha um valor para começar",
+      footer: { text: "Jogo | Escolha um valor para começar • © WDA - Todos os direitos reservados" },
     });
 
     const rowQuick = new ActionRowBuilder().addComponents(
@@ -76,6 +75,10 @@ module.exports = {
 
       if (i.customId.startsWith("roleta_quick_")) {
         collector.stop("started");
+        // 🛡️ PROTEÇÃO: Defer imediatamente
+        if (!i.deferred && !i.replied) {
+          await i.deferUpdate().catch(() => {});
+        }
         const value = parseInt(i.customId.split("_")[2], 10);
         return runGame(i, value, eco, guildId, userId);
       }
@@ -151,7 +154,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
             `Você perdeu **${originalBet}** 🪙`,
           ].join("\n"),
           color: 0xe74c3c,
-          footer: { text: "WDA - Todos os direitos reservados" },
+          footer: { text: "Jogo | © WDA - Todos os direitos reservados" },
         });
       }
 
@@ -167,7 +170,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
             `Você ganhou **${prize}** 🪙`,
           ].join("\n"),
           color: 0x2ecc71,
-          footer: { text: "WDA - Todos os direitos reservados" },
+          footer: { text: "Jogo | © WDA - Todos os direitos reservados" },
         });
       }
 
@@ -188,7 +191,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
           "Puxar o gatilho ou retirar-se com o prêmio?",
         ].join("\n"),
         color: 0xf39c12,
-        footer: `Aposta: ${originalBet} 🪙 • Chance de sobreviver: ${Math.round(((CHAMBERS - round - 1) / (CHAMBERS - round)) * 100)}% • WDA - Todos os direitos reservados`,
+        footer: `Jogo | Aposta: ${originalBet} 🪙 • Chance: ${Math.round(((CHAMBERS - round - 1) / (CHAMBERS - round)) * 100)}% • © WDA - Todos os direitos reservados`,
       });
     };
 

@@ -4,7 +4,7 @@ const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds
 const SUITS = ["♠", "♥", "♦", "♣"];
 const VALUES = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"];
 const QUICK_BETS = [100, 500, 1000];
-const FOOTER_TEXT = "WDA - Todos os direitos reservados";
+const FOOTER_TEXT = "Jogo | © WDA - Todos os direitos reservados";
 
 function shuffleDeck(deck) {
     for (let i = deck.length - 1; i > 0; i--) {
@@ -136,6 +136,11 @@ module.exports = {
             }
 
             if (i.customId === 'bj_play_custom') {
+                // 🛡️ PROTEÇÃO: Defer ANTES de awaitar o modal
+                if (!i.deferred && !i.replied) {
+                  await i.deferUpdate().catch(() => {});
+                }
+
                 const modal = new ModalBuilder()
                     .setCustomId('bj_bet_modal')
                     .setTitle('Apostar no Blackjack');

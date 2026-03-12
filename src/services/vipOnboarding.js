@@ -15,7 +15,7 @@ function createVipOnboarding({ client, vipService, logManager }) {
     const channelId = guildConfig.announcementChannelId || guild.systemChannelId;
     if (!channelId) return;
 
-    const channel = guild.channels.fetch(channelId).catch(() => null);
+    const channel = await guild.channels.fetch(channelId).catch(() => null);
     if (!channel || !channel.isTextBased()) return;
 
     const embed = new EmbedBuilder()
@@ -31,7 +31,7 @@ function createVipOnboarding({ client, vipService, logManager }) {
         { name: "Bônus", value: `+${tierConfig.valor_daily_extra || 0} 🪙 diários`, inline: true }
       )
       .setTimestamp()
-      .setFooter({ text: `ID: ${user.id}` });
+      .setFooter({ text: `VIP | © WDA - Todos os direitos reservados` });
 
     try {
       await channel.send({ content: `@everyone`, embeds: [embed] });
@@ -82,7 +82,7 @@ function createVipOnboarding({ client, vipService, logManager }) {
       )
       .setThumbnail(guild.iconURL({ size: 256 }))
       .setTimestamp()
-      .setFooter({ text: "Precisa de ajuda? Abra um ticket com `/ticket`" });
+      .setFooter({ text: "VIP | Precisa de ajuda? Abra um ticket com /ticket • © WDA - Todos os direitos reservados" });
 
     try {
       await user.send({ embeds: [embed] });
@@ -113,7 +113,7 @@ function createVipOnboarding({ client, vipService, logManager }) {
         { name: "📞 Call VIP", value: "Sua call privada já foi criada (se permitido pelo seu plano).", inline: false }
       )
       .setTimestamp()
-      .setFooter({ text: `Canal de ${user.username}` });
+      .setFooter({ text: `VIP | Canal de ${user.username} • © WDA - Todos os direitos reservados` });
 
     try {
       await textChannel.send({ embeds: [embed] });
