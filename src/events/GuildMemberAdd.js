@@ -3,10 +3,15 @@ const { getGuildConfig } = require("../config/guildConfig");
 const { createEmbed } = require("../embeds");
 const { logger } = require("../logger");
 const { enqueue } = require("../services/inviteTracker");
+const { checkMemberJoin: automodCheckMemberJoin } = require("../services/automodService");
 
 module.exports = {
   name: Events.GuildMemberAdd,
   async execute(member, client) {
+    // ── AutoMod: anti-raid / anti-join ──────────────────────────────────────
+    automodCheckMemberJoin(member).catch((err) =>
+      logger.error({ err }, "AutoMod: Erro ao verificar novo membro")
+    );
     // 📩 Invite Tracker — enfileira para processamento sequencial
     try {
       enqueue(member);

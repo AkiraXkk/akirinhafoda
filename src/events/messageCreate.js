@@ -1,6 +1,7 @@
 const { Events } = require("discord.js");
 const { logger } = require("../logger");
 const { createDataStore } = require("../store/dataStore");
+const { checkMessage: automodCheckMessage } = require("../services/automodService");
 
 const ticketStore = createDataStore("tickets.json");
 const chatStore = createDataStore("sejawda_chats.json");
@@ -9,6 +10,11 @@ module.exports = {
   name: Events.MessageCreate,
   async execute(message, client) {
     if (message.author.bot || !message.guild) return;
+
+    // ── AutoMod: verifica a mensagem contra todas as regras ativas ─────────
+    automodCheckMessage(message).catch((err) =>
+      logger.error({ err }, "AutoMod: Erro ao verificar mensagem")
+    );
 
     // ── SLA: Atualiza lastMessageAt/lastMessageBy nos tickets ──
     try {
