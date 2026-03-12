@@ -246,10 +246,10 @@ module.exports = {
         let areaValue = null;
 
         if (tipo === "migrado") {
-          description += "Solicitação de migração registrada. Aguarde o contato da equipe WDA.\n\n🏷️ **Protocolo:** `" + ticketId + "`";
+          description += "Solicitação de migração registrada. Aguarde o contato da equipe WDA.\n\n🏷️ **Protocolo:** `" + ticketId + "`\n\n⚠️ *Atenção: Tickets sem resposta do criador por mais de 2 horas serão encerrados automaticamente.*";
           areaValue = "nao_aplicavel";
         } else {
-          description += "Por favor, escolha a área que deseja atuar no menu abaixo.\n\n🏷️ **Protocolo:** `" + ticketId + "`";
+          description += "Por favor, escolha a área que deseja atuar no menu abaixo.\n\n🏷️ **Protocolo:** `" + ticketId + "`\n\n⚠️ *Atenção: Tickets sem resposta do criador por mais de 2 horas serão encerrados automaticamente.*";
           components.unshift(new ActionRowBuilder().addComponents(areaSelect));
         }
 
@@ -277,7 +277,9 @@ module.exports = {
           area: areaValue,
           ticketId: ticketId,
           staffRoleId: panelConfig.staffRoleId || null,
-          closedAt: null
+          closedAt: null,
+          lastMessageAt: Date.now(), lastMessageBy: "user",
+          ping30Sent: false, ping90Sent: false
         }));
 
         return interaction.editReply({ embeds: [createSuccessEmbed(`Seu chat foi criado: ${channel}`)] });
@@ -315,6 +317,53 @@ module.exports = {
         await interaction.channel.send(`<@&${areaRoleId}> Nova solicitação de recrutamento na área **${getAreaLabel(area)}** por ${interaction.user}!`);
       }
     }
+
+    // Handler do motivo de fechamento da solicitação
+    if (interaction.customId === "motivo_fechar_sejawda") {
+      const motivo = interaction.values[0];
+      await interaction.deferReply({ ephemeral: true });
+
+      const chats = await chatStore.load();
+      const chat = chats[interaction.channelId];
+      if (!chat || chat.closedAt) {
+        return interaction.editReply({ embeds: [createErrorEmbed("Esta solicitação já foi encerrada ou não é válida.")] });
+      }
+
+      const canal = interaction.channel;
+
+      try {
+        await canal.permissionOverwrites.edit(chat.userId, { ViewChannel: false });
+        const memberCreator = await interaction.guild.members.fetch(chat.userId).catch(() => null);
+        const username = memberCreator ? memberCreator.user.username.toLowerCase().replace(/[^a-z0-9-]/g, "-") : "usuario";
+
+        await canal.setName(`fechado-${username}-${chat.ticketId}`);
+        await canal.setParent(CATEGORIA_FECHADOS_ID, { lockPermissions: false });
+      } catch (e) {
+        logger.warn("[sejawda] Permissões insuficientes para renomear/mover o canal.");
+      }
+
+      await chatStore.update(interaction.channelId, (info) => (info ? { ...info, closedAt: Date.now() } : null));
+
+      const embedArquivado = createEmbed({
+        title: "🔒 Solicitação Arquivada",
+        description: `O membro não possui mais acesso a este canal.\n📋 **Motivo:** ${motivo}\n\nEquipe: Quando não for mais necessário manter o histórico, clique abaixo para excluir definitivamente.`,
+        color: 0x95a5a6
+      });
+
+      const rowAdmin = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("sejawda_delete").setLabel("Deletar Canal").setStyle(ButtonStyle.Danger).setEmoji("🗑️"));
+      await canal.send({ embeds: [embedArquivado], components: [rowAdmin] });
+      await interaction.editReply({ content: "✅ Solicitação arquivada com sucesso!" });
+
+      // NPS: Enviar avaliação de atendimento ao usuário via DM
+      try {
+        const userToRate = await interaction.client.users.fetch(chat.userId).catch(() => null);
+        if (userToRate) {
+          await enviarAvaliacaoDM(userToRate, interaction.user.id, interaction.guildId);
+        }
+      } catch (npsErr) {
+        logger.warn({ err: npsErr }, "[sejawda] Não foi possível enviar DM de avaliação NPS ao usuário");
+      }
+    }
   },
 
   // ==========================================
@@ -350,8 +399,13 @@ module.exports = {
       await interaction.followUp({ content: `🫂 Atendimento Iniciado por ${interaction.user}` });
     }
 
-    // FECHAR TICKET
+    // FECHAR TICKET — Mostra menu de motivos
     if (interaction.customId === "sejawda_close") {
+      // Bloqueia o dono do ticket de fechar
+      if (chat.userId === interaction.user.id) {
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas a equipe pode fechar esta solicitação.")], ephemeral: true });
+      }
+
       if (!isGlobal && !hasStaffRole) {
         return interaction.reply({ embeds: [createErrorEmbed("Apenas membros da equipe podem fechar solicitações.")], ephemeral: true });
       }
@@ -360,42 +414,21 @@ module.exports = {
         return interaction.reply({ embeds: [createErrorEmbed("Você precisa escolher uma área no menu antes de finalizar a solicitação.")], ephemeral: true });
       }
 
-      await interaction.deferReply({ ephemeral: true });
-      const canal = interaction.channel;
+      const motivoMenu = new StringSelectMenuBuilder()
+        .setCustomId("motivo_fechar_sejawda")
+        .setPlaceholder("Selecione o motivo do fechamento...")
+        .addOptions(
+          new StringSelectMenuOptionBuilder().setLabel("Concluído").setValue("Concluído").setEmoji("✅"),
+          new StringSelectMenuOptionBuilder().setLabel("Inatividade do Usuário").setValue("Inatividade do Usuário").setEmoji("⏰"),
+          new StringSelectMenuOptionBuilder().setLabel("Troll/Spam").setValue("Troll/Spam").setEmoji("🚫"),
+          new StringSelectMenuOptionBuilder().setLabel("Resolvido em Call").setValue("Resolvido em Call").setEmoji("📞")
+        );
 
-      try {
-        await canal.permissionOverwrites.edit(chat.userId, { ViewChannel: false });
-        const memberCreator = await interaction.guild.members.fetch(chat.userId).catch(() => null);
-        const username = memberCreator ? memberCreator.user.username.toLowerCase().replace(/[^a-z0-9-]/g, "-") : "usuario";
-
-        await canal.setName(`fechado-${username}-${chat.ticketId}`);
-        await canal.setParent(CATEGORIA_FECHADOS_ID, { lockPermissions: false });
-      } catch (e) {
-        console.log("Aviso: Permissões insuficientes para renomear/mover o canal do sejawda.");
-      }
-
-      await chatStore.update(interaction.channelId, (info) => (info ? { ...info, closedAt: Date.now() } : null));
-
-      const embedArquivado = createEmbed({
-        title: "🔒 Solicitação Arquivada",
-        description: `O membro não possui mais acesso a este canal.\n\nEquipe: Quando não for mais necessário manter o histórico, clique abaixo para excluir definitivamente.`,
-        color: 0x95a5a6
+      return interaction.reply({
+        embeds: [createEmbed({ title: "🔒 Fechar Solicitação", description: "Selecione o motivo do fechamento abaixo:", color: 0xe74c3c })],
+        components: [new ActionRowBuilder().addComponents(motivoMenu)],
+        ephemeral: true
       });
-
-      const rowAdmin = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("sejawda_delete").setLabel("Deletar Canal").setStyle(ButtonStyle.Danger).setEmoji("🗑️"));
-      await canal.send({ embeds: [embedArquivado], components: [rowAdmin] });
-      await interaction.editReply({ content: "✅ Solicitação arquivada com sucesso!" });
-
-      // 🆕 NPS: Enviar avaliação de atendimento ao usuário via DM
-      // O staff avaliado é quem fechou a solicitação (interaction.user)
-      try {
-        const userToRate = await interaction.client.users.fetch(chat.userId).catch(() => null);
-        if (userToRate) {
-          await enviarAvaliacaoDM(userToRate, interaction.user.id, interaction.guildId);
-        }
-      } catch (npsErr) {
-        logger.warn({ err: npsErr }, "[sejawda] Não foi possível enviar DM de avaliação NPS ao usuário");
-      }
     }
 
     // DELETAR TICKET PERMANENTEMENTE
