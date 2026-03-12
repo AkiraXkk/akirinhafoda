@@ -339,7 +339,7 @@ module.exports = {
         await canal.setName(`fechado-${username}-${chat.ticketId}`);
         await canal.setParent(CATEGORIA_FECHADOS_ID, { lockPermissions: false });
       } catch (e) {
-        logger.warn("[sejawda] Permissões insuficientes para renomear/mover o canal.");
+        logger.warn({ err: e, channelId: canal.id }, "[sejawda] Permissões insuficientes para renomear/mover o canal.");
       }
 
       await chatStore.update(interaction.channelId, (info) => (info ? { ...info, closedAt: Date.now() } : null));
