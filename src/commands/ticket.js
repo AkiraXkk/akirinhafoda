@@ -140,8 +140,11 @@ module.exports = {
     if (ticketInfo.closedAt) return interaction.reply({ content: "❌ Este ticket já foi arquivado.", ephemeral: true });
 
     const member = await interaction.guild.members.fetch(interaction.user.id);
-    if (!isStaff(member) && ticketInfo.userId !== interaction.user.id) {
-      return interaction.reply({ embeds: [createErrorEmbed("Apenas staff ou o criador do ticket pode fechá-lo.")], ephemeral: true });
+    const isAuthor = ticketInfo.userId === interaction.user.id;
+    const isAssumer = ticketInfo.assumedBy === interaction.user.id;
+    const hasManageGuild = member.permissions.has("ManageGuild");
+    if (!isAuthor && !isAssumer && !hasManageGuild) {
+      return interaction.reply({ embeds: [createErrorEmbed("Apenas o autor, o staff responsável ou um administrador pode fechar este ticket.")], ephemeral: true });
     }
 
     // Defer para evitar o erro de timeout!
@@ -182,14 +185,16 @@ module.exports = {
     await interaction.editReply({ content: "✅ Ticket arquivado com sucesso!" });
 
     // 🆕 NPS: Enviar avaliação de atendimento ao usuário via DM
-    // O staff avaliado é quem fechou o ticket (interaction.user)
-    try {
-      const userToRate = await interaction.client.users.fetch(ticketInfo.userId).catch(() => null);
-      if (userToRate) {
-        await enviarAvaliacaoDM(userToRate, interaction.user.id, interaction.guildId);
+    // Só envia se quem fechou NÃO é o autor do ticket
+    if (interaction.user.id !== ticketInfo.userId) {
+      try {
+        const userToRate = await interaction.client.users.fetch(ticketInfo.userId).catch(() => null);
+        if (userToRate) {
+          await enviarAvaliacaoDM(userToRate, interaction.user.id, interaction.guildId);
+        }
+      } catch (npsErr) {
+        logger.warn({ err: npsErr }, "[ticket] Não foi possível enviar DM de avaliação NPS ao usuário");
       }
-    } catch (npsErr) {
-      logger.warn({ err: npsErr }, "[ticket] Não foi possível enviar DM de avaliação NPS ao usuário");
     }
   },
 
@@ -383,7 +388,7 @@ module.exports = {
 
         const embedTicket = createEmbed({
           title: `Atendimento: ${categoryConfig.title.replace(/[^a-zA-ZÀ-ÿ\s]/g, '').trim()}`,
-          description: `Olá ${interaction.user}, sua sala foi criada com sucesso!\n\nPor favor, envie sua dúvida ou prova abaixo. Nossa equipe já foi notificada.\n\n🏷️ **Protocolo:** \`${ticketId}\`\n\n⚠️ *Atenção: Tickets sem resposta do criador por mais de 2 horas serão encerrados automaticamente.*`,
+          description: `Olá ${interaction.user}, sua sala foi criada com sucesso!\n\nPor favor, envie sua dúvida ou prova abaixo. Nossa equipe já foi notificada.\n\n🏷️ **Protocolo:** \`${ticketId}\`\n\n⚠️ *Este ticket pode ser encerrado pelo autor, pelo staff responsável ou por um administrador. Tickets sem resposta do autor por 2h serão arquivados automaticamente.*`,
           color: categoryConfig.color || 0x2ecc71
         });
 
@@ -408,6 +413,11 @@ module.exports = {
       const tickets = await ticketStore.load();
       const ticketInfo = tickets[interaction.channelId] || (tickets["global"] && tickets["global"][interaction.channelId]);
       
+      // Bloqueia o autor do ticket de assumir o próprio ticket
+      if (ticketInfo && ticketInfo.userId === interaction.user.id) {
+        return interaction.reply({ embeds: [createErrorEmbed("❌ Você não pode assumir seu próprio ticket.")], ephemeral: true });
+      }
+
       let isSpecificStaff = false;
       if (ticketInfo) {
         const setupData = await setupStore.load();
@@ -418,6 +428,9 @@ module.exports = {
       if (!isStaff(member) && !isSpecificStaff) {
         return interaction.reply({ embeds: [createErrorEmbed("Apenas responsáveis por esta área podem assumir o ticket.")], ephemeral: true });
       }
+
+      // Salva quem assumiu o ticket
+      await ticketStore.update(interaction.channelId, (info) => (info ? { ...info, assumedBy: interaction.user.id } : null));
 
       const rowOnlyClose = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("close_ticket_btn").setLabel("Fechar Ticket").setStyle(ButtonStyle.Danger).setEmoji("🔒"));
       await interaction.message.edit({ components: [rowOnlyClose] });
@@ -434,21 +447,14 @@ module.exports = {
         return interaction.reply({ embeds: [createErrorEmbed("Este ticket já foi encerrado ou não é válido.")], ephemeral: true });
       }
 
-      // Bloqueia o dono do ticket de fechar
-      if (ticketInfo.userId === interaction.user.id) {
-        return interaction.reply({ embeds: [createErrorEmbed("Apenas a equipe pode fechar este ticket.")], ephemeral: true });
-      }
-
+      // Permissão para fechar: autor do ticket, staff que assumiu, ou ManageGuild
+      const isAuthor = ticketInfo.userId === interaction.user.id;
+      const isAssumer = ticketInfo.assumedBy === interaction.user.id;
       const member = await interaction.guild.members.fetch(interaction.user.id);
-      let isSpecificStaff = false;
-      if (ticketInfo.ticketType) {
-        const setupData = await setupStore.load();
-        const typeSetup = (setupData[interaction.guildId] || {})[ticketInfo.ticketType] || {};
-        if (typeSetup.roleId && member.roles.cache.has(typeSetup.roleId)) isSpecificStaff = true;
-      }
+      const hasManageGuild = member.permissions.has("ManageGuild");
 
-      if (!isStaff(member) && !isSpecificStaff) {
-        return interaction.reply({ embeds: [createErrorEmbed("Apenas a equipe pode fechar este ticket.")], ephemeral: true });
+      if (!isAuthor && !isAssumer && !hasManageGuild) {
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas o autor, o staff responsável ou um administrador pode fechar este ticket.")], ephemeral: true });
       }
 
       const motivoMenu = new StringSelectMenuBuilder()

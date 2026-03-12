@@ -246,10 +246,10 @@ module.exports = {
         let areaValue = null;
 
         if (tipo === "migrado") {
-          description += "Solicitação de migração registrada. Aguarde o contato da equipe WDA.\n\n🏷️ **Protocolo:** `" + ticketId + "`\n\n⚠️ *Atenção: Tickets sem resposta do criador por mais de 2 horas serão encerrados automaticamente.*";
+          description += "Solicitação de migração registrada. Aguarde o contato da equipe WDA.\n\n🏷️ **Protocolo:** `" + ticketId + "`\n\n⚠️ *Este ticket pode ser encerrado pelo autor, pelo staff responsável ou por um administrador. Tickets sem resposta do autor por 2h serão arquivados automaticamente.*";
           areaValue = "nao_aplicavel";
         } else {
-          description += "Por favor, escolha a área que deseja atuar no menu abaixo.\n\n🏷️ **Protocolo:** `" + ticketId + "`\n\n⚠️ *Atenção: Tickets sem resposta do criador por mais de 2 horas serão encerrados automaticamente.*";
+          description += "Por favor, escolha a área que deseja atuar no menu abaixo.\n\n🏷️ **Protocolo:** `" + ticketId + "`\n\n⚠️ *Este ticket pode ser encerrado pelo autor, pelo staff responsável ou por um administrador. Tickets sem resposta do autor por 2h serão arquivados automaticamente.*";
           components.unshift(new ActionRowBuilder().addComponents(areaSelect));
         }
 
@@ -355,13 +355,16 @@ module.exports = {
       await interaction.editReply({ content: "✅ Solicitação arquivada com sucesso!" });
 
       // NPS: Enviar avaliação de atendimento ao usuário via DM
-      try {
-        const userToRate = await interaction.client.users.fetch(chat.userId).catch(() => null);
-        if (userToRate) {
-          await enviarAvaliacaoDM(userToRate, interaction.user.id, interaction.guildId);
+      // Só envia se quem fechou NÃO é o autor do ticket
+      if (interaction.user.id !== chat.userId) {
+        try {
+          const userToRate = await interaction.client.users.fetch(chat.userId).catch(() => null);
+          if (userToRate) {
+            await enviarAvaliacaoDM(userToRate, interaction.user.id, interaction.guildId);
+          }
+        } catch (npsErr) {
+          logger.warn({ err: npsErr }, "[sejawda] Não foi possível enviar DM de avaliação NPS ao usuário");
         }
-      } catch (npsErr) {
-        logger.warn({ err: npsErr }, "[sejawda] Não foi possível enviar DM de avaliação NPS ao usuário");
       }
     }
   },
@@ -380,11 +383,19 @@ module.exports = {
 
     // ASSUMIR TICKET
     if (interaction.customId === "sejawda_assumir") {
+      // Bloqueia o autor do ticket de assumir o próprio ticket
+      if (chat.userId === interaction.user.id) {
+        return interaction.reply({ embeds: [createErrorEmbed("❌ Você não pode assumir seu próprio ticket.")], ephemeral: true });
+      }
+
       if (!isGlobal && !hasStaffRole) {
         return interaction.reply({ embeds: [createErrorEmbed("Apenas membros da equipe podem assumir solicitações.")], ephemeral: true });
       }
 
       await interaction.deferUpdate();
+
+      // Salva quem assumiu o ticket
+      await chatStore.update(interaction.channelId, (info) => (info ? { ...info, assumedBy: interaction.user.id } : null));
 
       const newComponents = interaction.message.components.map(row => {
         const newRow = new ActionRowBuilder();
@@ -401,13 +412,13 @@ module.exports = {
 
     // FECHAR TICKET — Mostra menu de motivos
     if (interaction.customId === "sejawda_close") {
-      // Bloqueia o dono do ticket de fechar
-      if (chat.userId === interaction.user.id) {
-        return interaction.reply({ embeds: [createErrorEmbed("Apenas a equipe pode fechar esta solicitação.")], ephemeral: true });
-      }
+      // Permissão para fechar: autor do ticket, staff que assumiu, ou ManageGuild
+      const isAuthor = chat.userId === interaction.user.id;
+      const isAssumer = chat.assumedBy === interaction.user.id;
+      const hasManageGuild = interaction.member.permissions.has("ManageGuild");
 
-      if (!isGlobal && !hasStaffRole) {
-        return interaction.reply({ embeds: [createErrorEmbed("Apenas membros da equipe podem fechar solicitações.")], ephemeral: true });
+      if (!isAuthor && !isAssumer && !hasManageGuild) {
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas o autor, o staff responsável ou um administrador pode fechar esta solicitação.")], ephemeral: true });
       }
 
       if (chat.tipo !== "migrado" && !chat.area) {
