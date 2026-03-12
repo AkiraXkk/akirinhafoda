@@ -82,6 +82,9 @@ module.exports = {
       } else if (customId.startsWith("mod_appeal_") || customId.startsWith("mod_panel_")) {
         // 🆕 Roteamento: Moderação (apelações + painel) → mod.handleButton / handleModal / handleJudgmentButton
         commandName = "mod";
+      } else if (customId.startsWith("automod_")) {
+        // 🆕 Roteamento: Painel unificado de AutoMod → automod.handleButton / handleModal
+        commandName = "automod";
       } else if (customId.startsWith("vip_") || customId.startsWith("vipadmin_")) {
         // 🆕 Roteamento: VIP → vip / vipadmin
         commandName = customId.startsWith("vipadmin_") ? "vipadmin" : "vip";
