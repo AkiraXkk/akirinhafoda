@@ -17,6 +17,11 @@ const modConfigStore = createDataStore("mod_config.json");
 const modAppealsStore = createDataStore("mod_appeals.json");
 const warnsStore = createDataStore("warns.json");
 
+// ─── Constantes ─────────────────────────────────────────────────────────────
+const AUTO_MUTE_DURATION_MS = 1 * 60 * 60 * 1000; // 1 hora
+const MAX_MUTE_HOURS = 672; // 28 dias
+const INVITE_EXPIRY_SECONDS = 86400; // 24 horas
+
 // ─── HELPER: Gera o Painel de Moderação para um utilizador ──────────────────
 async function buildModPanel(guild, user) {
   const member = await guild.members.fetch(user.id).catch(() => null);
@@ -974,8 +979,7 @@ module.exports = {
             // Auto-Mute (1h por warn acima do limite)
             const member = await interaction.guild.members.fetch(userId).catch(() => null);
             if (member) {
-              const muteDuration = 1 * 60 * 60 * 1000; // 1 hora
-              await member.timeout(muteDuration, `Auto-Mute por acúmulo de ${warnCount} Warns`);
+              await member.timeout(AUTO_MUTE_DURATION_MS, `Auto-Mute por acúmulo de ${warnCount} Warns`);
               if (logService) {
                 await logService.log(interaction.guild, {
                   title: "🔇 Auto-Mute por Acúmulo de Warns",
@@ -1000,8 +1004,8 @@ module.exports = {
           const horasRaw = interaction.fields.getTextInputValue("horas");
           const horas = parseInt(horasRaw, 10);
 
-          if (isNaN(horas) || horas < 1 || horas > 672) {
-            return interaction.followUp({ embeds: [createErrorEmbed("Duração inválida. Informe um número entre 1 e 672.")], ephemeral: true });
+          if (isNaN(horas) || horas < 1 || horas > MAX_MUTE_HOURS) {
+            return interaction.followUp({ embeds: [createErrorEmbed(`Duração inválida. Informe um número entre 1 e ${MAX_MUTE_HOURS}.`)], ephemeral: true });
           }
 
           const member = await interaction.guild.members.fetch(userId).catch(() => null);
@@ -1214,7 +1218,7 @@ module.exports = {
                 let inviteLink = "";
                 if (inviteChannel) {
                   const invite = await inviteChannel.createInvite({
-                    maxAge: 86400,
+                    maxAge: INVITE_EXPIRY_SECONDS,
                     maxUses: 1,
                     reason: `Apelação Aprovada por ${interaction.user.username}`,
                   });
