@@ -27,7 +27,8 @@ async function buildModPanel(guild, user) {
   const member = await guild.members.fetch(user.id).catch(() => null);
 
   // Buscar warns do utilizador
-  const allWarns = await warnsStore.get(`${guild.id}_${user.id}`) || [];
+  const warnData = await warnsStore.get(`${guild.id}_${user.id}`);
+  const allWarns = warnData?.historico || [];
   const warnCount = allWarns.length;
 
   const fields = [
@@ -104,51 +105,6 @@ module.exports = {
     )
     .addSubcommand((sub) =>
       sub
-        .setName("ban")
-        .setDescription("Bane um usuário do servidor")
-        .addUserOption((opt) => opt.setName("usuario").setDescription("Usuário a ser banido").setRequired(true))
-        .addStringOption((opt) => opt.setName("motivo").setDescription("Motivo do banimento").setRequired(false))
-    )
-    .addSubcommand((sub) =>
-      sub
-        .setName("kick")
-        .setDescription("Expulsa um usuário do servidor")
-        .addUserOption((opt) => opt.setName("usuario").setDescription("Usuário a ser expulso").setRequired(true))
-        .addStringOption((opt) => opt.setName("motivo").setDescription("Motivo da expulsão").setRequired(false))
-    )
-    .addSubcommand((sub) =>
-      sub
-        .setName("lock")
-        .setDescription("Tranca o canal atual para que membros não possam falar")
-    )
-    .addSubcommand((sub) =>
-      sub
-        .setName("unlock")
-        .setDescription("Destranca o canal atual")
-    )
-    .addSubcommand((sub) =>
-      sub
-        .setName("mute")
-        .setDescription("Silencia um usuário temporariamente")
-        .addUserOption((opt) => opt.setName("usuario").setDescription("Usuário a ser silenciado").setRequired(true))
-        .addIntegerOption((opt) =>
-          opt
-            .setName("horas")
-            .setDescription("Duração do silenciamento em horas (1-672)")
-            .setMinValue(1)
-            .setMaxValue(672)
-            .setRequired(true)
-        )
-        .addStringOption((opt) => opt.setName("motivo").setDescription("Motivo do silenciamento").setRequired(false))
-    )
-    .addSubcommand((sub) =>
-      sub
-        .setName("unmute")
-        .setDescription("Remove o silenciamento de um usuário")
-        .addUserOption((opt) => opt.setName("usuario").setDescription("Usuário a ter o silenciamento removido").setRequired(true))
-    )
-    .addSubcommand((sub) =>
-      sub
         .setName("config")
         .setDescription("Configura o sistema de moderação (apenas administradores)")
         .addChannelOption((opt) =>
@@ -178,23 +134,6 @@ module.exports = {
             .setDescription("Quantos warns para auto-ban (ex: 5)")
             .setMinValue(1)
             .setMaxValue(50)
-            .setRequired(false)
-        )
-    )
-    .addSubcommand((sub) =>
-      sub
-        .setName("unban")
-        .setDescription("Desbane um utilizador")
-        .addStringOption((opt) =>
-          opt
-            .setName("id_utilizador")
-            .setDescription("ID do utilizador")
-            .setRequired(true)
-        )
-        .addStringOption((opt) =>
-          opt
-            .setName("motivo")
-            .setDescription("Motivo")
             .setRequired(false)
         )
     )
@@ -923,15 +862,16 @@ module.exports = {
         if (acao === "WARN") {
           const motivo = interaction.fields.getTextInputValue("motivo");
           const warnKey = `${interaction.guild.id}_${userId}`;
-          const existing = await warnsStore.get(warnKey) || [];
+          const warnData = await warnsStore.get(warnKey);
+          const historico = warnData?.historico || [];
 
-          existing.push({
+          historico.push({
             moderador: interaction.user.id,
             motivo,
             data: Date.now(),
           });
-          await warnsStore.set(warnKey, existing);
-          const warnCount = existing.length;
+          await warnsStore.set(warnKey, { historico });
+          const warnCount = historico.length;
 
           if (logService) {
             await logService.log(interaction.guild, {
