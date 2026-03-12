@@ -62,6 +62,7 @@ module.exports = {
                 .setDescription("Ação ao detectar spam (padrão: delete)")
                 .addChoices(
                   { name: "Deletar mensagem", value: "delete" },
+                  { name: "Deletar e registrar aviso", value: "warn" },
                   { name: "Silenciar 10 minutos", value: "mute" },
                   { name: "Expulsar", value: "kick" },
                   { name: "Banir", value: "ban" }
@@ -96,6 +97,11 @@ module.exports = {
                   { name: "Expulsar membro", value: "kick" }
                 )
             )
+            .addBooleanOption((o) =>
+              o
+                .setName("bloquear_urls")
+                .setDescription("Bloquear também URLs genéricas (http/https), não só convites Discord")
+            )
         )
     )
 
@@ -109,6 +115,23 @@ module.exports = {
         )
         .addSubcommand((s) =>
           s.setName("desativar").setDescription("Desativa o filtro de palavras")
+        )
+        .addSubcommand((s) =>
+          s
+            .setName("configurar")
+            .setDescription("Configura a ação ao detectar uma palavra proibida")
+            .addStringOption((o) =>
+              o
+                .setName("acao")
+                .setDescription("Ação ao detectar palavra proibida (padrão: delete)")
+                .setRequired(true)
+                .addChoices(
+                  { name: "Deletar mensagem", value: "delete" },
+                  { name: "Deletar e registrar aviso", value: "warn" },
+                  { name: "Deletar e silenciar 10 min", value: "mute" },
+                  { name: "Deletar e expulsar", value: "kick" }
+                )
+            )
         )
         .addSubcommand((s) =>
           s
@@ -293,10 +316,20 @@ module.exports = {
           });
         }
         if (sub === "configurar") {
-          const acao = interaction.options.getString("acao");
-          await mergeConfig(guildId, { antilink: { acao } });
+          const acao        = interaction.options.getString("acao");
+          const bloquearUrls = interaction.options.getBoolean("bloquear_urls");
+          const patch = { acao };
+          if (bloquearUrls !== null) patch.bloquearUrls = bloquearUrls;
+          await mergeConfig(guildId, { antilink: patch });
+          const updated = getFullConfig(await getConfig(guildId));
           return interaction.editReply({
-            embeds: [createSuccessEmbed(`Anti-link configurado! Ação: **${acao}**`)],
+            embeds: [
+              createSuccessEmbed(
+                `Anti-link configurado!\n\n` +
+                  `**Ação:** \`${updated.antilink.acao}\`\n` +
+                  `**Bloquear URLs genéricas:** ${updated.antilink.bloquearUrls ? "Sim" : "Não"}`
+              ),
+            ],
           });
         }
       }
@@ -313,6 +346,13 @@ module.exports = {
           await mergeConfig(guildId, { filtro: { enabled: false } });
           return interaction.editReply({
             embeds: [createSuccessEmbed("Filtro de palavras **desativado**.")],
+          });
+        }
+        if (sub === "configurar") {
+          const acao = interaction.options.getString("acao");
+          await mergeConfig(guildId, { filtro: { acao } });
+          return interaction.editReply({
+            embeds: [createSuccessEmbed(`Filtro de palavras configurado! Ação: **${acao}**`)],
           });
         }
         if (sub === "adicionar") {
@@ -467,14 +507,16 @@ module.exports = {
                   name: "🔗 Anti-Link",
                   value:
                     `${on(config.antilink.enabled)}\n` +
-                    `Ação: \`${config.antilink.acao}\``,
+                    `Ação: \`${config.antilink.acao}\`\n` +
+                    `URLs genéricas: ${config.antilink.bloquearUrls ? "✅ Sim" : "❌ Não"}`,
                   inline: true,
                 },
                 {
                   name: "🔤 Filtro de Palavras",
                   value:
                     `${on(config.filtro.enabled)}\n` +
-                    `Palavras: ${(config.filtro.palavras || []).length}`,
+                    `Palavras: ${(config.filtro.palavras || []).length}\n` +
+                    `Ação: \`${config.filtro.acao || "delete"}\``,
                   inline: true,
                 },
                 {

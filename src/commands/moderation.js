@@ -12,13 +12,12 @@ const {
 } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
+const { registrarWarn, warnsStore } = require("../services/warnService");
 
-const modConfigStore = createDataStore("mod_config.json");
+const modConfigStore  = createDataStore("mod_config.json");
 const modAppealsStore = createDataStore("mod_appeals.json");
-const warnsStore = createDataStore("warns.json");
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
-const AUTO_MUTE_DURATION_MS = 1 * 60 * 60 * 1000; // 1 hora
 const MAX_MUTE_HOURS = 672; // 28 dias
 const INVITE_EXPIRY_SECONDS = 86400; // 24 horas
 
@@ -861,75 +860,32 @@ module.exports = {
         // ── WARN ────────────────────────────────────────────────────────────
         if (acao === "WARN") {
           const motivo = interaction.fields.getTextInputValue("motivo");
-          const warnKey = `${interaction.guild.id}_${userId}`;
-          const warnData = await warnsStore.get(warnKey);
-          const historico = warnData?.historico || [];
 
-          historico.push({
-            moderador: interaction.user.id,
+          // Usa o warnService compartilhado (registra + auto-punição)
+          // logTitle: null para não duplicar — o painel faz seu próprio log abaixo
+          const { warnCount } = await registrarWarn(
+            interaction.guild,
+            userId,
             motivo,
-            data: Date.now(),
-          });
-          await warnsStore.set(warnKey, { historico });
-          const warnCount = historico.length;
+            interaction.client,
+            interaction.user.id,
+            { logTitle: null }
+          );
 
+          // Log adicional com info do moderador humano
           if (logService) {
             await logService.log(interaction.guild, {
               title: "⚠️ Warn Aplicado (Painel)",
               description: `**${user.username}** recebeu um warn de **${interaction.user.username}** via Painel.`,
               color: 0xFFCC00,
               fields: [
-                { name: "👤 Moderador", value: interaction.user.username, inline: true },
-                { name: "👤 Usuário", value: user.username, inline: true },
-                { name: "⚠️ Total de Warns", value: `${warnCount}`, inline: true },
-                { name: "📝 Motivo", value: motivo, inline: false },
+                { name: "👤 Moderador",       value: interaction.user.username, inline: true },
+                { name: "👤 Usuário",         value: user.username,             inline: true },
+                { name: "⚠️ Total de Warns", value: `${warnCount}`,             inline: true },
+                { name: "📝 Motivo",          value: motivo,                    inline: false },
               ],
               user: interaction.user,
-            });
-          }
-
-          // Auto-punição
-          const config = await modConfigStore.get(interaction.guild.id) || {};
-          const limitBan = config.warn_limit_ban;
-          const limitMute = config.warn_limit_mute;
-
-          if (limitBan && warnCount >= limitBan) {
-            // Auto-Ban
-            try {
-              await user.send({
-                embeds: [createEmbed({
-                  title: "🔨 Você foi banido (Auto-Punição)",
-                  description: `Você atingiu **${warnCount} warns** no servidor **${interaction.guild.name}** e foi banido automaticamente.\n\n**Último motivo:** ${motivo}`,
-                  color: 0xFF0000,
-                  footer: "Moderação | © WDA - Todos os direitos reservados",
-                })],
-              });
-            } catch {}
-            await interaction.guild.members.ban(userId, { reason: `Auto-Ban por acúmulo de ${warnCount} Warns` });
-            if (logService) {
-              await logService.log(interaction.guild, {
-                title: "🔨 Auto-Ban por Acúmulo de Warns",
-                description: `**${user.username}** foi banido automaticamente após atingir **${warnCount}** warns.`,
-                color: 0xFF0000,
-                fields: [{ name: "⚠️ Total de Warns", value: `${warnCount}`, inline: true }],
-                user: interaction.user,
-              });
-            }
-          } else if (limitMute && warnCount >= limitMute) {
-            // Auto-Mute (1h por warn acima do limite)
-            const member = await interaction.guild.members.fetch(userId).catch(() => null);
-            if (member) {
-              await member.timeout(AUTO_MUTE_DURATION_MS, `Auto-Mute por acúmulo de ${warnCount} Warns`);
-              if (logService) {
-                await logService.log(interaction.guild, {
-                  title: "🔇 Auto-Mute por Acúmulo de Warns",
-                  description: `**${user.username}** foi silenciado automaticamente por 1h após atingir **${warnCount}** warns.`,
-                  color: 0xFF6600,
-                  fields: [{ name: "⚠️ Total de Warns", value: `${warnCount}`, inline: true }],
-                  user: interaction.user,
-                });
-              }
-            }
+            }).catch(() => {});
           }
 
           // Atualizar o painel
