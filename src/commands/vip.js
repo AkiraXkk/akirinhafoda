@@ -229,6 +229,8 @@ module.exports = {
        const tierId = interaction.values[0];
        
        if (ownerId !== interaction.user.id) return interaction.reply({ content: "Você não tem permissão.", flags: MessageFlags.Ephemeral });
+
+       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
        return processGiveVip(interaction, targetUserId, tierId);
     }
 
@@ -243,10 +245,12 @@ module.exports = {
       const selectedUserId = interaction.values?.[0];
       if (!selectedUserId) return interaction.reply({ content: "Seleção inválida.", flags: MessageFlags.Ephemeral });
 
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
       const target = await interaction.guild.members.fetch(selectedUserId).catch(() => null);
-      if (!target) return interaction.reply({ content: "Usuário não encontrado no servidor.", flags: MessageFlags.Ephemeral });
-      if (target.id === interaction.user.id) return interaction.reply({ content: "❌ Você não pode dar VIP para si mesmo.", flags: MessageFlags.Ephemeral });
-      if (target.user?.bot) return interaction.reply({ content: "❌ Você não pode dar VIP para bots.", flags: MessageFlags.Ephemeral });
+      if (!target) return interaction.editReply({ content: "Usuário não encontrado no servidor." });
+      if (target.id === interaction.user.id) return interaction.editReply({ content: "❌ Você não pode dar VIP para si mesmo." });
+      if (target.user?.bot) return interaction.editReply({ content: "❌ Você não pode dar VIP para bots." });
 
       const validTiers = [];
       const orderedTiers = await vipService.getOrderedTiers(interaction.guildId);
@@ -255,7 +259,7 @@ module.exports = {
          if (check.ok) validTiers.push(t);
       }
 
-      if (validTiers.length === 0) return interaction.reply({ content: "❌ Você esgotou suas cotas.", flags: MessageFlags.Ephemeral });
+      if (validTiers.length === 0) return interaction.editReply({ content: "❌ Você esgotou suas cotas." });
       if (validTiers.length === 1) return processGiveVip(interaction, selectedUserId, validTiers[0].id);
 
       const menu = new StringSelectMenuBuilder()
@@ -263,10 +267,9 @@ module.exports = {
           .setPlaceholder("Selecione qual VIP deseja dar")
           .addOptions(validTiers.map(t => new StringSelectMenuOptionBuilder().setLabel(t.name || t.id).setValue(t.id)));
 
-      return interaction.reply({
+      return interaction.editReply({
           content: `Você tem opções de cota. Qual VIP deseja dar para <@${selectedUserId}>?`,
           components: [new ActionRowBuilder().addComponents(menu)],
-          flags: MessageFlags.Ephemeral
       });
     }
 
@@ -429,10 +432,12 @@ module.exports = {
       const selectedUserId = interaction.values?.[0];
       if (!selectedUserId) return interaction.reply({ content: "Seleção inválida.", flags: MessageFlags.Ephemeral });
 
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
       const target = await interaction.guild.members.fetch(selectedUserId).catch(() => null);
-      if (!target) return interaction.reply({ content: "Usuário não encontrado no servidor.", flags: MessageFlags.Ephemeral });
-      if (target.id === interaction.user.id) return interaction.reply({ content: "❌ Você não pode dar VIP para si mesmo.", flags: MessageFlags.Ephemeral });
-      if (target.user?.bot) return interaction.reply({ content: "❌ Você não pode dar VIP para bots.", flags: MessageFlags.Ephemeral });
+      if (!target) return interaction.editReply({ content: "Usuário não encontrado no servidor." });
+      if (target.id === interaction.user.id) return interaction.editReply({ content: "❌ Você não pode dar VIP para si mesmo." });
+      if (target.user?.bot) return interaction.editReply({ content: "❌ Você não pode dar VIP para bots." });
 
       const validTiers = [];
       const orderedTiers = await vipService.getOrderedTiers(interaction.guildId);
@@ -441,7 +446,7 @@ module.exports = {
          if (check.ok) validTiers.push(t);
       }
 
-      if (validTiers.length === 0) return interaction.reply({ content: "❌ Você esgotou suas cotas.", flags: MessageFlags.Ephemeral });
+      if (validTiers.length === 0) return interaction.editReply({ content: "❌ Você esgotou suas cotas." });
       if (validTiers.length === 1) return processGiveVip(interaction, selectedUserId, validTiers[0].id);
 
       const menu = new StringSelectMenuBuilder()
@@ -449,10 +454,9 @@ module.exports = {
           .setPlaceholder("Selecione qual VIP deseja dar")
           .addOptions(validTiers.map(t => new StringSelectMenuOptionBuilder().setLabel(t.name || t.id).setValue(t.id)));
 
-      return interaction.reply({
+      return interaction.editReply({
           content: `Você tem opções de cota. Qual VIP deseja dar para <@${selectedUserId}>?`,
           components: [new ActionRowBuilder().addComponents(menu)],
-          flags: MessageFlags.Ephemeral
       });
     }
 
@@ -495,26 +499,26 @@ module.exports = {
       if (interaction.guildId !== guildId) return interaction.reply({ content: "Este menu pertence a outro servidor.", flags: MessageFlags.Ephemeral });
       if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", flags: MessageFlags.Ephemeral });
 
-      const tier = await vipService.getMemberTier(interaction.member);
-      if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", flags: MessageFlags.Ephemeral });
-
       const selectedUserId = interaction.values?.[0];
       if (!selectedUserId) return interaction.reply({ content: "Seleção inválida.", flags: MessageFlags.Ephemeral });
       if (selectedUserId === interaction.user.id) return interaction.reply({ content: "❌ Você não pode se definir como sua própria Primeira Dama.", flags: MessageFlags.Ephemeral });
 
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
+      const tier = await vipService.getMemberTier(interaction.member);
+      if (!tier) return interaction.editReply({ content: "❌ Você não é VIP." });
+
       const targetMember = await interaction.guild.members.fetch(selectedUserId).catch(() => null);
-      if (!targetMember) return interaction.reply({ content: "❌ Membro não encontrado no servidor.", flags: MessageFlags.Ephemeral });
-      if (targetMember.user?.bot) return interaction.reply({ content: "❌ Você não pode definir um bot como Primeira Dama.", flags: MessageFlags.Ephemeral });
+      if (!targetMember) return interaction.editReply({ content: "❌ Membro não encontrado no servidor." });
+      if (targetMember.user?.bot) return interaction.editReply({ content: "❌ Você não pode definir um bot como Primeira Dama." });
 
       // Recupera o cargo de Primeira Dama das configurações do servidor
       const gConfig = await getGuildConfig(guildId);
       const damaRoleId = gConfig?.damaRoleId;
 
       if (!damaRoleId) {
-        return interaction.reply({ content: "❌ O cargo de Primeira Dama não está configurado neste servidor. Peça a um administrador para usar `/dama config`.", flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ content: "❌ O cargo de Primeira Dama não está configurado neste servidor. Peça a um administrador para usar `/dama config`." });
       }
-
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       try {
         await targetMember.roles.add(damaRoleId);
@@ -575,22 +579,24 @@ module.exports = {
     if (interaction.guildId !== guildId) return interaction.reply({ content: "Este modal pertence a outro servidor.", flags: MessageFlags.Ephemeral });
     if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas quem abriu o painel pode usar.", flags: MessageFlags.Ephemeral });
 
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
     const tier = await vipService.getMemberTier(interaction.member);
-    if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", flags: MessageFlags.Ephemeral });
+    if (!tier) return interaction.editReply({ content: "❌ Você não é VIP." });
 
     if (modalType === "call") {
-      if (!tier.canCall) return interaction.reply({ content: "❌ Seu tier não permite Call Privada.", flags: MessageFlags.Ephemeral });
+      if (!tier.canCall) return interaction.editReply({ content: "❌ Seu tier não permite Call Privada." });
       const nome = interaction.fields.getTextInputValue("nome");
       const res = await vipChannel.updateChannelName(interaction.user.id, nome, { guildId: interaction.guildId });
-      return interaction.reply({ content: res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`, flags: MessageFlags.Ephemeral });
+      return interaction.editReply({ content: res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}` });
     }
 
     if (modalType === "role") {
-      if (!tier.hasCustomRole) return interaction.reply({ content: "❌ Seu tier não permite cargo personalizado.", flags: MessageFlags.Ephemeral });
+      if (!tier.hasCustomRole) return interaction.editReply({ content: "❌ Seu tier não permite cargo personalizado." });
       const roleName = (interaction.fields.getTextInputValue("nome") || "").trim() || null;
       const roleColor = (interaction.fields.getTextInputValue("cor") || "").trim() || null;
       const res = await vipRole.updatePersonalRole(interaction.user.id, { roleName, roleColor }, { guildId: interaction.guildId });
-      return interaction.reply({ content: res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.", flags: MessageFlags.Ephemeral });
+      return interaction.editReply({ content: res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar." });
     }
   }
 };

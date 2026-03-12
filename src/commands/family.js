@@ -600,19 +600,22 @@ module.exports = {
 
     const userId       = interaction.user.id;
     const selectedUser = interaction.users.first();
-    const families     = await familyStore.load();
 
     if (!selectedUser) return interaction.reply({ content: "❌ Nenhum usuário selecionado.", flags: MessageFlags.Ephemeral });
     if (selectedUser.bot) return interaction.reply({ content: "❌ Não é possível convidar bots.", flags: MessageFlags.Ephemeral });
     if (selectedUser.id === userId) return interaction.reply({ content: "❌ Você não pode se convidar.", flags: MessageFlags.Ephemeral });
 
+    await interaction.deferUpdate().catch(() => {});
+
+    const families     = await familyStore.load();
+
     const userFamily = Object.values(families).find((f) => f.members.includes(selectedUser.id));
-    if (userFamily) return interaction.reply({ content: `❌ ${selectedUser.username} já está na família **${userFamily.name}**.`, flags: MessageFlags.Ephemeral });
+    if (userFamily) return interaction.followUp({ content: `❌ ${selectedUser.username} já está na família **${userFamily.name}**.`, flags: MessageFlags.Ephemeral });
 
     const myFamily = Object.values(families).find((f) => f.ownerId === userId);
-    if (!myFamily) return interaction.reply({ content: "❌ Você não tem família.", flags: MessageFlags.Ephemeral });
+    if (!myFamily) return interaction.followUp({ content: "❌ Você não tem família.", flags: MessageFlags.Ephemeral });
     if (myFamily.members.length >= myFamily.maxMembers) {
-      return interaction.reply({ content: `❌ Sua família já atingiu **${myFamily.maxMembers}** membros.`, flags: MessageFlags.Ephemeral });
+      return interaction.followUp({ content: `❌ Sua família já atingiu **${myFamily.maxMembers}** membros.`, flags: MessageFlags.Ephemeral });
     }
 
     await familyStore.update(myFamily.id, () => ({ ...myFamily, members: [...myFamily.members, selectedUser.id] }));
@@ -622,7 +625,7 @@ module.exports = {
       if (member) await member.roles.add(myFamily.roleId).catch(() => {});
     }
 
-    await interaction.update({ content: `✅ **${selectedUser.username}** convidado!`, components: [] });
+    await interaction.editReply({ content: `✅ **${selectedUser.username}** convidado!`, components: [] });
 
     // DM de boas-vindas
     try {

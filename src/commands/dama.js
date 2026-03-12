@@ -430,25 +430,26 @@ module.exports = {
       const damaPermRoleId = interaction.fields.getTextInputValue("damaPermRoleId").trim();
       const vipBaseRoleId  = interaction.fields.getTextInputValue("vipBaseRoleId").trim() || null;
 
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
       const damaRole = await interaction.guild.roles.fetch(damaRoleId).catch(() => null);
       const permRole = await interaction.guild.roles.fetch(damaPermRoleId).catch(() => null);
 
-      if (!damaRole) return interaction.reply({ embeds: [createErrorEmbed(`Cargo de dama com ID \`${damaRoleId}\` não encontrado.`)], flags: MessageFlags.Ephemeral });
-      if (!permRole) return interaction.reply({ embeds: [createErrorEmbed(`Cargo de permissão com ID \`${damaPermRoleId}\` não encontrado.`)], flags: MessageFlags.Ephemeral });
+      if (!damaRole) return interaction.editReply({ embeds: [createErrorEmbed(`Cargo de dama com ID \`${damaRoleId}\` não encontrado.`)] });
+      if (!permRole) return interaction.editReply({ embeds: [createErrorEmbed(`Cargo de permissão com ID \`${damaPermRoleId}\` não encontrado.`)] });
 
       if (vipBaseRoleId) {
         const baseRole = await interaction.guild.roles.fetch(vipBaseRoleId).catch(() => null);
-        if (!baseRole) return interaction.reply({ embeds: [createErrorEmbed(`Cargo Base VIP com ID \`${vipBaseRoleId}\` não encontrado.`)], flags: MessageFlags.Ephemeral });
+        if (!baseRole) return interaction.editReply({ embeds: [createErrorEmbed(`Cargo Base VIP com ID \`${vipBaseRoleId}\` não encontrado.`)] });
       }
 
       await setGuildConfig(guildId, { damaRoleId, damaPermRoleId, vipBaseRoleId });
 
-      return interaction.reply({
+      return interaction.editReply({
         embeds: [createSuccessEmbed(
           `✅ Cargos definidos!\n\n🎭 Dama: <@&${damaRoleId}>\n🔑 Permissão: <@&${damaPermRoleId}>` +
           (vipBaseRoleId ? `\n🌐 Base VIP Global: <@&${vipBaseRoleId}>` : "")
         )],
-        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -457,20 +458,21 @@ module.exports = {
       const vipSepId = interaction.fields.getTextInputValue("vipRoleSeparatorId").trim()    || null;
       const famSepId = interaction.fields.getTextInputValue("familyRoleSeparatorId").trim() || null;
 
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
       for (const [label, id] of [["Separador VIP", vipSepId], ["Separador Família", famSepId]]) {
         if (id) {
           const role = await interaction.guild.roles.fetch(id).catch(() => null);
-          if (!role) return interaction.reply({ embeds: [createErrorEmbed(`${label}: cargo com ID \`${id}\` não encontrado.`)], flags: MessageFlags.Ephemeral });
+          if (!role) return interaction.editReply({ embeds: [createErrorEmbed(`${label}: cargo com ID \`${id}\` não encontrado.`)] });
         }
       }
 
       await setGuildConfig(guildId, { vipRoleSeparatorId: vipSepId, familyRoleSeparatorId: famSepId });
 
-      return interaction.reply({
+      return interaction.editReply({
         embeds: [createSuccessEmbed(
           `✅ Separadores atualizados!\n\n📌 VIP: ${vipSepId ? `<@&${vipSepId}>` : "—"}\n📌 Família: ${famSepId ? `<@&${famSepId}>` : "—"}`
         )],
-        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -484,15 +486,16 @@ module.exports = {
         return interaction.reply({ embeds: [createErrorEmbed("Número inválido. Insira um inteiro maior que 0.")], flags: MessageFlags.Ephemeral });
       }
 
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
       const config       = await getGuildConfig(guildId);
       const damaVipRoles = { ...(config?.damaVipRoles || {}) };
       damaVipRoles[roleId] = { maxDamas };
 
       await setGuildConfig(guildId, { damaVipRoles });
 
-      return interaction.reply({
+      return interaction.editReply({
         embeds: [createSuccessEmbed(`Cargo <@&${roleId}> agora pode ter **${maxDamas}** dama(s).`)],
-        flags: MessageFlags.Ephemeral,
       });
     }
   },

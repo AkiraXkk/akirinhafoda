@@ -664,6 +664,8 @@ module.exports = {
       const vipRoleSepId       = interaction.fields.getTextInputValue("vipRoleSeparatorId").trim() || null;
       const familyRoleSepId    = interaction.fields.getTextInputValue("familyRoleSeparatorId").trim() || null;
 
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
       // Valida os IDs que foram preenchidos
       for (const [label, id] of [
         ["Cargo Base VIP",   vipBaseRoleId],
@@ -674,7 +676,7 @@ module.exports = {
         if (id) {
           const role = await interaction.guild.roles.fetch(id).catch(() => null);
           if (!role) {
-            return interaction.reply({ content: `❌ ${label}: cargo com ID \`${id}\` não encontrado.`, flags: MessageFlags.Ephemeral });
+            return interaction.editReply({ content: `❌ ${label}: cargo com ID \`${id}\` não encontrado.` });
           }
         }
       }
@@ -688,7 +690,7 @@ module.exports = {
         separatorId: vipRoleSepId,
       });
 
-      return interaction.reply({
+      return interaction.editReply({
         embeds: [
           new EmbedBuilder()
             .setTitle("✅ Cargos Base atualizados")
@@ -700,7 +702,6 @@ module.exports = {
               { name: "📌 Sep. Família",     value: familyRoleSepId  ? `<@&${familyRoleSepId}>`  : "—", inline: true },
             ),
         ],
-        flags: MessageFlags.Ephemeral,
       });
     }
 

@@ -235,6 +235,8 @@ module.exports = {
       const requestTime = pendingResets.get(userId);
       if (!requestTime || Date.now() - requestTime > 60000) return interaction.reply({ content: "❌ Confirmação expirada.", flags: MessageFlags.Ephemeral });
 
+      await interaction.deferUpdate().catch(() => {});
+
       try {
         const levels = (await levelsStore.load()) || {};
         const resetCount = Object.keys(levels).length;
@@ -262,10 +264,10 @@ module.exports = {
         }
 
         pendingResets.delete(userId);
-        return interaction.update({ embeds: [createSuccessEmbed(`✅ **Reset concluído!**\n\n• **${resetCount}** usuários resetados para o nível **0**.\n• Cargos de nível removidos.`)], components: [] });
+        return interaction.editReply({ embeds: [createSuccessEmbed(`✅ **Reset concluído!**\n\n• **${resetCount}** usuários resetados para o nível **0**.\n• Cargos de nível removidos.`)], components: [] });
       } catch (error) {
         console.error("Erro no botão do leveladmin:", error);
-        return interaction.update({ embeds: [createErrorEmbed("Ocorreu um erro ao resetar o servidor.")], components: [] });
+        return interaction.editReply({ embeds: [createErrorEmbed("Ocorreu um erro ao resetar o servidor.")], components: [] });
       }
     }
 

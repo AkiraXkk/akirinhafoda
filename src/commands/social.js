@@ -193,6 +193,8 @@ module.exports = {
               return;
           }
 
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
           try {
               const postOwner = await interaction.client.users.fetch(postOwnerId);
 
@@ -204,10 +206,10 @@ module.exports = {
               });
 
               await postOwner.send({ embeds: [dmEmbed] });
-              await interaction.reply({ content: "Comentário enviado com sucesso! 📨", flags: MessageFlags.Ephemeral });
+              await interaction.editReply({ content: "Comentário enviado com sucesso! 📨" });
           } catch (error) {
               console.error("Erro ao enviar DM de comentário:", error);
-              await interaction.reply({ content: "Comentário registado, mas não consegui enviar DM ao autor (DM fechada ou utilizador não encontrado).", flags: MessageFlags.Ephemeral });
+              await interaction.editReply({ content: "Comentário registado, mas não consegui enviar DM ao autor (DM fechada ou utilizador não encontrado)." });
           }
       }
   }

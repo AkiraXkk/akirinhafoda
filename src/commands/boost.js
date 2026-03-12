@@ -241,25 +241,30 @@ module.exports = {
   async handleButton(interaction) {
     if (!interaction.customId.startsWith("boost_parceria_")) return;
     const searchId = interaction.customId.replace("boost_parceria_", "");
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
     const partners = await partnersStore.load();
     const pData = partners[searchId];
-    if (!pData) return interaction.reply({ content: "❌ Parceria não encontrada no sistema.", flags: MessageFlags.Ephemeral });
+    if (!pData) return interaction.editReply({ content: "❌ Parceria não encontrada no sistema." });
     return _processPartnerBump(interaction, searchId, pData);
   }
 };
 
 async function _processPartnerBump(interaction, searchId, pData) {
-  if (interaction.user.id !== pData.requesterId) return interaction.reply({ content: "❌ Apenas o representante registrado pode dar bump nesta parceria.", flags: MessageFlags.Ephemeral });
+  const replyFn = (opts) => interaction.replied || interaction.deferred ? interaction.editReply(opts) : interaction.reply(opts);
+
+  if (interaction.user.id !== pData.requesterId) return replyFn({ content: "❌ Apenas o representante registrado pode dar bump nesta parceria.", flags: MessageFlags.Ephemeral });
 
   const cooldownMs = 4 * 60 * 60 * 1000;
   const lastBump = pData.lastBump || 0;
   if (Date.now() - lastBump < cooldownMs) {
     const hours = Math.ceil((cooldownMs - (Date.now() - lastBump)) / 3600000);
-    return interaction.reply({ content: `⏳ Aguarde mais **${hours}h** para dar bump novamente nesta parceria.`, flags: MessageFlags.Ephemeral });
+    return replyFn({ content: `⏳ Aguarde mais **${hours}h** para dar bump novamente nesta parceria.`, flags: MessageFlags.Ephemeral });
   }
 
   const channel = interaction.client.channels.cache.get(pData.channelId);
-  if (!channel) return interaction.reply({ content: "❌ Canal de parceria não encontrado.", flags: MessageFlags.Ephemeral });
+  if (!channel) return replyFn({ content: "❌ Canal de parceria não encontrado.", flags: MessageFlags.Ephemeral });
 
   let oldMessage = null;
   if (pData.messageId) oldMessage = await channel.messages.fetch(pData.messageId).catch(() => null);
@@ -289,5 +294,5 @@ async function _processPartnerBump(interaction, searchId, pData) {
     return p;
   });
 
-  return interaction.reply({ embeds: [createSuccessEmbed("✅ **Bump da parceria realizado!**\nSua mensagem antiga foi apagada e a nova está no topo do canal de parcerias.")], flags: MessageFlags.Ephemeral });
+  return replyFn({ embeds: [createSuccessEmbed("✅ **Bump da parceria realizado!**\nSua mensagem antiga foi apagada e a nova está no topo do canal de parcerias.")], flags: MessageFlags.Ephemeral });
 }

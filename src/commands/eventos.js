@@ -389,6 +389,8 @@ module.exports = {
 
   async handleModal(interaction) {
     if (interaction.customId === "evento_submit") {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
       const titulo = interaction.fields.getTextInputValue("ev_titulo");
       const desc = interaction.fields.getTextInputValue("ev_desc");
       const data = interaction.fields.getTextInputValue("ev_data");
@@ -402,7 +404,7 @@ module.exports = {
 
       const canalAnuncio = interaction.guild.channels.cache.find(c => c.name.includes("avisos")) || interaction.channel;
       await canalAnuncio.send({ content: "@everyone Um novo evento vai começar!", embeds: [embedEvento] });
-      await interaction.reply({ content: `✅ Evento anunciado com sucesso em ${canalAnuncio}!`, flags: MessageFlags.Ephemeral });
+      await interaction.editReply({ content: `✅ Evento anunciado com sucesso em ${canalAnuncio}!` });
     }
   }
 };
