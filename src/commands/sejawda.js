@@ -414,12 +414,12 @@ module.exports = {
 
     // FECHAR TICKET — Mostra menu de motivos
     if (interaction.customId === "sejawda_close") {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
       const chats = await chatStore.load();
       const chat = chats[interaction.channelId];
 
-      if (!chat || chat.closedAt) return interaction.reply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")], flags: MessageFlags.Ephemeral });
-
-      const isGlobal = isGlobalStaff(interaction.member);
+      if (!chat || chat.closedAt) return interaction.editReply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")] });
 
       // Permissão para fechar: autor do ticket, staff que assumiu, ou ManageGuild
       const isAuthor = chat.userId === interaction.user.id;
@@ -427,11 +427,11 @@ module.exports = {
       const hasManageGuild = interaction.member.permissions.has("ManageGuild");
 
       if (!isAuthor && !isAssumer && !hasManageGuild) {
-        return interaction.reply({ embeds: [createErrorEmbed("Apenas o autor, o staff responsável ou um administrador pode fechar esta solicitação.")], flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ embeds: [createErrorEmbed("Apenas o autor, o staff responsável ou um administrador pode fechar esta solicitação.")] });
       }
 
       if (chat.tipo !== "migrado" && !chat.area) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você precisa escolher uma área no menu antes de finalizar a solicitação.")], flags: MessageFlags.Ephemeral });
+        return interaction.editReply({ embeds: [createErrorEmbed("Você precisa escolher uma área no menu antes de finalizar a solicitação.")] });
       }
 
       const motivoMenu = new StringSelectMenuBuilder()
@@ -444,24 +444,24 @@ module.exports = {
           new StringSelectMenuOptionBuilder().setLabel("Resolvido em Call").setValue("Resolvido em Call").setEmoji("📞")
         );
 
-      return interaction.reply({
+      return interaction.editReply({
         embeds: [createEmbed({ title: "🔒 Fechar Solicitação", description: "Selecione o motivo do fechamento abaixo:", color: 0xe74c3c })],
         components: [new ActionRowBuilder().addComponents(motivoMenu)],
-        flags: MessageFlags.Ephemeral
       });
     }
 
     // DELETAR TICKET PERMANENTEMENTE
     if (interaction.customId === "sejawda_delete") {
+      await interaction.deferReply().catch(() => {});
+
       const chats = await chatStore.load();
       const chat = chats[interaction.channelId];
 
-      if (!chat || chat.closedAt) return interaction.reply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")], flags: MessageFlags.Ephemeral });
+      if (!chat || chat.closedAt) return interaction.editReply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")] });
 
       const isGlobal = isGlobalStaff(interaction.member);
-      if (!isGlobal) return interaction.reply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de solicitações.")], flags: MessageFlags.Ephemeral });
+      if (!isGlobal) return interaction.editReply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de solicitações.")] });
 
-      await interaction.deferReply().catch(() => {});
       await interaction.editReply({ content: "💥 O canal será destruído em 5 segundos..." });
       setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     }
