@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder,
+  MessageFlags, } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
 
 // Conecta diretamente ao banco de dados de níveis que você já tem
@@ -41,13 +42,13 @@ module.exports = {
 
     // Proteção: o staff precisa colocar pelo menos 1 minuto ou 1 hora
     if (hours === 0 && minutes === 0) {
-      return interaction.reply({ content: "❌ Você precisa informar a quantidade de horas ou minutos para editar!", ephemeral: true });
+      return interaction.reply({ content: "❌ Você precisa informar a quantidade de horas ou minutos para editar!", flags: MessageFlags.Ephemeral });
     }
 
     // O bot converte as horas e minutos informados para milissegundos (que é como seu banco salva)
     const timeInMs = (hours * 60 * 60 * 1000) + (minutes * 60 * 1000);
 
-    await interaction.deferReply({ ephemeral: false });
+    await interaction.deferReply();
 
     // Atualiza o banco de dados
     await levelsStore.update(targetUser.id, (current) => {

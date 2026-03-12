@@ -4,7 +4,8 @@ const {
   StringSelectMenuBuilder, 
   StringSelectMenuOptionBuilder,
   ComponentType,
-  PermissionFlagsBits
+  PermissionFlagsBits,
+  MessageFlags,
 } = require("discord.js");
 const { createEmbed } = require("../embeds");
 
@@ -132,7 +133,7 @@ module.exports = {
 
     const row = new ActionRowBuilder().addComponents(selectMenu);
 
-    const msg = await interaction.reply({ embeds: [embedPrincipal], components: [row], fetchReply: true, ephemeral: true });
+    const msg = await interaction.reply({ embeds: [embedPrincipal], components: [row], fetchReply: true, flags: MessageFlags.Ephemeral });
 
     const collector = msg.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 120000 });
 
@@ -146,7 +147,7 @@ module.exports = {
                            executor.roles.cache.some(r => r.name === areaData.cargo || leadership.includes(r.name));
 
       if (!isAuthorized) {
-        return i.reply({ content: `❌ **Acesso Negado:** Você não faz parte da **${areaData.cargo}** e não possui nível de Liderança para visualizar este manual.`, ephemeral: true });
+        return i.reply({ content: `❌ **Acesso Negado:** Você não faz parte da **${areaData.cargo}** e não possui nível de Liderança para visualizar este manual.`, flags: MessageFlags.Ephemeral });
       }
 
       const embedAjuda = createEmbed({
@@ -157,7 +158,7 @@ module.exports = {
         timestamp: true
       });
 
-      await i.reply({ embeds: [embedAjuda], ephemeral: true });
+      await i.reply({ embeds: [embedAjuda], flags: MessageFlags.Ephemeral });
     });
 
     collector.on("end", () => {

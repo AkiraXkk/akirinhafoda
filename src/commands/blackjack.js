@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ComponentType } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ComponentType,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
 const SUITS = ["♠", "♥", "♦", "♣"];
@@ -110,7 +111,7 @@ module.exports = {
         await interaction.reply({
             embeds: [mainEmbed],
             components: [rowMain, rowQuick],
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         const response = await interaction.fetchReply();
 
@@ -120,12 +121,12 @@ module.exports = {
         });
 
         collector.on('collect', async i => {
-            if (i.user.id !== userId) return i.reply({ content: "Não é seu jogo!", ephemeral: true });
+            if (i.user.id !== userId) return i.reply({ content: "Não é seu jogo!", flags: MessageFlags.Ephemeral });
 
             if (i.customId === 'bj_rules_btn') {
                 await i.reply({ 
                     content: "**Regras:**\n1. Ás vale 1 ou 11.\n2. Figuras (J,Q,K) valem 10.\n3. Dealer para no 17.\n4. Blackjack paga 3:2.\n5. Dobrar só na primeira mão.", 
-                    ephemeral: true 
+                    flags: MessageFlags.Ephemeral 
                 });
             }
 
@@ -163,7 +164,7 @@ module.exports = {
 
                     const value = parseInt(submission.fields.getTextInputValue('bj_bet_value'));
                     if (isNaN(value) || value <= 0) {
-                        return submission.reply({ content: "Valor inválido!", ephemeral: true });
+                        return submission.reply({ content: "Valor inválido!", flags: MessageFlags.Ephemeral });
                     }
 
                     collector.stop("started");
@@ -171,7 +172,7 @@ module.exports = {
 
                 } catch (e) {
                     if (!i.replied && !i.deferred) {
-                        await i.followUp({ content: "Tempo esgotado para enviar a aposta. Clique em **Jogar Agora** novamente.", ephemeral: true }).catch(() => {});
+                        await i.followUp({ content: "Tempo esgotado para enviar a aposta. Clique em **Jogar Agora** novamente.", flags: MessageFlags.Ephemeral }).catch(() => {});
                     }
                 }
             }
@@ -183,7 +184,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
     const originalBet = bet;
     const balance = await eco.getBalance(guildId, userId);
     if ((balance.coins || 0) < bet) {
-        const insufficient = { embeds: [createErrorEmbed(`Saldo insuficiente! Você tem **${balance.coins || 0}** 🪙`)], ephemeral: true };
+        const insufficient = { embeds: [createErrorEmbed(`Saldo insuficiente! Você tem **${balance.coins || 0}** 🪙`)], flags: MessageFlags.Ephemeral };
         if (interaction.replied || interaction.deferred) return interaction.followUp(insufficient).catch(() => {});
         return interaction.reply(insufficient);
     }
@@ -199,7 +200,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
         if (interaction.isButton()) {
             if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
         } else if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: "🎲 Embaralhando cartas...", ephemeral: true });
+            await interaction.reply({ content: "🎲 Embaralhando cartas...", flags: MessageFlags.Ephemeral });
         }
 
         let deck = createDeck();
@@ -304,7 +305,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
             content: null,
             embeds: [getGameEmbed()],
             components: getButtons(true),
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
 
         const collector = msg.createMessageComponentCollector({
@@ -315,7 +316,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
 
         collector.on('collect', async i => {
         if (actionLock) {
-            return i.reply({ content: "Aguarde a ação atual finalizar.", ephemeral: true });
+            return i.reply({ content: "Aguarde a ação atual finalizar.", flags: MessageFlags.Ephemeral });
         }
         actionLock = true;
         try {
@@ -343,7 +344,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
         if (i.customId === 'bj_double') {
             const currentBal = await eco.getBalance(guildId, userId);
             if ((currentBal.coins || 0) < bet) {
-                return i.reply({ content: "Saldo insuficiente para dobrar!", ephemeral: true });
+                return i.reply({ content: "Saldo insuficiente para dobrar!", flags: MessageFlags.Ephemeral });
             }
 
             await eco.removeCoins(guildId, userId, bet);
@@ -458,7 +459,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
         if (interaction.replied || interaction.deferred) {
             await interaction.editReply({ content: "Ocorreu um erro na mesa. Sua aposta foi devolvida.", embeds: [], components: [] }).catch(() => {});
         } else {
-            await interaction.reply({ content: "Ocorreu um erro na mesa. Sua aposta foi devolvida.", ephemeral: true }).catch(() => {});
+            await interaction.reply({ content: "Ocorreu um erro na mesa. Sua aposta foi devolvida.", flags: MessageFlags.Ephemeral }).catch(() => {});
         }
     }
 }

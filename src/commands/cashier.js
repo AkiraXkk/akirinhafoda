@@ -7,6 +7,7 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
+  MessageFlags,
 } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
@@ -124,7 +125,7 @@ module.exports = {
     const guildId = interaction.guildId;
     const userId = interaction.user.id;
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const guildConfig = await getGuildConfig(guildId).catch(() => ({}));
     const rate = getInterestRate(interaction.member, guildConfig);
@@ -199,7 +200,7 @@ module.exports = {
           }
 
           if (isNaN(amount) || amount <= 0) {
-            await submission.followUp({ content: "❌ Valor inválido.", ephemeral: true }).catch(() => {});
+            await submission.followUp({ content: "❌ Valor inválido.", flags: MessageFlags.Ephemeral }).catch(() => {});
             return;
           }
 
@@ -208,7 +209,7 @@ module.exports = {
 
           if (isDeposit) {
             if ((walletNow.coins || 0) < amount) {
-              await submission.followUp({ content: `❌ Saldo insuficiente! Você tem **${walletNow.coins || 0}** 🪙 na carteira.`, ephemeral: true }).catch(() => {});
+              await submission.followUp({ content: `❌ Saldo insuficiente! Você tem **${walletNow.coins || 0}** 🪙 na carteira.`, flags: MessageFlags.Ephemeral }).catch(() => {});
               return;
             }
             await eco.removeCoins(guildId, userId, amount);
@@ -220,7 +221,7 @@ module.exports = {
             resultMsg = `✅ **${amount}** 🪙 depositados com sucesso!`;
           } else {
             if ((bankNow.balance || 0) < amount) {
-              await submission.followUp({ content: `❌ Saldo insuficiente no banco! Você tem **${bankNow.balance || 0}** 🪙.`, ephemeral: true }).catch(() => {});
+              await submission.followUp({ content: `❌ Saldo insuficiente no banco! Você tem **${bankNow.balance || 0}** 🪙.`, flags: MessageFlags.Ephemeral }).catch(() => {});
               return;
             }
             await bankStore.update(key, (cur) => {

@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder,
+  MessageFlags, } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
 const { createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
@@ -34,7 +35,7 @@ module.exports = {
   async execute(interaction) {
     const ownerId = process.env.OWNER_ID;
     if (ownerId && interaction.user.id !== ownerId) {
-      return interaction.reply({ embeds: [createErrorEmbed("Apenas o dono do bot pode usar isso.")], ephemeral: true });
+      return interaction.reply({ embeds: [createErrorEmbed("Apenas o dono do bot pode usar isso.")], flags: MessageFlags.Ephemeral });
     }
 
     const sub = interaction.options.getSubcommand();
@@ -61,14 +62,14 @@ module.exports = {
           presenceService.startMaintenanceLoop(interaction.client, data);
       }
 
-      return interaction.reply({ embeds: [createSuccessEmbed("Modo manutenção ativo. A cada 2 min a mensagem será atualizada.")], ephemeral: true });
+      return interaction.reply({ embeds: [createSuccessEmbed("Modo manutenção ativo. A cada 2 min a mensagem será atualizada.")], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "off") {
       const config = await maintenanceStore.load();
       const current = config["global"];
 
-      if (!current?.enabled) return interaction.reply({ embeds: [createErrorEmbed("Não está em manutenção.")], ephemeral: true });
+      if (!current?.enabled) return interaction.reply({ embeds: [createErrorEmbed("Não está em manutenção.")], flags: MessageFlags.Ephemeral });
 
       // Para o loop
       if (presenceService?.stopMaintenanceLoop) presenceService.stopMaintenanceLoop();
@@ -88,7 +89,7 @@ module.exports = {
       }
 
       await maintenanceStore.update("global", () => ({ enabled: false }));
-      return interaction.reply({ embeds: [createSuccessEmbed("Modo manutenção desativado.")], ephemeral: true });
+      return interaction.reply({ embeds: [createSuccessEmbed("Modo manutenção desativado.")], flags: MessageFlags.Ephemeral });
     }
   }
 };

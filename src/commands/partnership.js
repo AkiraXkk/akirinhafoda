@@ -10,7 +10,8 @@ const {
   ChannelSelectMenuBuilder, 
   RoleSelectMenuBuilder, 
   ChannelType,
-  PermissionFlagsBits 
+  PermissionFlagsBits,
+  MessageFlags, 
 } = require("discord.js");
 const { createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
@@ -66,7 +67,7 @@ module.exports = {
     // SUBCOMANDO: MANUAL (POSTAGEM DIRETA STAFF)
     // ==========================================
     if (sub === "manual") {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       // Verificação de segurança (Apenas os 4 cargos ou Admin)
       const temPermissao = interaction.member.roles.cache.some(role => CARGOS_PERMITIDOS.includes(role.id)) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
@@ -186,7 +187,7 @@ module.exports = {
     // SUBCOMANDO: SOLICITAR (Sistema Normal)
     // ==========================================
     if (sub === "solicitar") {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const guildConfig = await getGuildConfig(guildId) || {};
       const pConfig = guildConfig.partnership || { enabledForAll: false };
@@ -263,7 +264,7 @@ module.exports = {
     // SUBCOMANDO: LIST (Visão Pessoal do Membro)
     // ==========================================
     if (sub === "list") {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const allPartners = await partnersStore.load();
       const myPartners = Object.values(allPartners).filter(p => p.status === "accepted" && p.requesterId === interaction.user.id);
@@ -324,7 +325,7 @@ module.exports = {
             return interaction.editReply({ content: "Não havia solicitações pendentes para recusar.", components: [], embeds: [] }).catch(() => null);
           }
         } catch (error) {
-          return interaction.followUp({ content: "Erro ao processar a recusa em massa.", ephemeral: true }).catch(() => null);
+          return interaction.followUp({ content: "Erro ao processar a recusa em massa.", flags: MessageFlags.Ephemeral }).catch(() => null);
         }
       }
       return; // Evita cair na lógica de parceria individual abaixo
@@ -337,7 +338,7 @@ module.exports = {
     const partners = await partnersStore.load();
     const data = partners[id];
 
-    if (!data || data.status !== "pending") return interaction.reply({ content: "Pedido expirado ou já processado.", ephemeral: true });
+    if (!data || data.status !== "pending") return interaction.reply({ content: "Pedido expirado ou já processado.", flags: MessageFlags.Ephemeral });
 
     if (action === "reject") {
       const modal = new ModalBuilder().setCustomId(`partnership_modal_reject_${id}`).setTitle("Recusar Parceria");
@@ -348,7 +349,7 @@ module.exports = {
 
     if (action === "approve") {
       const rowChannel = new ActionRowBuilder().addComponents(new ChannelSelectMenuBuilder().setCustomId(`sel_chan_${id}`).setPlaceholder("Selecione o canal de postagem").addChannelTypes(ChannelType.GuildText));
-      const promptMsg = await interaction.reply({ content: "Selecione o canal para postar a parceria:", components: [rowChannel], ephemeral: true, fetchReply: true });
+      const promptMsg = await interaction.reply({ content: "Selecione o canal para postar a parceria:", components: [rowChannel], flags: MessageFlags.Ephemeral, fetchReply: true });
 
       try {
         const chanInter = await promptMsg.awaitMessageComponent({ filter: i => i.user.id === interaction.user.id, time: 60000 });

@@ -1,4 +1,5 @@
-const { Events } = require("discord.js"); // 🚨 Corrigido o 'Const' maiúsculo para 'const' minúsculo
+const { Events,
+  MessageFlags, } = require("discord.js"); // 🚨 Corrigido o 'Const' maiúsculo para 'const' minúsculo
 const { logger } = require("../logger");
 
 module.exports = {
@@ -16,7 +17,7 @@ module.exports = {
         await command.execute(interaction);
       } catch (error) {
         logger.error({ err: error, command: interaction.commandName }, "Erro no comando slash");
-        const errorPayload = { content: "Ocorreu um erro ao executar este comando.", ephemeral: true };
+        const errorPayload = { content: "Ocorreu um erro ao executar este comando.", flags: MessageFlags.Ephemeral };
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp(errorPayload).catch(() => {});
         } else {

@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { SlashCommandBuilder, AttachmentBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
 
@@ -226,19 +227,19 @@ module.exports = {
       const userId = interaction.user.id;
       const { economy: eco } = interaction.client.services;
 
-      if (!eco) return interaction.reply({ embeds: [createErrorEmbed("Serviço de economia indisponível!")], ephemeral: true });
+      if (!eco) return interaction.reply({ embeds: [createErrorEmbed("Serviço de economia indisponível!")], flags: MessageFlags.Ephemeral });
 
       const card = CARDS_CONFIG[cardId];
       const userCards = await getUserCards(userId);
 
       if (userCards.owned.includes(cardId)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você já possui este card!")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você já possui este card!")], flags: MessageFlags.Ephemeral });
       }
 
       if (card.price > 0) {
         const balance = await eco.getBalance(interaction.guildId, userId);
         if (balance.coins < card.price) {
-          return interaction.reply({ embeds: [createErrorEmbed(`Você precisa de **${card.price} moedas**!\nSaldo: **${balance.coins} moedas**`)], ephemeral: true });
+          return interaction.reply({ embeds: [createErrorEmbed(`Você precisa de **${card.price} moedas**!\nSaldo: **${balance.coins} moedas**`)], flags: MessageFlags.Ephemeral });
         }
         await eco.removeCoins(interaction.guildId, userId, card.price);
       }
@@ -249,7 +250,7 @@ module.exports = {
 
       return interaction.reply({ 
         embeds: [createSuccessEmbed(`Você comprou o card **${card.name}**!\n${card.price > 0 ? `💸 Foram debitadas ${card.price} moedas.` : '🆓 Card gratuito!'}\nUse \`/rank view\` para ver!`)],
-        ephemeral: true 
+        flags: MessageFlags.Ephemeral 
       });
     } else {
       const page = interaction.options.getInteger("pagina") || 1;
@@ -257,7 +258,7 @@ module.exports = {
 
       try {
         const imagemBuffer = await gerarImagemLeaderboard(interaction, page);
-        if (!imagemBuffer) return interaction.editReply({ embeds: [createErrorEmbed("Nenhum usuário encontrado nesta página.")], ephemeral: true });
+        if (!imagemBuffer) return interaction.editReply({ embeds: [createErrorEmbed("Nenhum usuário encontrado nesta página.")], flags: MessageFlags.Ephemeral });
 
         const levels = await levelsStore.load();
         const totalPages = Math.ceil(Object.entries(levels).filter(([id, data]) => (data.totalXp || 0) >= 10).length / 5) || 1;
@@ -271,7 +272,7 @@ module.exports = {
         const attachment = new AttachmentBuilder(imagemBuffer, { name: "leaderboard.png" });
         return interaction.editReply({ files: [attachment], components: [row] });
       } catch (error) {
-        return interaction.editReply({ content: "Erro ao gerar leaderboard.", ephemeral: true });
+        return interaction.editReply({ content: "Erro ao gerar leaderboard.", flags: MessageFlags.Ephemeral });
       }
     }
   },
@@ -280,7 +281,7 @@ module.exports = {
     const customId = interaction.customId;
 
     if (customId === "leaderboard_shop") {
-      return interaction.reply({ embeds: [createShopEmbed()], ephemeral: true });
+      return interaction.reply({ embeds: [createShopEmbed()], flags: MessageFlags.Ephemeral });
     }
 
     if (customId.startsWith("leaderboard_prev_") || customId.startsWith("leaderboard_next_")) {
@@ -292,7 +293,7 @@ module.exports = {
 
       try {
         const imagemBuffer = await gerarImagemLeaderboard(interaction, page);
-        if (!imagemBuffer) return interaction.editReply({ embeds: [createErrorEmbed("Nenhum usuário encontrado.")], ephemeral: true, content: "" });
+        if (!imagemBuffer) return interaction.editReply({ embeds: [createErrorEmbed("Nenhum usuário encontrado.")], flags: MessageFlags.Ephemeral, content: "" });
 
         const levels = await levelsStore.load();
         const totalPages = Math.ceil(Object.entries(levels).filter(([id, data]) => (data.totalXp || 0) >= 10).length / 5) || 1;
@@ -306,7 +307,7 @@ module.exports = {
         const attachment = new AttachmentBuilder(imagemBuffer, { name: "leaderboard.png" });
         return interaction.editReply({ files: [attachment], components: [row], content: "" });
       } catch (error) {
-        return interaction.editReply({ content: "Erro ao carregar página.", ephemeral: true });
+        return interaction.editReply({ content: "Erro ao carregar página.", flags: MessageFlags.Ephemeral });
       }
     }
   }

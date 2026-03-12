@@ -1,4 +1,5 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed } = require("../embeds");
 const { logger } = require("../logger");
 
@@ -32,7 +33,7 @@ module.exports = {
         guildAfk.delete(userId);
         return interaction.reply({
           embeds: [createSuccessEmbed("Seu status de AFK foi removido. Bem-vindo de volta!", interaction.user)],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -50,7 +51,7 @@ module.exports = {
       return interaction.reply({ embeds: [embed] });
     } catch (error) {
       logger.error({ err: error, command: "afk" }, "Erro no comando /afk");
-      const msg = { content: "❌ Ocorreu um erro ao definir seu AFK.", ephemeral: true };
+      const msg = { content: "❌ Ocorreu um erro ao definir seu AFK.", flags: MessageFlags.Ephemeral };
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(msg).catch(() => {});
       } else {

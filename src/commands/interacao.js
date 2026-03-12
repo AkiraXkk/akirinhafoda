@@ -1,4 +1,5 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder,
+  MessageFlags, } = require("discord.js");
 const { createEmbed } = require("../embeds");
 const { logger } = require("../logger");
 
@@ -128,7 +129,7 @@ module.exports = {
       const interacaoData = INTERACOES[sub];
 
       if (!interacaoData) {
-        return interaction.reply({ content: "❌ Interação não encontrada.", ephemeral: true });
+        return interaction.reply({ content: "❌ Interação não encontrada.", flags: MessageFlags.Ephemeral });
       }
 
       const isSelf = target.id === interaction.user.id;
@@ -153,7 +154,7 @@ module.exports = {
       });
     } catch (error) {
       logger.error({ err: error, command: "interacao" }, "Erro no comando /interacao");
-      const msg = { content: "❌ Ocorreu um erro na interação.", ephemeral: true };
+      const msg = { content: "❌ Ocorreu um erro na interação.", flags: MessageFlags.Ephemeral };
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(msg).catch(() => {});
       } else {

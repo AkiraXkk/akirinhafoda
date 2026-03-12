@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
 function parseCustomId(customId) {
@@ -63,7 +64,7 @@ async function renderCatalogPage({ interaction, shopService, guildId, page = 0 }
     payload: {
       embeds: [embed],
       components: [new ActionRowBuilder().addComponents(menu), nav],
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     },
   };
 }
@@ -102,7 +103,7 @@ module.exports = {
     if (sub === "vip") {
       const tiers = await vipConfig.getGuildTiers(guildId);
       if (!tiers || Object.keys(tiers).length === 0) {
-        return interaction.reply({ embeds: [createErrorEmbed("Não há planos VIP disponíveis neste servidor.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Não há planos VIP disponíveis neste servidor.")], flags: MessageFlags.Ephemeral });
       }
 
       const tierEntries = [];
@@ -112,7 +113,7 @@ module.exports = {
       }
 
       if (tierEntries.length === 0) {
-        return interaction.reply({ embeds: [createErrorEmbed("Nenhum VIP configurado na loja.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Nenhum VIP configurado na loja.")], flags: MessageFlags.Ephemeral });
       }
 
       const menu = new StringSelectMenuBuilder()
@@ -123,12 +124,12 @@ module.exports = {
       return interaction.reply({
         embeds: [createEmbed({ title: "💎 Planos VIP", description: "Selecione no menu abaixo.", color: 0x9b59b6 })],
         components: [new ActionRowBuilder().addComponents(menu)],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
     if (sub === "catalog") {
-      if (!shopService) return interaction.reply({ embeds: [createErrorEmbed("Serviço de loja indisponível.")], ephemeral: true });
+      if (!shopService) return interaction.reply({ embeds: [createErrorEmbed("Serviço de loja indisponível.")], flags: MessageFlags.Ephemeral });
       const rendered = await renderCatalogPage({ interaction, shopService, guildId, page: 0 });
       return interaction.reply(rendered.payload);
     }
@@ -139,16 +140,16 @@ module.exports = {
       const catalogId = interaction.options.getString("id");
 
       if (item === "catalog") {
-        if (!catalogId) return interaction.reply({ embeds: [createErrorEmbed("Você precisa informar o `id` do item do catálogo.")], ephemeral: true });
+        if (!catalogId) return interaction.reply({ embeds: [createErrorEmbed("Você precisa informar o `id` do item do catálogo.")], flags: MessageFlags.Ephemeral });
 
         const catalogItem = await shopService.getItem(guildId, catalogId);
-        if (!catalogItem || catalogItem.enabled === false) return interaction.reply({ embeds: [createErrorEmbed("Item não encontrado ou desativado.")], ephemeral: true });
+        if (!catalogItem || catalogItem.enabled === false) return interaction.reply({ embeds: [createErrorEmbed("Item não encontrado ou desativado.")], flags: MessageFlags.Ephemeral });
 
         const total = catalogItem.priceCoins * quantity;
         const balance = await economyService.getBalance(guildId, userId);
         
         if ((balance.coins || 0) < total) {
-            return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Você precisa de **${total} 🪙** e tem **${balance.coins || 0} 🪙**.`)], ephemeral: true });
+            return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Você precisa de **${total} 🪙** e tem **${balance.coins || 0} 🪙**.`)], flags: MessageFlags.Ephemeral });
         }
 
         await economyService.removeCoins(guildId, userId, total);
@@ -163,7 +164,7 @@ module.exports = {
                 if (!uc.owned.includes(catalogItem.id)) uc.owned.push(catalogItem.id);
                 return uc;
             });
-            return interaction.reply({ embeds: [createSuccessEmbed(`Você comprou o card **${catalogItem.name || catalogItem.id}** por **${total} 🪙**! Equipe usando \`/rank cards\`.`)], ephemeral: true });
+            return interaction.reply({ embeds: [createSuccessEmbed(`Você comprou o card **${catalogItem.name || catalogItem.id}** por **${total} 🪙**! Equipe usando \`/rank cards\`.`)], flags: MessageFlags.Ephemeral });
         }
 
         // CARGOS TEMPORÁRIOS E CANAIS
@@ -172,32 +173,32 @@ module.exports = {
         const expiresAt = durationDays > 0 ? Date.now() + (durationDays * 24 * 60 * 60 * 1000) : null;
 
         if (catalogItem.type === "temporary_role") {
-          if (!catalogItem.roleId) return interaction.reply({ embeds: [createErrorEmbed("Item inválido (roleId ausente).")], ephemeral: true });
+          if (!catalogItem.roleId) return interaction.reply({ embeds: [createErrorEmbed("Item inválido (roleId ausente).")], flags: MessageFlags.Ephemeral });
           await member.roles.add(catalogItem.roleId).catch(() => {});
           if (expiresAt) {
             await shopService.registerGrant(guildId, { type: "temporary_role", userId, roleId: catalogItem.roleId, itemId: catalogItem.id, quantity, expiresAt });
           }
-          return interaction.reply({ embeds: [createSuccessEmbed(`Você comprou o cargo **${catalogItem.id}** por **${total} 🪙**.` )], ephemeral: true });
+          return interaction.reply({ embeds: [createSuccessEmbed(`Você comprou o cargo **${catalogItem.id}** por **${total} 🪙**.` )], flags: MessageFlags.Ephemeral });
         }
 
         if (catalogItem.type === "channel_access") {
-          if (!catalogItem.channelId) return interaction.reply({ embeds: [createErrorEmbed("Item inválido (channelId ausente).")], ephemeral: true });
+          if (!catalogItem.channelId) return interaction.reply({ embeds: [createErrorEmbed("Item inválido (channelId ausente).")], flags: MessageFlags.Ephemeral });
           const ch = await interaction.guild.channels.fetch(catalogItem.channelId).catch(() => null);
-          if (!ch) return interaction.reply({ embeds: [createErrorEmbed("Canal do item não encontrado.")], ephemeral: true });
+          if (!ch) return interaction.reply({ embeds: [createErrorEmbed("Canal do item não encontrado.")], flags: MessageFlags.Ephemeral });
           
           await ch.permissionOverwrites.edit(userId, { ViewChannel: true }).catch(() => {});
           if (expiresAt) {
             await shopService.registerGrant(guildId, { type: "channel_access", userId, channelId: catalogItem.channelId, itemId: catalogItem.id, quantity, expiresAt });
           }
-          return interaction.reply({ embeds: [createSuccessEmbed(`Acesso ao canal concedido pelo item **${catalogItem.id}** por **${total} 🪙**.` )], ephemeral: true });
+          return interaction.reply({ embeds: [createSuccessEmbed(`Acesso ao canal concedido pelo item **${catalogItem.id}** por **${total} 🪙**.` )], flags: MessageFlags.Ephemeral });
         }
 
-        return interaction.reply({ embeds: [createErrorEmbed("Tipo de item ainda não suportado no shop core.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Tipo de item ainda não suportado no shop core.")], flags: MessageFlags.Ephemeral });
       }
 
       if (item === "vip_days") {
         const tiers = await vipConfig.getGuildTiers(guildId);
-        if (!tiers || Object.keys(tiers).length === 0) return interaction.reply({ embeds: [createErrorEmbed("Não há planos VIP disponíveis neste servidor.")], ephemeral: true });
+        if (!tiers || Object.keys(tiers).length === 0) return interaction.reply({ embeds: [createErrorEmbed("Não há planos VIP disponíveis neste servidor.")], flags: MessageFlags.Ephemeral });
 
         const tierEntries = [];
         for (const tierId of Object.keys(tiers)) {
@@ -205,7 +206,7 @@ module.exports = {
           if (tier && tier.shop_enabled !== false && Number.isFinite(tier.shop_price_per_day) && tier.shop_price_per_day > 0) tierEntries.push(tier);
         }
 
-        if (tierEntries.length === 0) return interaction.reply({ embeds: [createErrorEmbed("Nenhum Tier com compra por dia configurado.")], ephemeral: true });
+        if (tierEntries.length === 0) return interaction.reply({ embeds: [createErrorEmbed("Nenhum Tier com compra por dia configurado.")], flags: MessageFlags.Ephemeral });
 
         const menu = new StringSelectMenuBuilder()
           .setCustomId(`shop_vip_days_${guildId}_${quantity}`)
@@ -215,44 +216,44 @@ module.exports = {
         return interaction.reply({
           embeds: [createEmbed({ title: "💳 Comprar VIP por dias", description: `Selecione o plano VIP desejado para **${quantity}** dia(s).`, color: 0x3498db })],
           components: [new ActionRowBuilder().addComponents(menu)],
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
 
       if (item === "role_color") {
         const cost = quantity * 5000;
         const balance = await economyService.getBalance(guildId, userId);
-        if (balance.coins < cost) return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Precisa de **${cost} 🪙**.` )], ephemeral: true });
+        if (balance.coins < cost) return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Precisa de **${cost} 🪙**.` )], flags: MessageFlags.Ephemeral });
         await economyService.removeCoins(guildId, userId, cost);
-        return interaction.reply({ embeds: [createSuccessEmbed(`Você comprou **${quantity}** mudança(s) de cor de cargo! Use \`/vip panel\`.`)], ephemeral: true });
+        return interaction.reply({ embeds: [createSuccessEmbed(`Você comprou **${quantity}** mudança(s) de cor de cargo! Use \`/vip panel\`.`)], flags: MessageFlags.Ephemeral });
       }
 
       if (item === "custom_name") {
         const cost = quantity * 10000;
         const balance = await economyService.getBalance(guildId, userId);
-        if (balance.coins < cost) return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Precisa de **${cost} 🪙**.` )], ephemeral: true });
+        if (balance.coins < cost) return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Precisa de **${cost} 🪙**.` )], flags: MessageFlags.Ephemeral });
         await economyService.removeCoins(guildId, userId, cost);
-        return interaction.reply({ embeds: [createSuccessEmbed(`Você comprou **${quantity}** alteração(ões) de nome! Use \`/vip panel\`.`)], ephemeral: true });
+        return interaction.reply({ embeds: [createSuccessEmbed(`Você comprou **${quantity}** alteração(ões) de nome! Use \`/vip panel\`.`)], flags: MessageFlags.Ephemeral });
       }
 
-      return interaction.reply({ embeds: [createErrorEmbed("Item não encontrado.")], ephemeral: true });
+      return interaction.reply({ embeds: [createErrorEmbed("Item não encontrado.")], flags: MessageFlags.Ephemeral });
     }
   },
   async handleSelectMenu(interaction) {
     if (!interaction.customId.startsWith("shop_")) return;
-    if (!interaction.inGuild()) return interaction.reply({ embeds: [createErrorEmbed("Use este menu em um servidor.")], ephemeral: true });
+    if (!interaction.inGuild()) return interaction.reply({ embeds: [createErrorEmbed("Use este menu em um servidor.")], flags: MessageFlags.Ephemeral });
 
     // LÓGICA DO MODAL (CATÁLOGO)
     if (interaction.customId.startsWith("shop_catalog_select_")) {
       const parts = parseCustomId(interaction.customId);
       const guildIdFromId = parts[3];
-      if (interaction.guildId !== guildIdFromId) return interaction.reply({ embeds: [createErrorEmbed("Este menu pertence a outro servidor.")], ephemeral: true });
+      if (interaction.guildId !== guildIdFromId) return interaction.reply({ embeds: [createErrorEmbed("Este menu pertence a outro servidor.")], flags: MessageFlags.Ephemeral });
       
       const itemId = interaction.values?.[0];
       const shopService = interaction.client.services.shop;
       
       const item = await shopService.getItem(interaction.guildId, itemId);
-      if (!item || item.enabled === false) return interaction.reply({ embeds: [createErrorEmbed("Item inválido ou desativado.")], ephemeral: true });
+      if (!item || item.enabled === false) return interaction.reply({ embeds: [createErrorEmbed("Item inválido ou desativado.")], flags: MessageFlags.Ephemeral });
 
       const modal = new ModalBuilder()
         .setCustomId(`shop_catalog_buy_${interaction.guildId}_${item.id}`)
@@ -287,7 +288,7 @@ module.exports = {
       
       // Checa saldo
       if ((balance.coins || 0) < totalCost) {
-          return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Você precisa de **${totalCost} 🪙** mas tem apenas **${balance.coins || 0} 🪙**.`)], ephemeral: true });
+          return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Você precisa de **${totalCost} 🪙** mas tem apenas **${balance.coins || 0} 🪙**.`)], flags: MessageFlags.Ephemeral });
       }
       
       // Desconta as moedas
@@ -315,9 +316,9 @@ module.exports = {
           if (member) await member.roles.add(tier.roleId).catch(() => {});
       }
 
-      return interaction.reply({ embeds: [createSuccessEmbed(`🎉 VIP **${tier.name || tier.id}** comprado por **${quantity} dia(s)** com sucesso!\n\n💸 Foram debitadas **${totalCost} 🪙** e seus benefícios já estão ativos.`)], ephemeral: true });
+      return interaction.reply({ embeds: [createSuccessEmbed(`🎉 VIP **${tier.name || tier.id}** comprado por **${quantity} dia(s)** com sucesso!\n\n💸 Foram debitadas **${totalCost} 🪙** e seus benefícios já estão ativos.`)], flags: MessageFlags.Ephemeral });
     }
 
-    return interaction.reply({ content: "Menu registrado.", ephemeral: true });
+    return interaction.reply({ content: "Menu registrado.", flags: MessageFlags.Ephemeral });
   }
 };

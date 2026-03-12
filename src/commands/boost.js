@@ -1,5 +1,6 @@
 const {
   SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType,
+  MessageFlags,
 } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
@@ -70,18 +71,18 @@ module.exports = {
 
     if (group === "premium") {
       if (sub === "promover") {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores podem promover o servidor!")], ephemeral: true });
+        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores podem promover o servidor!")], flags: MessageFlags.Ephemeral });
         const message = interaction.options.getString("mensagem");
         const duration = interaction.options.getInteger("duracao");
         const boosts = await boostStore.load();
         const existingBoost = Object.values(boosts).find(b => b.guildId === guildId && b.status === "active");
-        if (existingBoost) return interaction.reply({ embeds: [createErrorEmbed("Seu servidor já está sendo promovido!")], ephemeral: true });
+        if (existingBoost) return interaction.reply({ embeds: [createErrorEmbed("Seu servidor já está sendo promovido!")], flags: MessageFlags.Ephemeral });
 
         const userLastBoost = Object.values(boosts).filter(b => b.requesterId === userId).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
         if (userLastBoost) {
           const timeSinceLastBoost = Date.now() - new Date(userLastBoost.createdAt).getTime();
           const cooldownTime = 24 * 60 * 60 * 1000;
-          if (timeSinceLastBoost < cooldownTime) return interaction.reply({ embeds: [createErrorEmbed(`Aguarde ${Math.ceil((cooldownTime - timeSinceLastBoost) / 3600000)} horas para promover novamente!`)], ephemeral: true });
+          if (timeSinceLastBoost < cooldownTime) return interaction.reply({ embeds: [createErrorEmbed(`Aguarde ${Math.ceil((cooldownTime - timeSinceLastBoost) / 3600000)} horas para promover novamente!`)], flags: MessageFlags.Ephemeral });
         }
         const boostId = `${guildId}_${Date.now()}`;
         const expiresAt = new Date(Date.now() + (duration * 60 * 60 * 1000));
@@ -92,17 +93,17 @@ module.exports = {
       if (sub === "status") {
         const boosts = await boostStore.load();
         const activeBoost = Object.values(boosts).find(b => b.guildId === guildId && b.status === "active");
-        if (!activeBoost) return interaction.reply({ embeds: [createErrorEmbed("Seu servidor não está sendo promovido no momento.")], ephemeral: true });
+        if (!activeBoost) return interaction.reply({ embeds: [createErrorEmbed("Seu servidor não está sendo promovido no momento.")], flags: MessageFlags.Ephemeral });
         const timeRemaining = Math.max(0, new Date(activeBoost.expiresAt).getTime() - Date.now());
-        return interaction.reply({ embeds: [createEmbed({ title: "📊 Status do Boost", description: `**Status:** 🟢 Ativo\n**Duração:** ${activeBoost.duration} horas\n**Restante:** ${Math.ceil(timeRemaining / 3600000)} horas\n\n**Mensagem:** ${activeBoost.message}`, color: 0x00ff00 })], ephemeral: true });
+        return interaction.reply({ embeds: [createEmbed({ title: "📊 Status do Boost", description: `**Status:** 🟢 Ativo\n**Duração:** ${activeBoost.duration} horas\n**Restante:** ${Math.ceil(timeRemaining / 3600000)} horas\n\n**Mensagem:** ${activeBoost.message}`, color: 0x00ff00 })], flags: MessageFlags.Ephemeral });
       }
 
       if (sub === "lista") {
         const boosts = await boostStore.load();
         const activeBoosts = Object.values(boosts).filter(b => b.status === "active").sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        if (activeBoosts.length === 0) return interaction.reply({ embeds: [createEmbed({ title: "🚀 Servidores Promovidos", description: "Nenhum no momento.", color: 0x95a5a6 })], ephemeral: true });
+        if (activeBoosts.length === 0) return interaction.reply({ embeds: [createEmbed({ title: "🚀 Servidores Promovidos", description: "Nenhum no momento.", color: 0x95a5a6 })], flags: MessageFlags.Ephemeral });
         const desc = activeBoosts.map((b, i) => `**${i + 1}.** ${b.guildName}\n⏰ Restante: ${Math.ceil(Math.max(0, new Date(b.expiresAt).getTime() - Date.now()) / 3600000)}h\n💬 ${b.message}`).join("\n\n");
-        return interaction.reply({ embeds: [createEmbed({ title: "🚀 Servidores Promovidos", description: desc, color: 0x00ff00 })], ephemeral: true });
+        return interaction.reply({ embeds: [createEmbed({ title: "🚀 Servidores Promovidos", description: desc, color: 0x00ff00 })], flags: MessageFlags.Ephemeral });
       }
     }
 
@@ -111,25 +112,25 @@ module.exports = {
       const partners = await partnersStore.load();
       const pData = partners[searchId];
 
-      if (!pData) return interaction.reply({ embeds: [createErrorEmbed("❌ Parceria não encontrada. Verifique o ID.")], ephemeral: true });
-      if (pData.status !== "accepted") return interaction.reply({ embeds: [createErrorEmbed("❌ Esta parceria não está ativa/aceita.")], ephemeral: true });
+      if (!pData) return interaction.reply({ embeds: [createErrorEmbed("❌ Parceria não encontrada. Verifique o ID.")], flags: MessageFlags.Ephemeral });
+      if (pData.status !== "accepted") return interaction.reply({ embeds: [createErrorEmbed("❌ Esta parceria não está ativa/aceita.")], flags: MessageFlags.Ephemeral });
 
       if (sub === "cobrar") {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores podem cobrar parcerias.")], ephemeral: true });
+        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores podem cobrar parcerias.")], flags: MessageFlags.Ephemeral });
         const repUser = await interaction.client.users.fetch(pData.requesterId).catch(() => null);
-        if (!repUser) return interaction.reply({ embeds: [createErrorEmbed("Representante não encontrado ou com DM fechada.")], ephemeral: true });
+        if (!repUser) return interaction.reply({ embeds: [createErrorEmbed("Representante não encontrado ou com DM fechada.")], flags: MessageFlags.Ephemeral });
         const embedDM = new EmbedBuilder().setTitle("🚀 Hora de renovar nossa Parceria!").setColor(0x3498db).setDescription(`Olá! É hora de dar um **UP** na nossa parceria com o **${pData.serverName}** no nosso servidor.\n\nClique no botão abaixo para postar sua parceria novamente.`);
         const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`boost_parceria_${searchId}`).setLabel("Dar Bump na Parceria").setStyle(ButtonStyle.Success).setEmoji("🚀"));
         try {
           await repUser.send({ embeds: [embedDM], components: [row] });
-          return interaction.reply({ embeds: [createSuccessEmbed(`✅ Notificação enviada na DM de <@${pData.requesterId}>!`)], ephemeral: true });
-        } catch (e) { return interaction.reply({ embeds: [createErrorEmbed("❌ Falha ao enviar DM.")], ephemeral: true }); }
+          return interaction.reply({ embeds: [createSuccessEmbed(`✅ Notificação enviada na DM de <@${pData.requesterId}>!`)], flags: MessageFlags.Ephemeral });
+        } catch (e) { return interaction.reply({ embeds: [createErrorEmbed("❌ Falha ao enviar DM.")], flags: MessageFlags.Ephemeral }); }
       }
 
       // 👇 ENTREGA DO CARGO E PRIMEIRA DM INSTANTÂNEA 👇
       if (sub === "autobump") {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores podem gerenciar isso.")], ephemeral: true });
-        await interaction.deferReply({ ephemeral: true });
+        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores podem gerenciar isso.")], flags: MessageFlags.Ephemeral });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         
         const ativo = interaction.options.getBoolean("ativo");
         const guildConfig = await getGuildConfig(interaction.guildId);
@@ -164,7 +165,7 @@ module.exports = {
 
     if (group === "server") {
       if (sub === "config") {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores!")], ephemeral: true });
+        if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores!")], flags: MessageFlags.Ephemeral });
         const canal = interaction.options.getChannel("canal");
         const cooldown = interaction.options.getInteger("cooldown");
         const convite = interaction.options.getString("convite");
@@ -172,18 +173,18 @@ module.exports = {
         const sbConfig = currentConfig.serverbpost || {};
 
         if (!canal && cooldown == null && !convite) {
-          return interaction.reply({ embeds: [createEmbed({ title: "⚙️ Configuração", description: `**Canal:** ${sbConfig.channelId ? `<#${sbConfig.channelId}>` : "❌"}\n**Cooldown:** ${sbConfig.cooldownHours || 2} horas\n**Convite:** ${sbConfig.defaultInvite || "❌"}`, color: 0x3498db })], ephemeral: true });
+          return interaction.reply({ embeds: [createEmbed({ title: "⚙️ Configuração", description: `**Canal:** ${sbConfig.channelId ? `<#${sbConfig.channelId}>` : "❌"}\n**Cooldown:** ${sbConfig.cooldownHours || 2} horas\n**Convite:** ${sbConfig.defaultInvite || "❌"}`, color: 0x3498db })], flags: MessageFlags.Ephemeral });
         }
         const patch = { ...sbConfig };
         if (canal) patch.channelId = canal.id;
         if (cooldown != null) patch.cooldownHours = cooldown;
         if (convite) patch.defaultInvite = normalizeInviteLink(convite);
         await setGuildConfig(guildId, { serverbpost: patch });
-        return interaction.reply({ embeds: [createSuccessEmbed(`**✅ Sistema de Bump atualizado!**`)], ephemeral: true });
+        return interaction.reply({ embeds: [createSuccessEmbed(`**✅ Sistema de Bump atualizado!**`)], flags: MessageFlags.Ephemeral });
       }
 
       if (sub === "bump") {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const guildConfig = await getGuildConfig(guildId);
         const sbConfig = guildConfig.serverbpost || {};
         if (!sbConfig.channelId) return interaction.editReply({ embeds: [createErrorEmbed("O sistema de bump não foi configurado.")] });
@@ -214,17 +215,17 @@ module.exports = {
       if (sub === "info") {
         const allBumps = await bumpsStore.load();
         const guildBumps = Object.values(allBumps).filter(b => b.guildId === guildId).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        if (guildBumps.length === 0) return interaction.reply({ embeds: [createEmbed({ title: "📊 Estatísticas", description: "Nenhum bump recebido.", color: 0x95a5a6 })], ephemeral: true });
+        if (guildBumps.length === 0) return interaction.reply({ embeds: [createEmbed({ title: "📊 Estatísticas", description: "Nenhum bump recebido.", color: 0x95a5a6 })], flags: MessageFlags.Ephemeral });
         const userCounts = {};
         for (const b of guildBumps) userCounts[b.userId] = (userCounts[b.userId] || 0) + 1;
         const topBumpers = Object.entries(userCounts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([uid, count], i) => `**${i + 1}.** <@${uid}> — ${count} bumps`).join("\n");
-        return interaction.reply({ embeds: [createEmbed({ title: "📊 Estatísticas de Bump", description: `**Servidor:** ${interaction.guild.name}\n**Total:** ${guildBumps.length}\n\n**🏆 Top Bumpers:**\n${topBumpers}`, color: 0x3498db })], ephemeral: true });
+        return interaction.reply({ embeds: [createEmbed({ title: "📊 Estatísticas de Bump", description: `**Servidor:** ${interaction.guild.name}\n**Total:** ${guildBumps.length}\n\n**🏆 Top Bumpers:**\n${topBumpers}`, color: 0x3498db })], flags: MessageFlags.Ephemeral });
       }
 
       if (sub === "top") {
         const allBumps = await bumpsStore.load();
         const bumpValues = Object.values(allBumps);
-        if (bumpValues.length === 0) return interaction.reply({ embeds: [createEmbed({ title: "🏆 Ranking", description: "Vazio.", color: 0x95a5a6 })], ephemeral: true });
+        if (bumpValues.length === 0) return interaction.reply({ embeds: [createEmbed({ title: "🏆 Ranking", description: "Vazio.", color: 0x95a5a6 })], flags: MessageFlags.Ephemeral });
         const serverCounts = {};
         for (const b of bumpValues) {
           if (!serverCounts[b.guildId]) serverCounts[b.guildId] = { guildName: b.guildName, count: 0, lastBump: b.createdAt };
@@ -232,7 +233,7 @@ module.exports = {
         }
         const ranking = Object.values(serverCounts).sort((a, b) => b.count - a.count).slice(0, 10);
         const list = ranking.map((s, i) => `**${i + 1}.** **${s.guildName}** — ${s.count} bumps`).join("\n");
-        return interaction.reply({ embeds: [createEmbed({ title: "🏆 Ranking de Bumps", description: list, color: 0xf1c40f })], ephemeral: true });
+        return interaction.reply({ embeds: [createEmbed({ title: "🏆 Ranking de Bumps", description: list, color: 0xf1c40f })], flags: MessageFlags.Ephemeral });
       }
     }
   },
@@ -242,23 +243,23 @@ module.exports = {
     const searchId = interaction.customId.replace("boost_parceria_", "");
     const partners = await partnersStore.load();
     const pData = partners[searchId];
-    if (!pData) return interaction.reply({ content: "❌ Parceria não encontrada no sistema.", ephemeral: true });
+    if (!pData) return interaction.reply({ content: "❌ Parceria não encontrada no sistema.", flags: MessageFlags.Ephemeral });
     return _processPartnerBump(interaction, searchId, pData);
   }
 };
 
 async function _processPartnerBump(interaction, searchId, pData) {
-  if (interaction.user.id !== pData.requesterId) return interaction.reply({ content: "❌ Apenas o representante registrado pode dar bump nesta parceria.", ephemeral: true });
+  if (interaction.user.id !== pData.requesterId) return interaction.reply({ content: "❌ Apenas o representante registrado pode dar bump nesta parceria.", flags: MessageFlags.Ephemeral });
 
   const cooldownMs = 4 * 60 * 60 * 1000;
   const lastBump = pData.lastBump || 0;
   if (Date.now() - lastBump < cooldownMs) {
     const hours = Math.ceil((cooldownMs - (Date.now() - lastBump)) / 3600000);
-    return interaction.reply({ content: `⏳ Aguarde mais **${hours}h** para dar bump novamente nesta parceria.`, ephemeral: true });
+    return interaction.reply({ content: `⏳ Aguarde mais **${hours}h** para dar bump novamente nesta parceria.`, flags: MessageFlags.Ephemeral });
   }
 
   const channel = interaction.client.channels.cache.get(pData.channelId);
-  if (!channel) return interaction.reply({ content: "❌ Canal de parceria não encontrado.", ephemeral: true });
+  if (!channel) return interaction.reply({ content: "❌ Canal de parceria não encontrado.", flags: MessageFlags.Ephemeral });
 
   let oldMessage = null;
   if (pData.messageId) oldMessage = await channel.messages.fetch(pData.messageId).catch(() => null);
@@ -288,5 +289,5 @@ async function _processPartnerBump(interaction, searchId, pData) {
     return p;
   });
 
-  return interaction.reply({ embeds: [createSuccessEmbed("✅ **Bump da parceria realizado!**\nSua mensagem antiga foi apagada e a nova está no topo do canal de parcerias.")], ephemeral: true });
+  return interaction.reply({ embeds: [createSuccessEmbed("✅ **Bump da parceria realizado!**\nSua mensagem antiga foi apagada e a nova está no topo do canal de parcerias.")], flags: MessageFlags.Ephemeral });
 }

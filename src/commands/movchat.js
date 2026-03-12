@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits,
+  MessageFlags, } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -69,7 +70,7 @@ module.exports = {
       // Resposta pro Staff (Invisível para os outros)
       await interaction.reply({ 
         content: `✅ Advertência registrada para ${alvo.tag}.\n${enviouDM ? "📩 O membro foi notificado no privado." : "❌ A DM do membro está fechada, mas o registro foi feito."}`, 
-        ephemeral: true 
+        flags: MessageFlags.Ephemeral 
       });
     }
   }

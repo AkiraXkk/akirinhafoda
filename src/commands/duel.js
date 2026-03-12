@@ -5,6 +5,7 @@ const {
   ButtonStyle,
   ComponentType,
   userMention,
+  MessageFlags,
 } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
@@ -231,17 +232,17 @@ module.exports = {
 
     // Validações básicas
     if (target.bot) {
-      return interaction.reply({ embeds: [createErrorEmbed("Você não pode desafiar um bot!")], ephemeral: true });
+      return interaction.reply({ embeds: [createErrorEmbed("Você não pode desafiar um bot!")], flags: MessageFlags.Ephemeral });
     }
     if (target.id === challenger.id) {
-      return interaction.reply({ embeds: [createErrorEmbed("Você não pode se desafiar!")], ephemeral: true });
+      return interaction.reply({ embeds: [createErrorEmbed("Você não pode se desafiar!")], flags: MessageFlags.Ephemeral });
     }
 
     const challengerBal = await eco.getBalance(guildId, challenger.id);
     if ((challengerBal.coins || 0) < bet) {
       return interaction.reply({
         embeds: [createErrorEmbed(`Saldo insuficiente! Você tem **${challengerBal.coins || 0}** 🪙.`)],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -274,7 +275,7 @@ module.exports = {
     collector.on("collect", async (i) => {
       // Only challenger or target can interact
       if (i.user.id !== target.id && i.user.id !== challenger.id) {
-        return i.reply({ content: "Esse duelo não é seu!", ephemeral: true });
+        return i.reply({ content: "Esse duelo não é seu!", flags: MessageFlags.Ephemeral });
       }
 
       if (i.customId.startsWith("duel_decline_")) {
@@ -296,7 +297,7 @@ module.exports = {
       if (i.customId.startsWith("duel_accept_")) {
         // Only the target can accept
         if (i.user.id !== target.id) {
-          return i.reply({ content: "Somente o desafiado pode aceitar!", ephemeral: true });
+          return i.reply({ content: "Somente o desafiado pode aceitar!", flags: MessageFlags.Ephemeral });
         }
 
         // Check target balance

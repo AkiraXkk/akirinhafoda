@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType,
+  MessageFlags, } = require("discord.js");
 const { createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { setGuildConfig } = require("../config/guildConfig");
 
@@ -23,13 +24,13 @@ module.exports = {
         
         return interaction.reply({ 
             embeds: [createSuccessEmbed(`✅ Canal de sugestões configurado com sucesso para ${canal}!`)], 
-            ephemeral: true 
+            flags: MessageFlags.Ephemeral 
         });
     } catch (error) {
         console.error("Erro ao configurar canal de sugestões:", error);
         return interaction.reply({ 
             embeds: [createErrorEmbed("Ocorreu um erro ao salvar a configuração no banco de dados.")], 
-            ephemeral: true 
+            flags: MessageFlags.Ephemeral 
         });
     }
   }

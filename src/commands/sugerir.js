@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder,
+  MessageFlags, } = require("discord.js");
 const { createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { getGuildConfig } = require("../config/guildConfig");
 
@@ -22,7 +23,7 @@ module.exports = {
         if (!canalId) {
             return interaction.reply({ 
                 embeds: [createErrorEmbed("O canal de sugestões ainda não foi configurado. Peça a um Staff para configurá-lo.")], 
-                ephemeral: true 
+                flags: MessageFlags.Ephemeral 
             });
         }
 
@@ -31,7 +32,7 @@ module.exports = {
         if (!canal) {
             return interaction.reply({ 
                 embeds: [createErrorEmbed("O canal de sugestões configurado não foi encontrado. Talvez tenha sido apagado.")], 
-                ephemeral: true 
+                flags: MessageFlags.Ephemeral 
             });
         }
 
@@ -50,7 +51,7 @@ module.exports = {
 
         return interaction.reply({ 
             embeds: [createSuccessEmbed(`Sua sugestão foi enviada para o canal ${canal}!`)], 
-            ephemeral: true 
+            flags: MessageFlags.Ephemeral 
         });
     }
 };

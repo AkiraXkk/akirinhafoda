@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
 // Map local para controlar o tempo de espera do /work
@@ -50,7 +51,7 @@ module.exports = {
             const nextTime = Math.floor((lastWork + cooldownTime) / 1000);
             return interaction.reply({ 
                 embeds: [createErrorEmbed(`Você está cansado! Descanse um pouco.\n⏳ Volte a trabalhar <t:${nextTime}:R>.`)], 
-                ephemeral: true 
+                flags: MessageFlags.Ephemeral 
             });
         }
 
@@ -70,19 +71,19 @@ module.exports = {
         const amount = interaction.options.getInteger("quantidade");
 
         if (target.bot || target.id === userId) {
-            return interaction.reply({ embeds: [createErrorEmbed("Usuário inválido para transferência.")], ephemeral: true });
+            return interaction.reply({ embeds: [createErrorEmbed("Usuário inválido para transferência.")], flags: MessageFlags.Ephemeral });
         }
 
         const bal = await eco.getBalance(guildId, userId);
         if ((bal.coins || 0) < amount) {
-            return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Você tem apenas **${bal.coins || 0} 🪙**.`)], ephemeral: true });
+            return interaction.reply({ embeds: [createErrorEmbed(`Saldo insuficiente! Você tem apenas **${bal.coins || 0} 🪙**.`)], flags: MessageFlags.Ephemeral });
         }
 
         try {
             await eco.removeCoins(guildId, userId, amount);
             await eco.addCoins(guildId, target.id, amount);
         } catch (err) {
-            return interaction.reply({ embeds: [createErrorEmbed("Erro ao processar a transferência. Tente novamente.")], ephemeral: true });
+            return interaction.reply({ embeds: [createErrorEmbed("Erro ao processar a transferência. Tente novamente.")], flags: MessageFlags.Ephemeral });
         }
 
         return interaction.reply({ 
@@ -103,7 +104,7 @@ module.exports = {
             const nextDate = result?.nextDaily ? Math.floor(result.nextDaily / 1000) : Math.floor(Date.now() / 1000) + 86400;
             return interaction.reply({ 
                 embeds: [createErrorEmbed(`Você já resgatou seu daily hoje!\n⏳ Tente novamente <t:${nextDate}:R>.`)], 
-                ephemeral: true 
+                flags: MessageFlags.Ephemeral 
             });
         }
 
@@ -119,7 +120,7 @@ module.exports = {
             const nextTime = result?.nextHourly ? Math.floor(result.nextHourly / 1000) : Math.floor(Date.now() / 1000) + 3600;
             return interaction.reply({
                 embeds: [createErrorEmbed(`Você já resgatou seu bônus por hora!\n⏳ Tente novamente <t:${nextTime}:R>.`)],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
         return interaction.reply({ embeds: [createSuccessEmbed(`⏰ Você resgatou **${amount} 🪙** do bônus por hora!`)] });
@@ -132,7 +133,7 @@ module.exports = {
             const nextTime = result?.nextWeekly ? Math.floor(result.nextWeekly / 1000) : Math.floor(Date.now() / 1000) + 604800;
             return interaction.reply({
                 embeds: [createErrorEmbed(`Você já resgatou seu bônus semanal!\n⏳ Tente novamente <t:${nextTime}:R>.`)],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
         return interaction.reply({ embeds: [createSuccessEmbed(`📅 Você resgatou **${amount} 🪙** do bônus semanal!`)] });
@@ -145,7 +146,7 @@ module.exports = {
             const bal = await eco.getBalance(guildId, userId);
             return interaction.reply({
                 embeds: [createErrorEmbed(`Saldo insuficiente! Você tem apenas **${bal.coins || 0} 🪙** na carteira.`)],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
         return interaction.reply({ embeds: [createSuccessEmbed(`🏦 Você depositou **${amount} 🪙** no banco!`)] });
@@ -158,7 +159,7 @@ module.exports = {
             const bal = await eco.getBalance(guildId, userId);
             return interaction.reply({
                 embeds: [createErrorEmbed(`Saldo insuficiente no banco! Você tem apenas **${bal.bank || 0} 🪙** no banco.`)],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
         return interaction.reply({ embeds: [createSuccessEmbed(`💵 Você sacou **${amount} 🪙** do banco!`)] });
@@ -166,7 +167,7 @@ module.exports = {
 
     if (sub === "add" || sub === "remove") {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ embeds: [createErrorEmbed("Sem permissão.")], ephemeral: true });
+            return interaction.reply({ embeds: [createErrorEmbed("Sem permissão.")], flags: MessageFlags.Ephemeral });
         }
         
         const target = interaction.options.getUser("usuario");

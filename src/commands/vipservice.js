@@ -1,6 +1,7 @@
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
+  MessageFlags,
 } = require("discord.js");
 const { createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
@@ -32,12 +33,12 @@ module.exports = {
     if (sub === "addhook") {
       const type = interaction.options.getString("type");
       if (!["onAdd", "onRemove", "onExpire"].includes(type)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Tipo inválido.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Tipo inválido.")], flags: MessageFlags.Ephemeral });
       }
       vipService.addHook(type, async (payload) => {
         console.log(`[HOOK:${type}]`, payload);
       });
-      return interaction.reply({ embeds: [createSuccessEmbed(`Hook ${type} adicionado (console log).`)], ephemeral: true });
+      return interaction.reply({ embeds: [createSuccessEmbed(`Hook ${type} adicionado (console log).`)], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "report") {
@@ -48,17 +49,17 @@ module.exports = {
       });
       const embed = createSuccessEmbed(lines.join("\n") || "Nenhum VIP ativo.");
       embed.setTitle(`📋 Relatório VIP (${report.activeVips.length})`);
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "expire") {
       const user = interaction.options.getUser("usuario");
       const entry = vipService.getVip(interaction.guildId, user.id);
       if (!entry) {
-        return interaction.reply({ embeds: [createErrorEmbed("Usuário não é VIP.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Usuário não é VIP.")], flags: MessageFlags.Ephemeral });
       }
       await vipService.removeVip(interaction.guildId, user.id);
-      return interaction.reply({ embeds: [createSuccessEmbed(`VIP de ${user} expirado (forçado).`)], ephemeral: true });
+      return interaction.reply({ embeds: [createSuccessEmbed(`VIP de ${user} expirado (forçado).`)], flags: MessageFlags.Ephemeral });
     }
   },
 };

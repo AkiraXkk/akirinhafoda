@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, AttachmentBuilder } = require("discord.js");
+const { SlashCommandBuilder, AttachmentBuilder,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
 const { logger } = require("../logger");
@@ -293,7 +294,7 @@ module.exports = {
     }
 
     if (sub === "leaderboard") {
-      return interaction.reply({ content: "Use o comando `/leaderboard ver` para ver o ranking de XP!", ephemeral: true });
+      return interaction.reply({ content: "Use o comando `/leaderboard ver` para ver o ranking de XP!", flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "cards") {
@@ -302,14 +303,14 @@ module.exports = {
       const userCards = await getUserCards(interaction.user.id);
 
       if (action === "view") {
-        return interaction.reply({ embeds: [createEmbed({ title: "Seus Cards", description: `**Equipado:** ${getCardConfig(userCards.selected).name}\n**Você possui:**\n${userCards.owned.map(c => `- ${getCardConfig(c).name} (${c})`).join("\n")}` })], ephemeral: true });
+        return interaction.reply({ embeds: [createEmbed({ title: "Seus Cards", description: `**Equipado:** ${getCardConfig(userCards.selected).name}\n**Você possui:**\n${userCards.owned.map(c => `- ${getCardConfig(c).name} (${c})`).join("\n")}` })], flags: MessageFlags.Ephemeral });
       }
 
       if (action === "select") {
-        if (!card) return interaction.reply({ embeds: [createErrorEmbed("Especifique um card.")], ephemeral: true });
-        if (!userCards.owned.includes(card) && card !== "default") return interaction.reply({ embeds: [createErrorEmbed("Você não possui este card. Compre usando `/leaderboard comprar`.")], ephemeral: true });
+        if (!card) return interaction.reply({ embeds: [createErrorEmbed("Especifique um card.")], flags: MessageFlags.Ephemeral });
+        if (!userCards.owned.includes(card) && card !== "default") return interaction.reply({ embeds: [createErrorEmbed("Você não possui este card. Compre usando `/leaderboard comprar`.")], flags: MessageFlags.Ephemeral });
         await selectUserCard(interaction.user.id, card);
-        return interaction.reply({ embeds: [createSuccessEmbed(`Card **${getCardConfig(card).name}** selecionado com sucesso!`)], ephemeral: true });
+        return interaction.reply({ embeds: [createSuccessEmbed(`Card **${getCardConfig(card).name}** selecionado com sucesso!`)], flags: MessageFlags.Ephemeral });
       }
     }
   }

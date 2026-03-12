@@ -13,6 +13,7 @@ const {
   PermissionFlagsBits,
   ChannelType,
   Colors,
+  MessageFlags,
 } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const {
@@ -249,7 +250,7 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const guildId = interaction.guildId;
     const group = interaction.options.getSubcommandGroup(false);

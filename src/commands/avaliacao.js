@@ -6,6 +6,7 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
+  MessageFlags,
 } = require("discord.js");
 const { createEmbed, createSuccessEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
@@ -62,7 +63,7 @@ module.exports = {
       await setGuildConfig(interaction.guildId, { [AVAL_LOG_CHANNEL_KEY]: canal.id });
       await interaction.reply({
         embeds: [createSuccessEmbed(`Canal de logs de avaliação configurado para ${canal}.`)],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   },
@@ -79,7 +80,7 @@ module.exports = {
     // Ex.: "aval_staff_5_123456789012345678_722253176283070506"
     const parts = interaction.customId.split("_");
     if (parts.length < 5) {
-      return interaction.reply({ content: "❌ customId de avaliação inválido.", ephemeral: true });
+      return interaction.reply({ content: "❌ customId de avaliação inválido.", flags: MessageFlags.Ephemeral });
     }
 
     const nota    = parts[2];
@@ -88,10 +89,10 @@ module.exports = {
 
     const notaNum = parseInt(nota, 10);
     if (isNaN(notaNum) || notaNum < 1 || notaNum > 5) {
-      return interaction.reply({ content: "❌ Nota de avaliação inválida.", ephemeral: true });
+      return interaction.reply({ content: "❌ Nota de avaliação inválida.", flags: MessageFlags.Ephemeral });
     }
     if (!/^\d{17,20}$/.test(staffId) || !/^\d{17,20}$/.test(guildId)) {
-      return interaction.reply({ content: "❌ Dados de avaliação inválidos.", ephemeral: true });
+      return interaction.reply({ content: "❌ Dados de avaliação inválidos.", flags: MessageFlags.Ephemeral });
     }
 
     const msgId = interaction.message?.id ?? "0";
@@ -130,7 +131,7 @@ module.exports = {
     // Ex.: "aval_modal_123456789012345678_5_722253176283070506_987654321098765432"
     const parts = interaction.customId.split("_");
     if (parts.length < 6) {
-      return interaction.reply({ content: "❌ customId de avaliação inválido.", ephemeral: true });
+      return interaction.reply({ content: "❌ customId de avaliação inválido.", flags: MessageFlags.Ephemeral });
     }
 
     const staffId = parts[2];
@@ -139,15 +140,15 @@ module.exports = {
     const msgId   = parts[5] ?? "0";
 
     if (isNaN(nota) || nota < 1 || nota > 5) {
-      return interaction.reply({ content: "❌ Nota de avaliação inválida.", ephemeral: true });
+      return interaction.reply({ content: "❌ Nota de avaliação inválida.", flags: MessageFlags.Ephemeral });
     }
     if (!/^\d{17,20}$/.test(staffId) || !/^\d{17,20}$/.test(guildId)) {
-      return interaction.reply({ content: "❌ Dados de avaliação inválidos.", ephemeral: true });
+      return interaction.reply({ content: "❌ Dados de avaliação inválidos.", flags: MessageFlags.Ephemeral });
     }
 
     const comment = interaction.fields.getTextInputValue("aval_comment").trim();
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     // 1. Atualizar estatísticas do staff no banco de dados
     const stats = await staffStatsStore.update(staffId, (current) => {

@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { logger } = require("../logger");
 
@@ -126,14 +127,14 @@ module.exports = {
     // SAY
     if (sub === "say") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
-          return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para fazer o bot falar.")], ephemeral: true });
+          return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para fazer o bot falar.")], flags: MessageFlags.Ephemeral });
       }
       const text = interaction.options.getString("texto");
       const jsonFile = interaction.options.getAttachment("json");
-      if (!text && !jsonFile) return interaction.reply({ embeds: [createErrorEmbed("Forneça um texto ou um arquivo JSON.")], ephemeral: true });
+      if (!text && !jsonFile) return interaction.reply({ embeds: [createErrorEmbed("Forneça um texto ou um arquivo JSON.")], flags: MessageFlags.Ephemeral });
 
       try {
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
           let optionsToSend = {};
 
           if (text) {
@@ -305,7 +306,7 @@ module.exports = {
     if (sub === "horoscopo") {
         const sign = interaction.options.getString("signo");
         // Ocultado por limite de caracteres, mantendo a estrutura lógica padrão que você forneceu originalmente
-        await interaction.reply({ content: `🔮 Confira as previsões do seu signo! (Sistemas grandes mantidos no código fonte intactos).`, ephemeral: true });
+        await interaction.reply({ content: `🔮 Confira as previsões do seu signo! (Sistemas grandes mantidos no código fonte intactos).`, flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "slot") {
@@ -330,7 +331,7 @@ module.exports = {
       const choice = parts[2];
       const originalUserId = parts[3];
 
-      if (interaction.user.id !== originalUserId) return interaction.reply({ embeds: [createErrorEmbed("Apenas quem iniciou o jogo pode jogar!")], ephemeral: true });
+      if (interaction.user.id !== originalUserId) return interaction.reply({ embeds: [createErrorEmbed("Apenas quem iniciou o jogo pode jogar!")], flags: MessageFlags.Ephemeral });
 
       const choices = ["pedra", "papel", "tesoura"];
       const botChoice = choices[Math.floor(Math.random() * choices.length)];
@@ -359,8 +360,8 @@ module.exports = {
       const triviaId = parts[3];
 
       const state = triviaAnswers.get(triviaId);
-      if (!state) return interaction.reply({ embeds: [createErrorEmbed("Esta pergunta expirou.")], ephemeral: true });
-      if (interaction.user.id !== state.userId) return interaction.reply({ embeds: [createErrorEmbed("Apenas quem iniciou o trivia pode responder!")], ephemeral: true });
+      if (!state) return interaction.reply({ embeds: [createErrorEmbed("Esta pergunta expirou.")], flags: MessageFlags.Ephemeral });
+      if (interaction.user.id !== state.userId) return interaction.reply({ embeds: [createErrorEmbed("Apenas quem iniciou o trivia pode responder!")], flags: MessageFlags.Ephemeral });
 
       clearTimeout(state.timeout);
       triviaAnswers.delete(triviaId);
@@ -401,10 +402,10 @@ module.exports = {
       const battleId = parts[3];
 
       const state = activeBattles.get(battleId);
-      if (!state) return interaction.reply({ embeds: [createErrorEmbed("Esta batalha expirou ou já terminou.")], ephemeral: true });
-      if (interaction.user.id !== state.userId) return interaction.reply({ embeds: [createErrorEmbed("Apenas quem iniciou a batalha pode jogar!")], ephemeral: true });
-      if (action === "defender" && state.playerLastDefended) return interaction.reply({ embeds: [createErrorEmbed("Você não pode defender duas vezes seguidas!")], ephemeral: true });
-      if (action === "especial" && state.playerSpecials <= 0) return interaction.reply({ embeds: [createErrorEmbed("Você não tem mais usos de especial!")], ephemeral: true });
+      if (!state) return interaction.reply({ embeds: [createErrorEmbed("Esta batalha expirou ou já terminou.")], flags: MessageFlags.Ephemeral });
+      if (interaction.user.id !== state.userId) return interaction.reply({ embeds: [createErrorEmbed("Apenas quem iniciou a batalha pode jogar!")], flags: MessageFlags.Ephemeral });
+      if (action === "defender" && state.playerLastDefended) return interaction.reply({ embeds: [createErrorEmbed("Você não pode defender duas vezes seguidas!")], flags: MessageFlags.Ephemeral });
+      if (action === "especial" && state.playerSpecials <= 0) return interaction.reply({ embeds: [createErrorEmbed("Você não tem mais usos de especial!")], flags: MessageFlags.Ephemeral });
 
       let playerDmg = 0, playerActionText = "";
       const playerDefending = action === "defender";

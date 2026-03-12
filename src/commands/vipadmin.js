@@ -25,6 +25,7 @@ const {
   ChannelType,
   RoleSelectMenuBuilder,
   StringSelectMenuBuilder,
+  MessageFlags,
 } = require("discord.js");
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -201,7 +202,7 @@ module.exports = {
 
       if (sub === "info") {
         const family = await familyService.getFamilyByOwner(targetOwner.id);
-        if (!family) return interaction.reply({ content: "❌ Este utilizador não lidera uma família.", ephemeral: true });
+        if (!family) return interaction.reply({ content: "❌ Este utilizador não lidera uma família.", flags: MessageFlags.Ephemeral });
 
         const embed = new EmbedBuilder()
           .setTitle(`🏠 Família: ${family.name}`)
@@ -211,20 +212,20 @@ module.exports = {
             { name: "Ocupação", value: `👥 ${family.members.length} / ${family.maxMembers} membros`, inline: true },
             { name: "ID Interno", value: `\`${family.id}\``, inline: false },
           );
-        return interaction.reply({ embeds: [embed], ephemeral: true });
+        return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
       }
 
       if (sub === "delete") {
         await familyService.deleteFamily(interaction.guild, targetOwner.id);
-        return interaction.reply({ content: `🗑️ Família de <@${targetOwner.id}> apagada e canais limpos.`, ephemeral: true });
+        return interaction.reply({ content: `🗑️ Família de <@${targetOwner.id}> apagada e canais limpos.`, flags: MessageFlags.Ephemeral });
       }
 
       if (sub === "limit") {
         const vagas  = interaction.options.getInteger("vagas");
         const family = await familyService.getFamilyByOwner(targetOwner.id);
-        if (!family) return interaction.reply({ content: "❌ Família não localizada.", ephemeral: true });
+        if (!family) return interaction.reply({ content: "❌ Família não localizada.", flags: MessageFlags.Ephemeral });
         await familyService.updateMaxMembers(family.id, vagas);
-        return interaction.reply({ content: `✅ Limite de **${family.name}** atualizado para **${vagas}**.`, ephemeral: true });
+        return interaction.reply({ content: `✅ Limite de **${family.name}** atualizado para **${vagas}**.`, flags: MessageFlags.Ephemeral });
       }
     }
 
@@ -265,7 +266,7 @@ module.exports = {
           { name: "👻 Cargo Fantasma",    value: fantasma        ? `<@&${fantasma.id}>`         : "—", inline: true },
         );
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     // ── GRUPO: tiers — abre dashboard ────────────────────────────────────────
@@ -283,7 +284,7 @@ module.exports = {
       return interaction.reply({
         embeds:     [embed],
         components: buildTierDashComponents(tid, guildId, hasTiers),
-        ephemeral:  true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -295,7 +296,7 @@ module.exports = {
       const tier    = await vipConfig.getTierConfig(guildId, tid);
 
       if (!tier) {
-        return interaction.reply({ content: `❌ O Tier \`${tid}\` não existe. Configure-o em /vipadmin tiers tier.`, ephemeral: true });
+        return interaction.reply({ content: `❌ O Tier \`${tid}\` não existe. Configure-o em /vipadmin tiers tier.`, flags: MessageFlags.Ephemeral });
       }
 
       const expiresAt = Date.now() + dias * 24 * 60 * 60 * 1000;
@@ -328,7 +329,7 @@ module.exports = {
           { name: "Por",     value: `<@${interaction.user.id}>`, inline: true },
         );
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "remove") {
@@ -347,7 +348,7 @@ module.exports = {
 
       return interaction.reply({
         content:   `🚫 VIP de <@${target.id}> removido e todos os ativos apagados.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -381,7 +382,7 @@ module.exports = {
         { name: "📌 Sep. Família",     value: gConf?.familyRoleSeparatorId ? `<@&${gConf.familyRoleSeparatorId}>` : "Não definido", inline: true },
       );
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
   },
 
@@ -391,7 +392,7 @@ module.exports = {
 
     // Valida permissão
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      return interaction.reply({ content: "❌ Você não tem permissão.", ephemeral: true });
+      return interaction.reply({ content: "❌ Você não tem permissão.", flags: MessageFlags.Ephemeral });
     }
 
     const parts   = interaction.customId.split(":");
@@ -401,7 +402,7 @@ module.exports = {
     const tierId  = parts[3];
 
     if (interaction.guildId !== guildId) {
-      return interaction.reply({ content: "Este painel pertence a outro servidor.", ephemeral: true });
+      return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
     }
 
     const { vipConfig, vip: vipService } = interaction.client.services;
@@ -460,7 +461,7 @@ module.exports = {
     if (action === "add_tier") {
       const tier = await vipConfig.getTierConfig(guildId, tierId);
       if (!tier) {
-        return interaction.reply({ content: `❌ Tier \`${tierId}\` não encontrado no banco.`, ephemeral: true });
+        return interaction.reply({ content: `❌ Tier \`${tierId}\` não encontrado no banco.`, flags: MessageFlags.Ephemeral });
       }
 
       const id = (sec) => `vipadmin_tier_section:${sec}:${guildId}:${tierId}`;
@@ -475,7 +476,7 @@ module.exports = {
       return interaction.reply({
         content:    `Qual seção deseja editar para o tier \`${tierId}\`?`,
         components: [row],
-        ephemeral:  true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -483,7 +484,7 @@ module.exports = {
     if (action === "remove_tier") {
       const tiers = await vipConfig.getGuildTiers(guildId);
       if (!tiers[tierId]) {
-        return interaction.reply({ content: `❌ Tier \`${tierId}\` não encontrado.`, ephemeral: true });
+        return interaction.reply({ content: `❌ Tier \`${tierId}\` não encontrado.`, flags: MessageFlags.Ephemeral });
       }
 
       await vipConfig.removeTier(guildId, tierId);
@@ -546,7 +547,7 @@ module.exports = {
     // ── Sub-seções do tier (eco / soc / tec / shop) ──────────────────────────
     if (interaction.customId?.startsWith("vipadmin_tier_section:")) {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-        return interaction.reply({ content: "❌ Sem permissão.", ephemeral: true });
+        return interaction.reply({ content: "❌ Sem permissão.", flags: MessageFlags.Ephemeral });
       }
 
       const parts   = interaction.customId.split(":");
@@ -555,12 +556,12 @@ module.exports = {
       const tierId  = parts[3];
 
       if (interaction.guildId !== guildId) {
-        return interaction.reply({ content: "Painel de outro servidor.", ephemeral: true });
+        return interaction.reply({ content: "Painel de outro servidor.", flags: MessageFlags.Ephemeral });
       }
 
       const tier = await vipConfig?.getTierConfig(guildId, tierId);
       if (!tier) {
-        return interaction.reply({ content: `Tier \`${tierId}\` não encontrado.`, ephemeral: true });
+        return interaction.reply({ content: `Tier \`${tierId}\` não encontrado.`, flags: MessageFlags.Ephemeral });
       }
 
       return _showSectionModal(interaction, section, guildId, tierId, tier);
@@ -569,7 +570,7 @@ module.exports = {
     // ── Cotas ────────────────────────────────────────────────────────────────
     if (interaction.customId?.startsWith("vipadmin_cotas:")) {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-        return interaction.reply({ content: "❌ Sem permissão.", ephemeral: true });
+        return interaction.reply({ content: "❌ Sem permissão.", flags: MessageFlags.Ephemeral });
       }
 
       const parts   = interaction.customId.split(":");
@@ -578,7 +579,7 @@ module.exports = {
       const tierId  = parts[3];
 
       if (interaction.guildId !== guildId) {
-        return interaction.reply({ content: "Painel de outro servidor.", ephemeral: true });
+        return interaction.reply({ content: "Painel de outro servidor.", flags: MessageFlags.Ephemeral });
       }
 
       // ◀ Voltar ao painel principal
@@ -594,7 +595,7 @@ module.exports = {
       // 🗑️ Limpar todas as regras de cota
       if (action === "clear") {
         await vipConfig.updateTier(guildId, tierId, "cotas", { cotasConfig: [] });
-        return interaction.reply({ content: `✅ Todas as cotas do tier \`${tierId}\` foram removidas.`, ephemeral: true });
+        return interaction.reply({ content: `✅ Todas as cotas do tier \`${tierId}\` foram removidas.`, flags: MessageFlags.Ephemeral });
       }
 
       // ➕ Adicionar Modo A
@@ -648,7 +649,7 @@ module.exports = {
     if (!interaction.customId?.startsWith("vipadmin_modal_")) return;
 
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      return interaction.reply({ content: "❌ Sem permissão.", ephemeral: true });
+      return interaction.reply({ content: "❌ Sem permissão.", flags: MessageFlags.Ephemeral });
     }
 
     const { vipConfig, vip: vipService } = interaction.client.services;
@@ -673,7 +674,7 @@ module.exports = {
         if (id) {
           const role = await interaction.guild.roles.fetch(id).catch(() => null);
           if (!role) {
-            return interaction.reply({ content: `❌ ${label}: cargo com ID \`${id}\` não encontrado.`, ephemeral: true });
+            return interaction.reply({ content: `❌ ${label}: cargo com ID \`${id}\` não encontrado.`, flags: MessageFlags.Ephemeral });
           }
         }
       }
@@ -699,7 +700,7 @@ module.exports = {
               { name: "📌 Sep. Família",     value: familyRoleSepId  ? `<@&${familyRoleSepId}>`  : "—", inline: true },
             ),
         ],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -712,7 +713,7 @@ module.exports = {
       const quantidadeRaw = interaction.fields.getTextInputValue("quantidade").trim();
       const quantidade    = parseInt(quantidadeRaw, 10);
       if (!Number.isFinite(quantidade) || quantidade < 1) {
-        return interaction.reply({ content: "❌ Quantidade inválida.", ephemeral: true });
+        return interaction.reply({ content: "❌ Quantidade inválida.", flags: MessageFlags.Ephemeral });
       }
 
       const tier          = await vipConfig.getTierConfig(guildId, tierId);
@@ -724,7 +725,7 @@ module.exports = {
 
       return interaction.reply({
         content:   `✅ Cota Modo A adicionada ao tier \`${tierId}\`: **${quantidade}** cotas hierárquicas.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -739,16 +740,16 @@ module.exports = {
       const quantidade    = parseInt(quantidadeRaw, 10);
 
       if (!targetTierId) {
-        return interaction.reply({ content: "❌ ID do tier alvo não pode ser vazio.", ephemeral: true });
+        return interaction.reply({ content: "❌ ID do tier alvo não pode ser vazio.", flags: MessageFlags.Ephemeral });
       }
       if (!Number.isFinite(quantidade) || quantidade < 1) {
-        return interaction.reply({ content: "❌ Quantidade inválida.", ephemeral: true });
+        return interaction.reply({ content: "❌ Quantidade inválida.", flags: MessageFlags.Ephemeral });
       }
 
       // Verifica se o tier alvo existe
       const targetTierCheck = await vipConfig.getTierConfig(guildId, targetTierId);
       if (!targetTierCheck) {
-        return interaction.reply({ content: `❌ Tier alvo \`${targetTierId}\` não encontrado. Crie-o primeiro.`, ephemeral: true });
+        return interaction.reply({ content: `❌ Tier alvo \`${targetTierId}\` não encontrado. Crie-o primeiro.`, flags: MessageFlags.Ephemeral });
       }
 
       const tier          = await vipConfig.getTierConfig(guildId, tierId);
@@ -760,7 +761,7 @@ module.exports = {
 
       return interaction.reply({
         content:   `✅ Cota Modo B adicionada ao tier \`${tierId}\`: **${quantidade}** cotas do tier \`${targetTierId}\`.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -772,7 +773,7 @@ module.exports = {
     const tierId  = parts.slice(4).join("_");
 
     if (!vipConfig) {
-      return interaction.reply({ content: "Serviço vipConfig indisponível.", ephemeral: true });
+      return interaction.reply({ content: "Serviço vipConfig indisponível.", flags: MessageFlags.Ephemeral });
     }
 
     if (section === "eco") {
@@ -781,9 +782,9 @@ module.exports = {
       const midas             = parseBool(interaction.fields.getTextInputValue("midas"));
       const preco_shop        = parseNum(interaction.fields.getTextInputValue("preco_shop"));
 
-      if (valor_daily_extra < 0) return interaction.reply({ content: "Daily extra inválido.", ephemeral: true });
-      if (bonus_inicial     < 0) return interaction.reply({ content: "Bônus inicial inválido.", ephemeral: true });
-      if (preco_shop !== null && preco_shop < 0) return interaction.reply({ content: "preco_shop inválido.", ephemeral: true });
+      if (valor_daily_extra < 0) return interaction.reply({ content: "Daily extra inválido.", flags: MessageFlags.Ephemeral });
+      if (bonus_inicial     < 0) return interaction.reply({ content: "Bônus inicial inválido.", flags: MessageFlags.Ephemeral });
+      if (preco_shop !== null && preco_shop < 0) return interaction.reply({ content: "preco_shop inválido.", flags: MessageFlags.Ephemeral });
 
       await vipConfig.updateTier(guildId, tierId, "eco", {
         valor_daily_extra,
@@ -791,7 +792,7 @@ module.exports = {
         ...(midas    !== null ? { midas }     : {}),
         ...(preco_shop !== null ? { preco_shop } : {}),
       });
-      return interaction.reply({ content: `✅ Economia do tier \`${tierId}\` atualizada.`, ephemeral: true });
+      return interaction.reply({ content: `✅ Economia do tier \`${tierId}\` atualizada.`, flags: MessageFlags.Ephemeral });
     }
 
     if (section === "soc") {
@@ -800,8 +801,8 @@ module.exports = {
       const cotaRoleId       = interaction.fields.getTextInputValue("cotaRoleId").trim()          || null;
       const pode_presentear  = parseBool(interaction.fields.getTextInputValue("pode_presentear"));
 
-      if (vagas_familia   < 0) return interaction.reply({ content: "Vagas família inválido.", ephemeral: true });
-      if (primeiras_damas < 0) return interaction.reply({ content: "Primeiras damas inválido.", ephemeral: true });
+      if (vagas_familia   < 0) return interaction.reply({ content: "Vagas família inválido.", flags: MessageFlags.Ephemeral });
+      if (primeiras_damas < 0) return interaction.reply({ content: "Primeiras damas inválido.", flags: MessageFlags.Ephemeral });
 
       await vipConfig.updateTier(guildId, tierId, "soc", {
         vagas_familia,
@@ -809,7 +810,7 @@ module.exports = {
         cotaRoleId,
         ...(pode_presentear !== null ? { pode_presentear } : {}),
       });
-      return interaction.reply({ content: `✅ Configuração social do tier \`${tierId}\` atualizada.`, ephemeral: true });
+      return interaction.reply({ content: `✅ Configuração social do tier \`${tierId}\` atualizada.`, flags: MessageFlags.Ephemeral });
     }
 
     if (section === "tec") {
@@ -824,7 +825,7 @@ module.exports = {
         ...(hasCustomRole      !== null ? { hasCustomRole }      : {}),
         ...(high_quality_voice !== null ? { high_quality_voice } : {}),
       });
-      return interaction.reply({ content: `✅ Configuração técnica do tier \`${tierId}\` atualizada.`, ephemeral: true });
+      return interaction.reply({ content: `✅ Configuração técnica do tier \`${tierId}\` atualizada.`, flags: MessageFlags.Ephemeral });
     }
 
     if (section === "shop") {
@@ -833,9 +834,9 @@ module.exports = {
       const shop_fixed_price   = parseNum(interaction.fields.getTextInputValue("shop_fixed_price"));
       const shop_default_days  = parseNum(interaction.fields.getTextInputValue("shop_default_days"));
 
-      if (shop_price_per_day !== null && shop_price_per_day < 0) return interaction.reply({ content: "Preço por dia inválido.", ephemeral: true });
-      if (shop_fixed_price   !== null && shop_fixed_price   < 0) return interaction.reply({ content: "Preço fixo inválido.", ephemeral: true });
-      if (shop_default_days  !== null && shop_default_days  < 0) return interaction.reply({ content: "Dias padrão inválidos.", ephemeral: true });
+      if (shop_price_per_day !== null && shop_price_per_day < 0) return interaction.reply({ content: "Preço por dia inválido.", flags: MessageFlags.Ephemeral });
+      if (shop_fixed_price   !== null && shop_fixed_price   < 0) return interaction.reply({ content: "Preço fixo inválido.", flags: MessageFlags.Ephemeral });
+      if (shop_default_days  !== null && shop_default_days  < 0) return interaction.reply({ content: "Dias padrão inválidos.", flags: MessageFlags.Ephemeral });
 
       await vipConfig.updateTier(guildId, tierId, "shop", {
         ...(shop_enabled     !== null ? { shop_enabled }     : {}),
@@ -843,7 +844,7 @@ module.exports = {
         ...(shop_fixed_price   !== null ? { shop_fixed_price }   : {}),
         ...(shop_default_days  !== null ? { shop_default_days }  : {}),
       });
-      return interaction.reply({ content: `✅ Loja do tier \`${tierId}\` atualizada.`, ephemeral: true });
+      return interaction.reply({ content: `✅ Loja do tier \`${tierId}\` atualizada.`, flags: MessageFlags.Ephemeral });
     }
   },
 };
@@ -934,5 +935,5 @@ async function _showSectionModal(interaction, section, guildId, tierId, tier) {
     return interaction.showModal(modal);
   }
 
-  return interaction.reply({ content: "Seção desconhecida.", ephemeral: true });
+  return interaction.reply({ content: "Seção desconhecida.", flags: MessageFlags.Ephemeral });
 }

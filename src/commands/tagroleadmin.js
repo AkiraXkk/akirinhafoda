@@ -2,6 +2,7 @@ const {
   SlashCommandBuilder,
   PermissionFlagsBits,
   EmbedBuilder,
+  MessageFlags,
 } = require("discord.js");
 
 function parseTags(raw) {
@@ -47,12 +48,12 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    if (!interaction.inGuild()) return interaction.reply({ content: "Use em um servidor.", ephemeral: true });
+    if (!interaction.inGuild()) return interaction.reply({ content: "Use em um servidor.", flags: MessageFlags.Ephemeral });
 
     const tagRoleService = interaction.client.services?.tagRole;
     const tagRoleManager = interaction.client.services?.tagRoleManager;
     if (!tagRoleService) {
-      return interaction.reply({ content: "Serviço tagRole indisponível.", ephemeral: true });
+      return interaction.reply({ content: "Serviço tagRole indisponível.", flags: MessageFlags.Ephemeral });
     }
 
     const sub = interaction.options.getSubcommand();
@@ -72,7 +73,7 @@ module.exports = {
           // 👇 ATUALIZADO PARA MOSTRAR O STATUS 👇
           { name: "Checagens", value: `Status Personalizado: **${cfg.includeStatus ? "ON" : "OFF"}**\nNick Servidor: **${cfg.includeDisplayName ? "ON" : "OFF"}**\nNick Global: **${cfg.includeGlobalName ? "ON" : "OFF"}**\nUsername: **${cfg.includeUsername ? "ON" : "OFF"}**`, inline: false }
         );
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "setup") {
@@ -106,14 +107,14 @@ module.exports = {
         await tagRoleManager.start();
       }
 
-      return interaction.reply({ content: `✅ Configurado.\nCargo: <@&${cfg.roleId}>\nTags/Links: ${(cfg.tags || []).join(", ")}\nStatus: ${cfg.includeStatus ? "Ativado" : "Desativado"}`, ephemeral: true });
+      return interaction.reply({ content: `✅ Configurado.\nCargo: <@&${cfg.roleId}>\nTags/Links: ${(cfg.tags || []).join(", ")}\nStatus: ${cfg.includeStatus ? "Ativado" : "Desativado"}`, flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "run") {
       if (!tagRoleManager?.applyOnce) {
-        return interaction.reply({ content: "Manager indisponível.", ephemeral: true });
+        return interaction.reply({ content: "Manager indisponível.", flags: MessageFlags.Ephemeral });
       }
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const res = await tagRoleManager.applyOnce();
       if (!res.ok) return interaction.editReply("❌ Falha ao executar varredura.");
       if (res.skipped) return interaction.editReply(`⚠️ Varredura ignorada: ${res.reason}`);

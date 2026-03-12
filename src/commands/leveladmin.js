@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
 
@@ -59,7 +60,7 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         const sub = interaction.options.getSubcommand();
@@ -229,10 +230,10 @@ module.exports = {
 
     if (customId.startsWith("leveladmin_confirm_")) {
       const userId = customId.replace("leveladmin_confirm_", "");
-      if (interaction.user.id !== userId) return interaction.reply({ content: "❌ Você não pode confirmar.", ephemeral: true });
+      if (interaction.user.id !== userId) return interaction.reply({ content: "❌ Você não pode confirmar.", flags: MessageFlags.Ephemeral });
 
       const requestTime = pendingResets.get(userId);
-      if (!requestTime || Date.now() - requestTime > 60000) return interaction.reply({ content: "❌ Confirmação expirada.", ephemeral: true });
+      if (!requestTime || Date.now() - requestTime > 60000) return interaction.reply({ content: "❌ Confirmação expirada.", flags: MessageFlags.Ephemeral });
 
       try {
         const levels = (await levelsStore.load()) || {};
@@ -270,7 +271,7 @@ module.exports = {
 
     if (customId.startsWith("leveladmin_cancel_")) {
       const userId = customId.replace("leveladmin_cancel_", "");
-      if (interaction.user.id !== userId) return interaction.reply({ content: "❌ Você não pode cancelar.", ephemeral: true });
+      if (interaction.user.id !== userId) return interaction.reply({ content: "❌ Você não pode cancelar.", flags: MessageFlags.Ephemeral });
 
       pendingResets.delete(userId);
       return interaction.update({ embeds: [createEmbed({ title: "❌ Reset Cancelado", description: "O reset foi cancelado.", color: 0x00ff00 })], components: [] });

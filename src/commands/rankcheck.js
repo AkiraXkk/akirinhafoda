@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder,
+  MessageFlags, } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
 
 const levelRolesStore = createDataStore("levelRoles.json");
@@ -20,7 +21,7 @@ module.exports = {
 
   async execute(interaction) {
     // Como a checagem pode demorar para ler todos os membros, damos um "defer"
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const sub = interaction.options.getSubcommand();
     const guildId = interaction.guildId;
