@@ -73,6 +73,9 @@ module.exports = {
       } else if (customId.startsWith("cashier_")) {
         // 🆕 Roteamento: Painel do banco → cashier.handleButton
         commandName = "cashier";
+      } else if (customId.startsWith("mod_appeal_")) {
+        // 🆕 Roteamento: Sistema de apelação de moderação → mod.handleButton / handleModal / handleJudgmentButton
+        commandName = "mod";
       } else {
         // Roteador Dinâmico original
         commandName = customId.split(/_|-|:/)[0];
