@@ -103,7 +103,7 @@ module.exports = {
   async checkSorteios(client) {
     const dados = await giveawayStore.load();
     const now = Date.now();
-    
+
     for (const [msgId, gw] of Object.entries(dados)) {
       if (msgId === "counters") continue;
       // Se não acabou, o tempo passou e não é um DROP (drop não tem tempo)
@@ -117,7 +117,7 @@ module.exports = {
     .setName("evento")
     .setDescription("Sistema avançado da equipe de Eventos")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    
+
     .addSubcommand(sub => 
       sub.setName("painel").setDescription("Cria o painel de criação rápida de anúncios")
     )
@@ -128,6 +128,8 @@ module.exports = {
       .addStringOption(opt => opt.setName("premio").setDescription("Nome do prêmio").setRequired(true))
       .addStringOption(opt => opt.setName("duracao").setDescription("Duração (Ex: 10m, 1h, 1d)").setRequired(true))
       .addIntegerOption(opt => opt.setName("vencedores").setDescription("Quantidade de ganhadores").setRequired(true).setMinValue(1))
+      .addStringOption(opt => opt.setName("descricao").setDescription("Descrição ou regras do sorteio").setRequired(false)) // 🟢 NOVA OPÇÃO
+      .addAttachmentOption(opt => opt.setName("imagem").setDescription("Imagem ou banner do sorteio").setRequired(false)) // 🟢 NOVA OPÇÃO
       .addRoleOption(opt => opt.setName("requisito_cargo").setDescription("Cargo obrigatório").setRequired(false))
       .addIntegerOption(opt => opt.setName("requisito_dias").setDescription("Dias mínimos no servidor para participar").setRequired(false).setMinValue(1))
       .addUserOption(opt => opt.setName("patrocinador").setDescription("Quem doou o prêmio?").setRequired(false))
@@ -167,8 +169,8 @@ module.exports = {
 
       const btnCriar = new ButtonBuilder().setCustomId("evento_modal_criar").setLabel("📝 Anunciar Evento").setStyle(ButtonStyle.Success).setEmoji("📢");
       const row = new ActionRowBuilder().addComponents(btnCriar);
-      
-      await interaction.reply({ embeds: [embedPainel], components: [row], flags: MessageFlags.Ephemeral });
+
+      await interaction.reply({ embeds: [embedPainel], components: [row], ephemeral: true });
       await interaction.channel.send({ embeds: [embedPainel], components: [row] });
     }
 
@@ -179,6 +181,8 @@ module.exports = {
       const premio = interaction.options.getString("premio");
       const duracaoStr = interaction.options.getString("duracao");
       const vencedores = interaction.options.getInteger("vencedores");
+      const descricao = interaction.options.getString("descricao"); // 🟢 EXTRAINDO A DESCRIÇÃO
+      const imagem = interaction.options.getAttachment("imagem"); // 🟢 EXTRAINDO A IMAGEM
       const requisitoCargo = interaction.options.getRole("requisito_cargo");
       const requisitoDias = interaction.options.getInteger("requisito_dias");
       const patrocinador = interaction.options.getUser("patrocinador");
@@ -191,7 +195,9 @@ module.exports = {
 
       const dataFim = Date.now() + tempoMs;
 
-      let desc = `Clique no botão abaixo para participar!\n\n🏆 **Vencedores:** ${vencedores}\n⏳ **Termina em:** <t:${Math.floor(dataFim / 1000)}:R>\n\n**Requisitos:**\n`;
+      // 🟢 MONTANDO A DESCRIÇÃO COM A NOVA OPÇÃO
+      let desc = descricao ? `**Detalhes:** ${descricao}\n\n` : "";
+      desc += `Clique no botão abaixo para participar!\n\n🏆 **Vencedores:** ${vencedores}\n⏳ **Termina em:** <t:${Math.floor(dataFim / 1000)}:R>\n\n**Requisitos:**\n`;
       desc += requisitoCargo ? `🔸 Cargo: <@&${requisitoCargo.id}>\n` : "🔸 Cargo: Livre\n";
       desc += requisitoDias ? `🔸 Conta no servidor: Mínimo ${requisitoDias} dias\n` : "";
       if (patrocinador) desc += `\n🤝 **Patrocinador:** ${patrocinador}\n`;
@@ -202,6 +208,11 @@ module.exports = {
         .setDescription(desc)
         .setFooter({ text: `Criado por ${interaction.user.username}` })
         .setTimestamp(dataFim);
+
+      // 🟢 INJETANDO A IMAGEM SE O USUÁRIO ENVIOU
+      if (imagem) {
+        embed.setImage(imagem.url);
+      }
 
       const btnParticipar = new ButtonBuilder().setCustomId("evento_participar").setLabel("Participar (0)").setStyle(ButtonStyle.Primary).setEmoji("🎉");
       const row = new ActionRowBuilder().addComponents(btnParticipar);
@@ -286,7 +297,7 @@ module.exports = {
       try {
         const channel = await interaction.client.channels.fetch(gw.channelId);
         const message = await channel.messages.fetch(msgId);
-        
+
         const embedCancelado = EmbedBuilder.from(message.embeds[0])
           .setColor("#e74c3c")
           .setTitle(`🚫 Sorteio Cancelado: ${gw.premio}`)
@@ -304,11 +315,10 @@ module.exports = {
   // HANDLERS (Botões e Modal)
   // ==========================================
   async handleButton(interaction) {
-    
+
     // Participar do Sorteio Normal
     if (interaction.customId === "evento_participar") {
       // 🛠️ BUG FIX: deferUpdate() permite atualizar a mensagem E usar followUp() ephemeral.
-      // deferReply() era incompatível com o interaction.update() e os interaction.reply() de erro subsequentes.
       await interaction.deferUpdate();
       const gwData = await giveawayStore.load();
       const gw = gwData[interaction.message.id];
@@ -366,7 +376,7 @@ module.exports = {
         .setDescription(`🏆 **Vencedor:** ${interaction.user} foi o mais rápido e levou o prêmio!`);
 
       const btnWinner = new ButtonBuilder().setCustomId("null").setLabel(`Pego por ${interaction.user.username}`).setStyle(ButtonStyle.Secondary).setDisabled(true);
-      
+
       // 🛠️ BUG FIX: editReply() após deferUpdate() atualiza a mensagem do drop corretamente.
       await interaction.editReply({ embeds: [embedWin], components: [new ActionRowBuilder().addComponents(btnWinner)] });
       await interaction.channel.send({ content: `🎊 O dedo mais rápido do oeste! ${interaction.user} pegou **${gw.premio}** no Drop!` });
@@ -375,7 +385,6 @@ module.exports = {
     // Abrir Modal do Painel
     if (interaction.customId === "evento_modal_criar") {
       // 🛠️ BUG FIX: Removido o deferUpdate() que impedia o showModal() de funcionar.
-      // showModal() DEVE ser a primeira (e única) resposta à interação.
       const modal = new ModalBuilder().setCustomId("evento_submit").setTitle("Anúncio de Evento");
       modal.addComponents(
         new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("ev_titulo").setLabel("Nome do Evento").setStyle(TextInputStyle.Short).setRequired(true)),

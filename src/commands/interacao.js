@@ -3,6 +3,18 @@ const { SlashCommandBuilder,
 const { createEmbed } = require("../embeds");
 const { logger } = require("../logger");
 
+// Mapeamento de subcomando → endpoint da API waifu.pics
+const WAIFU_PICS_MAP = {
+  chorar: "cry",
+  highfive: "highfive",
+  poke: "poke",
+  tapa: "slap",
+  danca: "dance",
+  abracar: "hug",
+  beijar: "kiss",
+  cafune: "pat",
+};
+
 // Definições de interações com GIFs temáticos (URLs públicas genéricas)
 const INTERACOES = {
   abracar: {
@@ -132,8 +144,29 @@ module.exports = {
         return interaction.reply({ content: "❌ Interação não encontrada.", flags: MessageFlags.Ephemeral });
       }
 
+      await interaction.deferReply();
+
+      // Busca GIF da API waifu.pics; fallback para GIFs locais em caso de erro
+      let gif;
+      const waifuCategory = WAIFU_PICS_MAP[sub];
+      if (waifuCategory) {
+        try {
+          const res = await fetch(`https://api.waifu.pics/sfw/${waifuCategory}`);
+          if (res.ok) {
+            const json = await res.json();
+            if (json && json.url) gif = json.url;
+          } else {
+            logger.warn({ status: res.status, sub }, "waifu.pics retornou status não-ok, usando fallback local");
+          }
+        } catch (fetchErr) {
+          logger.warn({ err: fetchErr, sub }, "Falha ao buscar GIF da waifu.pics, usando fallback local");
+        }
+      }
+      if (!gif && interacaoData.gifs && interacaoData.gifs.length > 0) {
+        gif = interacaoData.gifs[Math.floor(Math.random() * interacaoData.gifs.length)];
+      }
+
       const isSelf = target.id === interaction.user.id;
-      const gif = interacaoData.gifs[Math.floor(Math.random() * interacaoData.gifs.length)];
 
       const description = isSelf
         ? `${interacaoData.emoji} **${interaction.user.username}** ${interacaoData.selfAction}`
@@ -147,7 +180,7 @@ module.exports = {
         timestamp: true,
       });
 
-      await interaction.reply({
+      await interaction.editReply({
         content: isSelf ? undefined : `${target}`,
         embeds: [embed],
         allowedMentions: { users: [target.id] },
