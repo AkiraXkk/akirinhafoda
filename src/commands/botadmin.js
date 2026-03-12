@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits,
+  MessageFlags, } = require("discord.js");
 const { createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { setGuildConfig, getGuildConfig } = require("../config/guildConfig");
 
@@ -19,7 +20,7 @@ module.exports = {
   async execute(interaction) {
     // Aqui qualquer Adm do servidor pode usar (exceto o leaveguild se você quiser travar pro dono)
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Permissão insuficiente.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Permissão insuficiente.")], flags: MessageFlags.Ephemeral });
     }
 
     const sub = interaction.options.getSubcommand();
@@ -49,14 +50,14 @@ module.exports = {
       }
 
       await setGuildConfig(interaction.guildId, patch);
-      return interaction.reply({ embeds: [createSuccessEmbed("Configuração salva!")], ephemeral: true });
+      return interaction.reply({ embeds: [createSuccessEmbed("Configuração salva!")], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "leaveguild") {
       const ownerId = process.env.OWNER_ID;
-      if (interaction.user.id !== ownerId) return interaction.reply({ content: "Só o dono tira o bot do server.", ephemeral: true });
+      if (interaction.user.id !== ownerId) return interaction.reply({ content: "Só o dono tira o bot do server.", flags: MessageFlags.Ephemeral });
 
-      await interaction.reply({ content: "👋 Saindo em 3 segundos...", ephemeral: true });
+      await interaction.reply({ content: "👋 Saindo em 3 segundos...", flags: MessageFlags.Ephemeral });
       setTimeout(() => interaction.guild.leave(), 3000);
     }
   }

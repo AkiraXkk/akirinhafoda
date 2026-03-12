@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
 const CHAMBERS = 6;
@@ -60,7 +61,7 @@ module.exports = {
     await interaction.reply({
       embeds: [mainEmbed],
       components: [rowQuick],
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     const response = await interaction.fetchReply();
 
@@ -71,7 +72,7 @@ module.exports = {
 
     collector.on("collect", async (i) => {
       if (i.user.id !== userId)
-        return i.reply({ content: "Não é seu jogo!", ephemeral: true });
+        return i.reply({ content: "Não é seu jogo!", flags: MessageFlags.Ephemeral });
 
       if (i.customId.startsWith("roleta_quick_")) {
         collector.stop("started");
@@ -97,7 +98,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
           `Saldo insuficiente! Você tem **${balance.coins || 0}** 🪙`
         ),
       ],
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     };
     if (interaction.replied || interaction.deferred)
       return interaction.followUp(insufficient).catch(() => {});
@@ -115,7 +116,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
     } else if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: "🔫 Carregando o revólver...",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -217,7 +218,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
       content: null,
       embeds: [getGameEmbed(0, true)],
       components: getButtons(0),
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
 
     const collector = msg.createMessageComponentCollector({
@@ -386,7 +387,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
       await interaction
         .reply({
           content: "Ocorreu um erro no jogo. Sua aposta foi devolvida.",
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         })
         .catch(() => {});
     }

@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
 const EMPTY = "⬜";
@@ -127,7 +128,7 @@ module.exports = {
             color: 0xe74c3c,
           }),
         ],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -142,7 +143,7 @@ module.exports = {
             color: 0xe74c3c,
           }),
         ],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -205,7 +206,7 @@ async function runBotGame(interaction, player) {
     if (board[index] !== EMPTY) {
       return i.reply({
         content: "Essa posição já está ocupada!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -417,7 +418,7 @@ async function startPvPMatch(
     if (i.user.id !== currentTurn) {
       return i.reply({
         content: "Não é sua vez!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -426,7 +427,7 @@ async function startPvPMatch(
     if (board[index] !== EMPTY) {
       return i.reply({
         content: "Essa posição já está ocupada!",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 

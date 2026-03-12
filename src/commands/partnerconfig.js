@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder,
+  MessageFlags, } = require("discord.js");
 const { getGuildConfig, setGuildConfig } = require("../config/guildConfig");
 const { createDataStore } = require("../store/dataStore");
 
@@ -63,7 +64,7 @@ module.exports = {
       if (staffRole) pConfig.staffPingRoleId = staffRole.id; 
 
       await setGuildConfig(guildId, { partnership: pConfig });
-      return interaction.reply({ content: "✅ Configurações básicas de parceria atualizadas.", ephemeral: true });
+      return interaction.reply({ content: "✅ Configurações básicas de parceria atualizadas.", flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "ranks") {
@@ -73,13 +74,13 @@ module.exports = {
         ouro: interaction.options.getRole("ouro").id
       };
       await setGuildConfig(guildId, { partnership: pConfig });
-      return interaction.reply({ content: "✅ Cargos de Ranking configurados com sucesso.", ephemeral: true });
+      return interaction.reply({ content: "✅ Cargos de Ranking configurados com sucesso.", flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "boostrole") {
       pConfig.boostRole = interaction.options.getRole("cargo").id;
       await setGuildConfig(guildId, { partnership: pConfig });
-      return interaction.reply({ content: "✅ Cargo VIP de **Parceiro Boost** configurado com sucesso!", ephemeral: true });
+      return interaction.reply({ content: "✅ Cargo VIP de **Parceiro Boost** configurado com sucesso!", flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "info") {
@@ -87,7 +88,7 @@ module.exports = {
       const searchId = interaction.options.getString("id").toUpperCase();
       const data = partners[searchId];
 
-      if (!data) return interaction.reply({ content: "❌ Nenhuma parceria encontrada com este ID.", ephemeral: true });
+      if (!data) return interaction.reply({ content: "❌ Nenhuma parceria encontrada com este ID.", flags: MessageFlags.Ephemeral });
 
       const embed = new EmbedBuilder()
         .setTitle(`Ficha Técnica - ${data.id}`)
@@ -106,14 +107,14 @@ module.exports = {
       if (data.processedBy) embed.addFields({ name: "Processado por", value: `<@${data.processedBy}>`, inline: false });
       if (data.reason) embed.addFields({ name: "Motivo da Recusa", value: data.reason, inline: false });
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     // ==========================================
     // EXECUÇÃO DA NOVA LISTA DE ADMIN
     // ==========================================
     if (sub === "list") {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const allPartners = await partnersStore.load();
       const activePartners = Object.values(allPartners).filter(p => p.status === "accepted");
@@ -144,7 +145,7 @@ module.exports = {
     }
 
     if (sub === "clear") {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const allPartners = await partnersStore.load();
       const keys = Object.keys(allPartners);
       if (keys.length === 0) return interaction.editReply({ content: "❌ O banco de dados já está vazio!" });

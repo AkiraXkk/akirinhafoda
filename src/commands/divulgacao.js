@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder,
+  MessageFlags, } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -43,7 +44,7 @@ module.exports = {
       
       if (canalProvas) {
         await canalProvas.send({ embeds: [embedRegistro] });
-        await interaction.reply({ content: "✅ O seu registro foi salvo com sucesso no canal de provas! Bom trabalho!", ephemeral: true });
+        await interaction.reply({ content: "✅ O seu registro foi salvo com sucesso no canal de provas! Bom trabalho!", flags: MessageFlags.Ephemeral });
       } else {
         // Se não achar o canal, manda onde o comando foi usado
         await interaction.reply({ content: "✅ Registro salvo!", embeds: [embedRegistro] });

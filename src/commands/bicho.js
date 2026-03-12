@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ComponentType } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ComponentType,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 
 const animals = [
@@ -77,7 +78,7 @@ module.exports = {
         const response = await interaction.reply({ 
             embeds: [mainEmbed], 
             components: [row],
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
 
         // Collector para botões
@@ -88,12 +89,12 @@ module.exports = {
 
         collector.on('collect', async i => {
             if (i.user.id !== userId) {
-                return i.reply({ content: "Esse painel não é para você!", ephemeral: true });
+                return i.reply({ content: "Esse painel não é para você!", flags: MessageFlags.Ephemeral });
             }
 
             if (i.customId === 'bicho_saldo') {
                 const bal = await eco.getBalance(guildId, userId);
-                await i.reply({ content: `💰 Seu saldo atual: **${bal.coins || 0}** moedas`, ephemeral: true });
+                await i.reply({ content: `💰 Seu saldo atual: **${bal.coins || 0}** moedas`, flags: MessageFlags.Ephemeral });
             }
 
             if (i.customId === 'bicho_tabela') {
@@ -102,7 +103,7 @@ module.exports = {
                     description: animals.map(a => `**${a.id}**. ${a.emoji} ${a.name}`).join('\n'),
                     color: 0x3498db
                 });
-                await i.reply({ embeds: [tabelaEmbed], ephemeral: true });
+                await i.reply({ embeds: [tabelaEmbed], flags: MessageFlags.Ephemeral });
             }
 
             if (i.customId === 'bicho_apostar') {
@@ -124,7 +125,7 @@ module.exports = {
                 const selectMsg = await i.reply({ 
                     content: "Selecione o bicho em que deseja apostar:", 
                     components: [selectRow], 
-                    ephemeral: true,
+                    flags: MessageFlags.Ephemeral,
                     fetchReply: true
                 });
 
@@ -176,7 +177,7 @@ module.exports = {
                         const valor = parseInt(valorRaw);
 
                         if (isNaN(valor) || valor <= 0) {
-                            return modalSubmission.reply({ content: "❌ Valor inválido! Digite um número inteiro positivo.", ephemeral: true });
+                            return modalSubmission.reply({ content: "❌ Valor inválido! Digite um número inteiro positivo.", flags: MessageFlags.Ephemeral });
                         }
 
                         // Executar o jogo
@@ -198,9 +199,9 @@ async function runGame(interaction, grupoAposta, valorAposta, eco, guildId, user
     if ((balance.coins || 0) < valorAposta) {
         const errorEmbed = createErrorEmbed(`Você não tem moedas suficientes! Seu saldo: **${balance.coins || 0}** 🪙`);
         if (interaction.isRepliable() && !interaction.replied) {
-            return interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+            return interaction.reply({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         } else {
-            return interaction.followUp({ embeds: [errorEmbed], ephemeral: true });
+            return interaction.followUp({ embeds: [errorEmbed], flags: MessageFlags.Ephemeral });
         }
     }
 

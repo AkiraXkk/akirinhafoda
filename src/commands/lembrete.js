@@ -1,4 +1,5 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { logger } = require("../logger");
 
@@ -46,7 +47,7 @@ module.exports = {
       if (!ms) {
         return interaction.reply({
           embeds: [createErrorEmbed("Formato de tempo inválido. Use: `10s`, `5m`, `2h`, `1d`.", interaction.user)],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -55,7 +56,7 @@ module.exports = {
       if (ms > MAX_MS) {
         return interaction.reply({
           embeds: [createErrorEmbed("O tempo máximo para um lembrete é de **7 dias**.", interaction.user)],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -67,7 +68,7 @@ module.exports = {
       if (userReminders.length >= 5) {
         return interaction.reply({
           embeds: [createErrorEmbed("Você já tem **5 lembretes** ativos. Aguarde um deles expirar.", interaction.user)],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -123,10 +124,10 @@ module.exports = {
         user: interaction.user,
       });
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     } catch (error) {
       logger.error({ err: error, command: "lembrete" }, "Erro no comando /lembrete");
-      const msg = { content: "❌ Ocorreu um erro ao definir o lembrete.", ephemeral: true };
+      const msg = { content: "❌ Ocorreu um erro ao definir o lembrete.", flags: MessageFlags.Ephemeral };
       if (interaction.replied || interaction.deferred) {
         await interaction.followUp(msg).catch(() => {});
       } else {

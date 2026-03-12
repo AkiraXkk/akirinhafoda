@@ -1,7 +1,8 @@
 const { 
   SlashCommandBuilder, 
   EmbedBuilder, 
-  PermissionFlagsBits 
+  PermissionFlagsBits,
+  MessageFlags, 
 } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
 
@@ -57,11 +58,11 @@ module.exports = {
     if (userAreas.length === 0) {
       return interaction.reply({ 
         content: "❌ Este membro não faz parte de nenhuma equipe da Staff mapeada.", 
-        ephemeral: true 
+        flags: MessageFlags.Ephemeral 
       });
     }
 
-    await interaction.deferReply({ ephemeral: targetUser.id !== interaction.user.id });
+    await interaction.deferReply({ flags: targetUser.id !== interaction.user.id ? MessageFlags.Ephemeral : 0 });
 
     try {
       const levels = await levelsStore.load();

@@ -7,7 +7,8 @@ const {
   StringSelectMenuOptionBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder
+  EmbedBuilder,
+  MessageFlags,
 } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
@@ -116,7 +117,7 @@ module.exports = {
       const areaLabel = area === "migracao" ? "Migração" : getAreaLabel(area);
       return interaction.reply({
         embeds: [createSuccessEmbed(`Cargo <@&${cargo.id}> configurado para a área **${areaLabel}**.`)],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -167,7 +168,7 @@ module.exports = {
       staffRoleId: cargoEquipe?.id || null
     }));
 
-    await interaction.reply({ embeds: [createSuccessEmbed(`Painel enviado em ${canal}.`)], ephemeral: true });
+    await interaction.reply({ embeds: [createSuccessEmbed(`Painel enviado em ${canal}.`)], flags: MessageFlags.Ephemeral });
   },
 
   // ==========================================
@@ -175,7 +176,7 @@ module.exports = {
   // ==========================================
   async handleSelectMenu(interaction) {
     if (interaction.customId === "sejawda_tipo") {
-      await interaction.deferReply({ ephemeral: true }); 
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }); 
 
       const tipo = interaction.values[0];
       const rainbow = getDecorEmoji(interaction, "urainbowdiamond", "💎");
@@ -294,7 +295,7 @@ module.exports = {
       const chats = await chatStore.load();
       const chat = chats[interaction.channelId];
 
-      if (!chat || chat.closedAt) return interaction.followUp({ embeds: [createErrorEmbed("Este chat não é uma solicitação ativa.")], ephemeral: true });
+      if (!chat || chat.closedAt) return interaction.followUp({ embeds: [createErrorEmbed("Este chat não é uma solicitação ativa.")], flags: MessageFlags.Ephemeral });
 
       const area = interaction.values[0];
       await chatStore.update(interaction.channelId, (data) => ({ ...data, area }));
@@ -321,7 +322,7 @@ module.exports = {
     // Handler do motivo de fechamento da solicitação
     if (interaction.customId === "motivo_fechar_sejawda") {
       const motivo = interaction.values[0];
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const chats = await chatStore.load();
       const chat = chats[interaction.channelId];
@@ -376,7 +377,7 @@ module.exports = {
     const chats = await chatStore.load();
     const chat = chats[interaction.channelId];
 
-    if (!chat || chat.closedAt) return interaction.reply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")], ephemeral: true });
+    if (!chat || chat.closedAt) return interaction.reply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")], flags: MessageFlags.Ephemeral });
 
     const hasStaffRole = chat.staffRoleId && interaction.member?.roles?.cache?.has(chat.staffRoleId);
     const isGlobal = isGlobalStaff(interaction.member);
@@ -385,11 +386,11 @@ module.exports = {
     if (interaction.customId === "sejawda_assumir") {
       // Bloqueia o autor do ticket de assumir o próprio ticket
       if (chat.userId === interaction.user.id) {
-        return interaction.reply({ embeds: [createErrorEmbed("❌ Você não pode assumir seu próprio ticket.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("❌ Você não pode assumir seu próprio ticket.")], flags: MessageFlags.Ephemeral });
       }
 
       if (!isGlobal && !hasStaffRole) {
-        return interaction.reply({ embeds: [createErrorEmbed("Apenas membros da equipe podem assumir solicitações.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas membros da equipe podem assumir solicitações.")], flags: MessageFlags.Ephemeral });
       }
 
       await interaction.deferUpdate();
@@ -418,11 +419,11 @@ module.exports = {
       const hasManageGuild = interaction.member.permissions.has("ManageGuild");
 
       if (!isAuthor && !isAssumer && !hasManageGuild) {
-        return interaction.reply({ embeds: [createErrorEmbed("Apenas o autor, o staff responsável ou um administrador pode fechar esta solicitação.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas o autor, o staff responsável ou um administrador pode fechar esta solicitação.")], flags: MessageFlags.Ephemeral });
       }
 
       if (chat.tipo !== "migrado" && !chat.area) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você precisa escolher uma área no menu antes de finalizar a solicitação.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você precisa escolher uma área no menu antes de finalizar a solicitação.")], flags: MessageFlags.Ephemeral });
       }
 
       const motivoMenu = new StringSelectMenuBuilder()
@@ -438,15 +439,15 @@ module.exports = {
       return interaction.reply({
         embeds: [createEmbed({ title: "🔒 Fechar Solicitação", description: "Selecione o motivo do fechamento abaixo:", color: 0xe74c3c })],
         components: [new ActionRowBuilder().addComponents(motivoMenu)],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
 
     // DELETAR TICKET PERMANENTEMENTE
     if (interaction.customId === "sejawda_delete") {
-      if (!isGlobal) return interaction.reply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de solicitações.")], ephemeral: true });
-      await interaction.deferReply({ ephemeral: false });
-      await interaction.followUp({ content: "💥 O canal será destruído em 5 segundos...", ephemeral: false });
+      if (!isGlobal) return interaction.reply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de solicitações.")], flags: MessageFlags.Ephemeral });
+      await interaction.deferReply();
+      await interaction.followUp({ content: "💥 O canal será destruído em 5 segundos..." });
       setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     }
   }

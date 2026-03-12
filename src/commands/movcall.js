@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits,
+  MessageFlags, } = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -25,16 +26,16 @@ module.exports = {
     const tipo = interaction.options.getString("tipo");
     const motivo = interaction.options.getString("motivo");
 
-    if (!alvo) return interaction.reply({ content: "❌ Membro não encontrado.", ephemeral: true });
-    if (!alvo.voice.channel) return interaction.reply({ content: "❌ O membro selecionado não está em um canal de voz no momento.", ephemeral: true });
+    if (!alvo) return interaction.reply({ content: "❌ Membro não encontrado.", flags: MessageFlags.Ephemeral });
+    if (!alvo.voice.channel) return interaction.reply({ content: "❌ O membro selecionado não está em um canal de voz no momento.", flags: MessageFlags.Ephemeral });
 
     try {
       if (tipo === "mutar") {
         await alvo.voice.setMute(true, motivo);
-        await interaction.reply({ content: `✅ **${alvo.user.tag}** foi mutado(a) no canal de voz com sucesso.\n📝 **Motivo:** ${motivo}`, ephemeral: true });
+        await interaction.reply({ content: `✅ **${alvo.user.tag}** foi mutado(a) no canal de voz com sucesso.\n📝 **Motivo:** ${motivo}`, flags: MessageFlags.Ephemeral });
       } else if (tipo === "kickar") {
         await alvo.voice.disconnect(motivo);
-        await interaction.reply({ content: `✅ **${alvo.user.tag}** foi desconectado(a) da call com sucesso.\n📝 **Motivo:** ${motivo}`, ephemeral: true });
+        await interaction.reply({ content: `✅ **${alvo.user.tag}** foi desconectado(a) da call com sucesso.\n📝 **Motivo:** ${motivo}`, flags: MessageFlags.Ephemeral });
       }
       
       // LOG DA AÇÃO PARA A CÚPULA LER DEPOIS
@@ -45,7 +46,7 @@ module.exports = {
       
     } catch (e) {
       console.error(e);
-      await interaction.reply({ content: "❌ Erro ao tentar punir. Verifique se o bot tem permissão suficiente ou se o cargo do membro é superior ao do bot.", ephemeral: true });
+      await interaction.reply({ content: "❌ Erro ao tentar punir. Verifique se o bot tem permissão suficiente ou se o cargo do membro é superior ao do bot.", flags: MessageFlags.Ephemeral });
     }
   }
 };

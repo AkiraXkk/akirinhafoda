@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits, ChannelType,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { getGuildConfig, setGuildConfig } = require("../config/guildConfig");
 
@@ -81,7 +82,7 @@ module.exports = {
           `✅ Categoria de tickets definida para **${category.name}**!\n\n` +
           `Agora use \`/ticket setup\` para enviar o painel de tickets.`
         )],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -97,7 +98,7 @@ module.exports = {
           `✅ Canal de logs definido para **${channel.name}**!\n\n` +
           `Os logs do sistema serão enviados para este canal.`
         )],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -113,7 +114,7 @@ module.exports = {
           `✅ Cargo de staff definido para **${role.name}**!\n\n` +
           `Membros com este cargo terão acesso administrativo.`
         )],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -141,7 +142,7 @@ module.exports = {
         `Esses cargos agora estarão disponíveis para menção no sistema de parcerias!`
       );
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "view") {
@@ -220,7 +221,7 @@ module.exports = {
           color: 0x3498db,
           footer: { text: "WDA - Todos os direitos reservados" }
         })],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
   }

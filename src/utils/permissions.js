@@ -1,4 +1,5 @@
-const { PermissionFlagsBits } = require("discord.js");
+const { PermissionFlagsBits,
+  MessageFlags, } = require("discord.js");
 const { getGuildConfig } = require("../config/guildConfig");
 
 /**
@@ -86,7 +87,7 @@ function withPermissionCheck(execute, options = {}) {
       const { createErrorEmbed } = require("../embeds");
       return interaction.reply({
         embeds: [createErrorEmbed(check.reason || "Sem permissão para usar este comando.")],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 

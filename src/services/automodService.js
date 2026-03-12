@@ -4,30 +4,45 @@
  * RaidProtectionService, AntiMemberJoinService.
  *
  * Funcionalidades:
- *  - Anti-Spam      : limita mensagens por usuário em uma janela de tempo
- *  - Anti-Link      : bloqueia links de convite do Discord
+ *  - Anti-Spam        : limita mensagens por usuário em uma janela de tempo
+ *  - Anti-Link        : bloqueia links de convite do Discord e URLs genéricas
  *  - Filtro de Palavras : remove mensagens com conteúdo proibido
- *  - Anti-Raid      : detecta entrada em massa de membros e toma ação
+ *  - Anti-Raid        : detecta entrada em massa de membros e toma ação
+ *  - Anti-Join        : bloqueia entradas quando o servidor está em lockdown
+ *
+ * Integração com o sistema de moderação:
+ *  - Ação "warn" registra o warn em warns.json via warnService
+ *  - Respeita os limites de auto-punição configurados em mod_config.json
+ *  - Envia logs tanto no canal de automod quanto no canal de logs principal
  */
 
 const { PermissionFlagsBits } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
 const { logger } = require("../logger");
+const { registrarWarn } = require("./warnService");
 
 const automodStore = createDataStore("automod_config.json");
 
 // ── Defaults ─────────────────────────────────────────────────────────────────
 const DEFAULT_CONFIG = {
   antispam: { enabled: false, limite: 5, janela: 5000, acao: "delete" },
-  antilink: { enabled: false, acao: "delete" },
-  filtro:   { enabled: false, palavras: [] },
+  antilink: { enabled: false, acao: "delete", bloquearUrls: false },
+  filtro:   { enabled: false, palavras: [], acao: "delete" },
   antiraid: { enabled: false, limite: 10, janela: 10000, acao: "kick" },
   antijoin: { enabled: false, acao: "kick" },
   logChannelId: null,
 };
 
-// Regex para detectar links de convite do Discord
-const INVITE_REGEX = /\bdiscord(?:\.gg|app\.com\/invite|\.com\/invite)\/[\w-]+/i;
+// Regex para detectar links de convite do Discord (incluindo formatos alternativos e encurtadores)
+const INVITE_REGEX =
+  /\b(?:discord(?:\.gg|app\.com\/invite|\.com\/invite)|dsc\.gg|discord\.link)\/[\w-]+/i;
+
+// Regex para detectar URLs genéricas (http/https) com estrutura de domínio válida
+const URL_REGEX =
+  /https?:\/\/[a-zA-Z0-9][-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z]{2,}\b([-a-zA-Z0-9@:%_+.~#?&/=]*)/i;
+
+// ── Durações de timeout ───────────────────────────────────────────────────────
+const SPAM_MUTE_DURATION_MS  = 10 * 60 * 1000; // 10 minutos (spam / palavra proibida)
 
 // ── Caches em memória ────────────────────────────────────────────────────────
 // spam cache: `${guildId}_${userId}` -> { timestamps: number[] }
@@ -77,21 +92,32 @@ async function logAutomodAction(guild, titulo, descricao) {
   try {
     const raw = await getConfig(guild.id);
     const channelId = raw.logChannelId;
-    if (!channelId) return;
 
-    const channel = guild.channels.cache.get(channelId);
-    if (!channel) return;
+    // Canal dedicado de automod
+    if (channelId) {
+      const channel = guild.channels.cache.get(channelId);
+      if (channel) {
+        const { createEmbed } = require("../embeds");
+        const embed = createEmbed({
+          title: `🛡️ AutoMod — ${titulo}`,
+          description: descricao,
+          color: 0xff6b35,
+          footer: "AutoMod Log",
+          timestamp: true,
+        });
+        await channel.send({ embeds: [embed] }).catch(() => {});
+      }
+    }
 
-    const { createEmbed } = require("../embeds");
-    const embed = createEmbed({
-      title: `🛡️ AutoMod — ${titulo}`,
-      description: descricao,
-      color: 0xff6b35,
-      footer: "AutoMod Log",
-      timestamp: true,
-    });
-
-    await channel.send({ embeds: [embed] }).catch(() => {});
+    // Canal de logs principal (via logService)
+    const logService = guild.client?.services?.log;
+    if (logService) {
+      await logService.log(guild, {
+        title: `🛡️ AutoMod — ${titulo}`,
+        description: descricao,
+        color: 0xff6b35,
+      }).catch(() => {});
+    }
   } catch (err) {
     logger.error({ err }, "AutoMod: Erro ao enviar log");
   }
@@ -181,11 +207,29 @@ async function applySpamAction(message, config) {
       );
       break;
 
+    case "warn":
+      await message.delete().catch(() => {});
+      try {
+        await registrarWarn(
+          message.guild,
+          message.author.id,
+          "AutoMod: Spam detectado",
+          message.client
+        );
+      } catch (err) {
+        logger.error({ err }, "AutoMod: Erro ao registrar warn por spam");
+      }
+      sendWarning(
+        message.channel,
+        `⚠️ ${message.author}, você está enviando mensagens muito rápido! Aviso registrado.`
+      );
+      break;
+
     case "mute":
       await message.delete().catch(() => {});
       if (message.member) {
         await message.member
-          .timeout(10 * 60 * 1000, "AutoMod: Spam detectado")
+          .timeout(SPAM_MUTE_DURATION_MS, "AutoMod: Spam detectado")
           .catch(() => {});
         sendWarning(
           message.channel,
@@ -213,11 +257,16 @@ async function applySpamAction(message, config) {
 // ── Anti-Link ────────────────────────────────────────────────────────────────
 
 async function checkLinks(message, config) {
-  if (!INVITE_REGEX.test(message.content)) return;
+  const isInvite = INVITE_REGEX.test(message.content);
+  const isUrl    = config.bloquearUrls && URL_REGEX.test(message.content);
+
+  if (!isInvite && !isUrl) return;
+
+  const tipo = isInvite ? "Link de convite" : "URL";
 
   logger.info(
     { userId: message.author.id, guildId: message.guildId },
-    "AutoMod: Link de convite detectado"
+    `AutoMod: ${tipo} detectado`
   );
 
   try {
@@ -226,6 +275,7 @@ async function checkLinks(message, config) {
       message.guild,
       "Anti-Link",
       `**Usuário:** ${message.author.tag} (<@${message.author.id}>)\n` +
+        `**Tipo:** ${tipo}\n` +
         `**Ação:** ${config.acao}\n` +
         `**Canal:** <#${message.channelId}>\n` +
         `**Mensagem:** ${message.content.substring(0, 200)}`
@@ -241,15 +291,25 @@ async function applyLinkAction(message, config) {
       await message.delete().catch(() => {});
       sendWarning(
         message.channel,
-        `⚠️ ${message.author}, links de convite não são permitidos neste servidor!`
+        `⚠️ ${message.author}, links não são permitidos neste servidor!`
       );
       break;
 
     case "warn":
       await message.delete().catch(() => {});
+      try {
+        await registrarWarn(
+          message.guild,
+          message.author.id,
+          "AutoMod: Link não permitido detectado",
+          message.client
+        );
+      } catch (err) {
+        logger.error({ err }, "AutoMod: Erro ao registrar warn por link");
+      }
       sendWarning(
         message.channel,
-        `⚠️ ${message.author}, links de convite não são permitidos! Aviso registrado.`
+        `⚠️ ${message.author}, links não são permitidos! Aviso registrado.`
       );
       break;
 
@@ -257,7 +317,7 @@ async function applyLinkAction(message, config) {
       await message.delete().catch(() => {});
       if (message.member) {
         await message.member
-          .kick("AutoMod: Link de convite detectado")
+          .kick("AutoMod: Link não permitido detectado")
           .catch(() => {});
       }
       break;
@@ -278,19 +338,67 @@ async function checkWordFilter(message, config) {
 
   try {
     await message.delete().catch(() => {});
-    sendWarning(
-      message.channel,
-      `⚠️ ${message.author}, sua mensagem contém conteúdo proibido.`
-    );
+    await applyWordFilterAction(message, config, matched);
     await logAutomodAction(
       message.guild,
       "Filtro de Palavras",
       `**Usuário:** ${message.author.tag} (<@${message.author.id}>)\n` +
         `**Canal:** <#${message.channelId}>\n` +
+        `**Ação:** ${config.acao || "delete"}\n` +
         `**Palavra detectada:** \`${matched}\``
     );
   } catch (err) {
     logger.error({ err }, "AutoMod: Erro ao aplicar filtro de palavras");
+  }
+}
+
+async function applyWordFilterAction(message, config, matched) {
+  const acao = config.acao || "delete";
+
+  switch (acao) {
+    case "delete":
+      sendWarning(
+        message.channel,
+        `⚠️ ${message.author}, sua mensagem contém conteúdo proibido.`
+      );
+      break;
+
+    case "warn":
+      try {
+        await registrarWarn(
+          message.guild,
+          message.author.id,
+          `AutoMod: Palavra proibida detectada — "${matched}"`,
+          message.client
+        );
+      } catch (err) {
+        logger.error({ err }, "AutoMod: Erro ao registrar warn por palavra proibida");
+      }
+      sendWarning(
+        message.channel,
+        `⚠️ ${message.author}, sua mensagem contém conteúdo proibido! Aviso registrado.`
+      );
+      break;
+
+    case "mute":
+      if (message.member) {
+        await message.member
+          .timeout(SPAM_MUTE_DURATION_MS, `AutoMod: Palavra proibida — "${matched}"`)
+          .catch(() => {});
+        sendWarning(
+          message.channel,
+          `🔇 ${message.author} foi silenciado por 10 minutos por uso de conteúdo proibido.`
+        );
+      }
+      break;
+
+    case "kick":
+      if (message.member) {
+        await message.member
+          .kick(`AutoMod: Palavra proibida — "${matched}"`)
+          .catch(() => {});
+      }
+      break;
   }
 }
 

@@ -1,4 +1,5 @@
-const { Events } = require("discord.js");
+const { Events,
+  MessageFlags, } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
 
 const partnersStore = createDataStore("partners.json");
@@ -40,7 +41,7 @@ module.exports = {
         }
       } catch (error) {
         console.error("Erro ao recusar tudo:", error.message);
-        return interaction.reply({ content: "Erro ao processar a recusa em massa.", ephemeral: true }).catch(() => null);
+        return interaction.reply({ content: "Erro ao processar a recusa em massa.", flags: MessageFlags.Ephemeral }).catch(() => null);
       }
     }
   }

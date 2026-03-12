@@ -9,16 +9,16 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
+  MessageFlags,
 } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
+const { registrarWarn, warnsStore } = require("../services/warnService");
 
-const modConfigStore = createDataStore("mod_config.json");
+const modConfigStore  = createDataStore("mod_config.json");
 const modAppealsStore = createDataStore("mod_appeals.json");
-const warnsStore = createDataStore("warns.json");
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
-const AUTO_MUTE_DURATION_MS = 1 * 60 * 60 * 1000; // 1 hora
 const MAX_MUTE_HOURS = 672; // 28 dias
 const INVITE_EXPIRY_SECONDS = 86400; // 24 horas
 
@@ -156,12 +156,12 @@ module.exports = {
     // CLEAR
     if (sub === "clear") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para gerenciar mensagens.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para gerenciar mensagens.")], flags: MessageFlags.Ephemeral });
       }
 
       const amount = interaction.options.getInteger("quantidade");
       
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       
       try {
         const deleted = await interaction.channel.bulkDelete(amount, true);
@@ -194,7 +194,7 @@ module.exports = {
     // BAN
     if (sub === "ban") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.BanMembers)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para banir membros.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para banir membros.")], flags: MessageFlags.Ephemeral });
       }
 
       const user = interaction.options.getUser("usuario");
@@ -202,21 +202,21 @@ module.exports = {
 
       // Trava de Auto-Punição
       if (user.id === interaction.user.id) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não pode punir a si mesmo.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não pode punir a si mesmo.")], flags: MessageFlags.Ephemeral });
       }
 
       const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
       if (member) {
         if (!member.bannable) {
-          return interaction.reply({ embeds: [createErrorEmbed("Eu não posso banir este usuário (ele pode ter um cargo maior que o meu).")], ephemeral: true });
+          return interaction.reply({ embeds: [createErrorEmbed("Eu não posso banir este usuário (ele pode ter um cargo maior que o meu).")], flags: MessageFlags.Ephemeral });
         }
 
         // Trava de Hierarquia
         const targetHighest = member.roles.highest.position;
         const executorHighest = interaction.member.roles.highest.position;
         if (targetHighest >= executorHighest) {
-          return interaction.reply({ embeds: [createErrorEmbed("Você não pode punir alguém com cargo igual ou superior ao seu.")], ephemeral: true });
+          return interaction.reply({ embeds: [createErrorEmbed("Você não pode punir alguém com cargo igual ou superior ao seu.")], flags: MessageFlags.Ephemeral });
         }
       }
 
@@ -275,7 +275,7 @@ module.exports = {
     // KICK
     if (sub === "kick") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.KickMembers)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para expulsar membros.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para expulsar membros.")], flags: MessageFlags.Ephemeral });
       }
 
       const user = interaction.options.getUser("usuario");
@@ -283,24 +283,24 @@ module.exports = {
 
       // Trava de Auto-Punição
       if (user.id === interaction.user.id) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não pode punir a si mesmo.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não pode punir a si mesmo.")], flags: MessageFlags.Ephemeral });
       }
 
       const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
       if (!member) {
-        return interaction.reply({ embeds: [createErrorEmbed("Usuário não encontrado no servidor.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Usuário não encontrado no servidor.")], flags: MessageFlags.Ephemeral });
       }
 
       if (!member.kickable) {
-        return interaction.reply({ embeds: [createErrorEmbed("Eu não posso expulsar este usuário.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Eu não posso expulsar este usuário.")], flags: MessageFlags.Ephemeral });
       }
 
       // Trava de Hierarquia
       const targetHighest = member.roles.highest.position;
       const executorHighest = interaction.member.roles.highest.position;
       if (targetHighest >= executorHighest) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não pode punir alguém com cargo igual ou superior ao seu.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não pode punir alguém com cargo igual ou superior ao seu.")], flags: MessageFlags.Ephemeral });
       }
 
       await interaction.deferReply();
@@ -338,7 +338,7 @@ module.exports = {
     // LOCK
     if (sub === "lock") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para gerenciar canais.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para gerenciar canais.")], flags: MessageFlags.Ephemeral });
       }
 
       await interaction.deferReply();
@@ -355,7 +355,7 @@ module.exports = {
     // UNLOCK
     if (sub === "unlock") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageChannels)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para gerenciar canais.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para gerenciar canais.")], flags: MessageFlags.Ephemeral });
       }
 
       await interaction.deferReply();
@@ -372,7 +372,7 @@ module.exports = {
     // MUTE
     if (sub === "mute") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para silenciar membros.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para silenciar membros.")], flags: MessageFlags.Ephemeral });
       }
 
       const user = interaction.options.getUser("usuario");
@@ -381,19 +381,19 @@ module.exports = {
 
       // Trava de Auto-Punição
       if (user.id === interaction.user.id) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não pode punir a si mesmo.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não pode punir a si mesmo.")], flags: MessageFlags.Ephemeral });
       }
 
       const member = await interaction.guild.members.fetch(user.id).catch(() => null);
       if (!member) {
-        return interaction.reply({ embeds: [createErrorEmbed("Usuário não encontrado no servidor.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Usuário não encontrado no servidor.")], flags: MessageFlags.Ephemeral });
       }
 
       // Trava de Hierarquia
       const targetHighest = member.roles.highest.position;
       const executorHighest = interaction.member.roles.highest.position;
       if (targetHighest >= executorHighest) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não pode punir alguém com cargo igual ou superior ao seu.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não pode punir alguém com cargo igual ou superior ao seu.")], flags: MessageFlags.Ephemeral });
       }
 
       await interaction.deferReply();
@@ -453,14 +453,14 @@ module.exports = {
     // UNMUTE
     if (sub === "unmute") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para remover silenciamentos.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para remover silenciamentos.")], flags: MessageFlags.Ephemeral });
       }
 
       const user = interaction.options.getUser("usuario");
       const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
       if (!member) {
-        return interaction.reply({ embeds: [createErrorEmbed("Usuário não encontrado no servidor.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Usuário não encontrado no servidor.")], flags: MessageFlags.Ephemeral });
       }
 
       await interaction.deferReply();
@@ -491,7 +491,7 @@ module.exports = {
     // CONFIG
     if (sub === "config") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores podem configurar o sistema de moderação.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores podem configurar o sistema de moderação.")], flags: MessageFlags.Ephemeral });
       }
 
       const canal = interaction.options.getChannel("canal_apelacao");
@@ -499,7 +499,7 @@ module.exports = {
       const warnLimitMute = interaction.options.getInteger("warn_limit_mute");
       const warnLimitBan = interaction.options.getInteger("warn_limit_ban");
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       try {
         const existing = await modConfigStore.get(interaction.guild.id) || {};
         await modConfigStore.set(interaction.guild.id, {
@@ -531,7 +531,7 @@ module.exports = {
         const config = await modConfigStore.get(interaction.guild.id);
         const cargoMod = config?.cargo_mod;
         if (!cargoMod || !interaction.member.roles.cache.has(cargoMod)) {
-          return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para desbanir membros.")], ephemeral: true });
+          return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para desbanir membros.")], flags: MessageFlags.Ephemeral });
         }
       }
 
@@ -569,14 +569,14 @@ module.exports = {
     // PAINEL
     if (sub === "painel") {
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para usar o painel de moderação.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão para usar o painel de moderação.")], flags: MessageFlags.Ephemeral });
       }
 
       const alvoRaw = interaction.options.getString("alvo");
       // Extrair ID de menção (<@123456>) ou usar diretamente
       const userId = alvoRaw.replace(/[<@!>]/g, "");
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       try {
         const user = await interaction.client.users.fetch(userId);
@@ -631,7 +631,7 @@ module.exports = {
       const userId = parts[1];
 
       if (!interaction.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
-        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Você não tem permissão.")], flags: MessageFlags.Ephemeral });
       }
 
       // UNMUTE – ação direta (sem modal)
@@ -639,7 +639,7 @@ module.exports = {
         await interaction.deferUpdate();
         try {
           const member = await interaction.guild.members.fetch(userId).catch(() => null);
-          if (!member) return interaction.followUp({ embeds: [createErrorEmbed("Membro não encontrado.")], ephemeral: true });
+          if (!member) return interaction.followUp({ embeds: [createErrorEmbed("Membro não encontrado.")], flags: MessageFlags.Ephemeral });
           await member.timeout(null);
 
           const logService = interaction.client.services.log;
@@ -661,7 +661,7 @@ module.exports = {
           const { embed, row } = await buildModPanel(interaction.guild, user);
           await interaction.editReply({ embeds: [embed], components: [row] });
         } catch (error) {
-          await interaction.followUp({ embeds: [createErrorEmbed("Erro ao remover silenciamento.")], ephemeral: true });
+          await interaction.followUp({ embeds: [createErrorEmbed("Erro ao remover silenciamento.")], flags: MessageFlags.Ephemeral });
         }
         return;
       }
@@ -790,7 +790,7 @@ module.exports = {
       const userId = parts[5];
       const defesa = interaction.fields.getTextInputValue("defesa");
 
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const config = await modConfigStore.get(guildId);
       const appealChannelId = config?.canal_apelacao;
@@ -861,75 +861,32 @@ module.exports = {
         // ── WARN ────────────────────────────────────────────────────────────
         if (acao === "WARN") {
           const motivo = interaction.fields.getTextInputValue("motivo");
-          const warnKey = `${interaction.guild.id}_${userId}`;
-          const warnData = await warnsStore.get(warnKey);
-          const historico = warnData?.historico || [];
 
-          historico.push({
-            moderador: interaction.user.id,
+          // Usa o warnService compartilhado (registra + auto-punição)
+          // logTitle: null para não duplicar — o painel faz seu próprio log abaixo
+          const { warnCount } = await registrarWarn(
+            interaction.guild,
+            userId,
             motivo,
-            data: Date.now(),
-          });
-          await warnsStore.set(warnKey, { historico });
-          const warnCount = historico.length;
+            interaction.client,
+            interaction.user.id,
+            { logTitle: null }
+          );
 
+          // Log adicional com info do moderador humano
           if (logService) {
             await logService.log(interaction.guild, {
               title: "⚠️ Warn Aplicado (Painel)",
               description: `**${user.username}** recebeu um warn de **${interaction.user.username}** via Painel.`,
               color: 0xFFCC00,
               fields: [
-                { name: "👤 Moderador", value: interaction.user.username, inline: true },
-                { name: "👤 Usuário", value: user.username, inline: true },
-                { name: "⚠️ Total de Warns", value: `${warnCount}`, inline: true },
-                { name: "📝 Motivo", value: motivo, inline: false },
+                { name: "👤 Moderador",       value: interaction.user.username, inline: true },
+                { name: "👤 Usuário",         value: user.username,             inline: true },
+                { name: "⚠️ Total de Warns", value: `${warnCount}`,             inline: true },
+                { name: "📝 Motivo",          value: motivo,                    inline: false },
               ],
               user: interaction.user,
-            });
-          }
-
-          // Auto-punição
-          const config = await modConfigStore.get(interaction.guild.id) || {};
-          const limitBan = config.warn_limit_ban;
-          const limitMute = config.warn_limit_mute;
-
-          if (limitBan && warnCount >= limitBan) {
-            // Auto-Ban
-            try {
-              await user.send({
-                embeds: [createEmbed({
-                  title: "🔨 Você foi banido (Auto-Punição)",
-                  description: `Você atingiu **${warnCount} warns** no servidor **${interaction.guild.name}** e foi banido automaticamente.\n\n**Último motivo:** ${motivo}`,
-                  color: 0xFF0000,
-                  footer: "Moderação | © WDA - Todos os direitos reservados",
-                })],
-              });
-            } catch {}
-            await interaction.guild.members.ban(userId, { reason: `Auto-Ban por acúmulo de ${warnCount} Warns` });
-            if (logService) {
-              await logService.log(interaction.guild, {
-                title: "🔨 Auto-Ban por Acúmulo de Warns",
-                description: `**${user.username}** foi banido automaticamente após atingir **${warnCount}** warns.`,
-                color: 0xFF0000,
-                fields: [{ name: "⚠️ Total de Warns", value: `${warnCount}`, inline: true }],
-                user: interaction.user,
-              });
-            }
-          } else if (limitMute && warnCount >= limitMute) {
-            // Auto-Mute (1h por warn acima do limite)
-            const member = await interaction.guild.members.fetch(userId).catch(() => null);
-            if (member) {
-              await member.timeout(AUTO_MUTE_DURATION_MS, `Auto-Mute por acúmulo de ${warnCount} Warns`);
-              if (logService) {
-                await logService.log(interaction.guild, {
-                  title: "🔇 Auto-Mute por Acúmulo de Warns",
-                  description: `**${user.username}** foi silenciado automaticamente por 1h após atingir **${warnCount}** warns.`,
-                  color: 0xFF6600,
-                  fields: [{ name: "⚠️ Total de Warns", value: `${warnCount}`, inline: true }],
-                  user: interaction.user,
-                });
-              }
-            }
+            }).catch(() => {});
           }
 
           // Atualizar o painel
@@ -945,17 +902,17 @@ module.exports = {
           const horas = parseInt(horasRaw, 10);
 
           if (isNaN(horas) || horas < 1 || horas > MAX_MUTE_HOURS) {
-            return interaction.followUp({ embeds: [createErrorEmbed(`Duração inválida. Informe um número entre 1 e ${MAX_MUTE_HOURS}.`)], ephemeral: true });
+            return interaction.followUp({ embeds: [createErrorEmbed(`Duração inválida. Informe um número entre 1 e ${MAX_MUTE_HOURS}.`)], flags: MessageFlags.Ephemeral });
           }
 
           const member = await interaction.guild.members.fetch(userId).catch(() => null);
-          if (!member) return interaction.followUp({ embeds: [createErrorEmbed("Membro não encontrado.")], ephemeral: true });
+          if (!member) return interaction.followUp({ embeds: [createErrorEmbed("Membro não encontrado.")], flags: MessageFlags.Ephemeral });
 
           // Trava de Hierarquia
           const targetHighest = member.roles.highest.position;
           const executorHighest = interaction.member.roles.highest.position;
           if (targetHighest >= executorHighest) {
-            return interaction.followUp({ embeds: [createErrorEmbed("Você não pode punir alguém com cargo igual ou superior ao seu.")], ephemeral: true });
+            return interaction.followUp({ embeds: [createErrorEmbed("Você não pode punir alguém com cargo igual ou superior ao seu.")], flags: MessageFlags.Ephemeral });
           }
 
           // DM com apelação se >= 24h
@@ -1006,14 +963,14 @@ module.exports = {
           const motivo = interaction.fields.getTextInputValue("motivo");
           const member = await interaction.guild.members.fetch(userId).catch(() => null);
 
-          if (!member) return interaction.followUp({ embeds: [createErrorEmbed("Membro não encontrado.")], ephemeral: true });
-          if (!member.kickable) return interaction.followUp({ embeds: [createErrorEmbed("Eu não posso expulsar este utilizador.")], ephemeral: true });
+          if (!member) return interaction.followUp({ embeds: [createErrorEmbed("Membro não encontrado.")], flags: MessageFlags.Ephemeral });
+          if (!member.kickable) return interaction.followUp({ embeds: [createErrorEmbed("Eu não posso expulsar este utilizador.")], flags: MessageFlags.Ephemeral });
 
           // Trava de Hierarquia
           const targetHighest = member.roles.highest.position;
           const executorHighest = interaction.member.roles.highest.position;
           if (targetHighest >= executorHighest) {
-            return interaction.followUp({ embeds: [createErrorEmbed("Você não pode punir alguém com cargo igual ou superior ao seu.")], ephemeral: true });
+            return interaction.followUp({ embeds: [createErrorEmbed("Você não pode punir alguém com cargo igual ou superior ao seu.")], flags: MessageFlags.Ephemeral });
           }
 
           await member.kick(motivo);
@@ -1044,13 +1001,13 @@ module.exports = {
           const member = await interaction.guild.members.fetch(userId).catch(() => null);
 
           if (member) {
-            if (!member.bannable) return interaction.followUp({ embeds: [createErrorEmbed("Eu não posso banir este utilizador.")], ephemeral: true });
+            if (!member.bannable) return interaction.followUp({ embeds: [createErrorEmbed("Eu não posso banir este utilizador.")], flags: MessageFlags.Ephemeral });
 
             // Trava de Hierarquia
             const targetHighest = member.roles.highest.position;
             const executorHighest = interaction.member.roles.highest.position;
             if (targetHighest >= executorHighest) {
-              return interaction.followUp({ embeds: [createErrorEmbed("Você não pode punir alguém com cargo igual ou superior ao seu.")], ephemeral: true });
+              return interaction.followUp({ embeds: [createErrorEmbed("Você não pode punir alguém com cargo igual ou superior ao seu.")], flags: MessageFlags.Ephemeral });
             }
           }
 
@@ -1120,7 +1077,7 @@ module.exports = {
         }
 
       } catch (error) {
-        await interaction.followUp({ embeds: [createErrorEmbed("Erro ao processar a ação de moderação.")], ephemeral: true });
+        await interaction.followUp({ embeds: [createErrorEmbed("Erro ao processar a ação de moderação.")], flags: MessageFlags.Ephemeral });
       }
     }
   },
@@ -1213,7 +1170,7 @@ module.exports = {
           components: [disabledRow],
         });
       } catch (error) {
-        await interaction.followUp({ embeds: [createErrorEmbed("Erro ao processar a apelação.")], ephemeral: true });
+        await interaction.followUp({ embeds: [createErrorEmbed("Erro ao processar a apelação.")], flags: MessageFlags.Ephemeral });
       }
     } else if (customId.startsWith("mod_appeal_deny_")) {
       // Format: mod_appeal_deny_TYPE_guildId_userId

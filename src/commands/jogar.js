@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  MessageFlags, } = require("discord.js");
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -14,7 +15,7 @@ module.exports = {
 
         // Verifica se a pessoa que chamou está em um canal de voz
         if (!member.voice.channel) {
-            return interaction.reply({ content: "Você precisa estar em um canal de voz para chamar a galera!", ephemeral: true });
+            return interaction.reply({ content: "Você precisa estar em um canal de voz para chamar a galera!", flags: MessageFlags.Ephemeral });
         }
 
         const channelURL = `https://discord.com/channels/${interaction.guildId}/${member.voice.channel.id}`;

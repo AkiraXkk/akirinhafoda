@@ -7,7 +7,8 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  PermissionFlagsBits
+  PermissionFlagsBits,
+  MessageFlags,
 } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { logger } = require("../logger");
@@ -121,7 +122,7 @@ module.exports = {
 
       const aviso = pendingAvisos.get(interaction.user.id);
       if (!aviso) {
-        return interaction.followUp({ content: "❌ Dados do anúncio não encontrados. Por favor, preencha o formulário novamente.", ephemeral: true });
+        return interaction.followUp({ content: "❌ Dados do anúncio não encontrados. Por favor, preencha o formulário novamente.", flags: MessageFlags.Ephemeral });
       }
 
       const canalDestino = aviso.canalId
@@ -129,7 +130,7 @@ module.exports = {
         : interaction.channel;
 
       if (!canalDestino) {
-        return interaction.followUp({ content: `❌ Canal com ID \`${aviso.canalId}\` não encontrado neste servidor.`, ephemeral: true });
+        return interaction.followUp({ content: `❌ Canal com ID \`${aviso.canalId}\` não encontrado neste servidor.`, flags: MessageFlags.Ephemeral });
       }
 
       const tipoConfig = TIPOS_AVISO[aviso.tipo] || TIPOS_AVISO.normal;
@@ -154,7 +155,7 @@ module.exports = {
         logger.error({ err: e, userId: interaction.user.id }, "Erro ao publicar aviso");
         await interaction.followUp({
           content: "❌ Não foi possível enviar o anúncio. Verifique se o bot tem permissão de enviar mensagens no canal de destino.",
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         });
       }
     }
@@ -172,7 +173,7 @@ module.exports = {
   // ==========================================
   async handleModal(interaction) {
     if (interaction.customId.startsWith("avisos_modal_")) {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const tipo = interaction.customId.replace("avisos_modal_", "");
       const tipoConfig = TIPOS_AVISO[tipo] || TIPOS_AVISO.normal;

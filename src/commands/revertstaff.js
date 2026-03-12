@@ -4,7 +4,8 @@ const {
   EmbedBuilder, 
   ActionRowBuilder, 
   ButtonBuilder, 
-  ButtonStyle 
+  ButtonStyle,
+  MessageFlags, 
 } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
 
@@ -21,7 +22,7 @@ module.exports = {
     const guildData = data[interaction.guildId];
 
     if (!guildData || (!guildData.roles.length && !guildData.channels.length)) {
-      return interaction.reply({ content: "❌ O bot não encontrou nenhum registro de setup recente neste servidor. Nada para reverter.", ephemeral: true });
+      return interaction.reply({ content: "❌ O bot não encontrou nenhum registro de setup recente neste servidor. Nada para reverter.", flags: MessageFlags.Ephemeral });
     }
 
     const embedAviso = new EmbedBuilder()
@@ -34,7 +35,7 @@ module.exports = {
       new ButtonBuilder().setCustomId("cancel_revert").setLabel("❌ Cancelar").setStyle(ButtonStyle.Secondary)
     );
 
-    const msg = await interaction.reply({ embeds: [embedAviso], components: [row], ephemeral: true });
+    const msg = await interaction.reply({ embeds: [embedAviso], components: [row], flags: MessageFlags.Ephemeral });
 
     try {
       const btnInteraction = await msg.awaitMessageComponent({ filter: i => i.user.id === interaction.user.id, time: 30000 });

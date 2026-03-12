@@ -1,4 +1,5 @@
-const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle,
+  MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
 const { getGuildConfig } = require("../config/guildConfig");
 
@@ -22,7 +23,7 @@ module.exports = {
           color: 0x3498db,
           user: interaction.user,
         })],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     } catch {
       // segue o fluxo antigo abaixo
@@ -41,7 +42,7 @@ module.exports = {
       if (!tiers || Object.keys(tiers).length === 0) {
         return interaction.reply({
           embeds: [createErrorEmbed("Não há planos VIP disponíveis neste servidor. Configure os planos usando `/vipadmin tier`.")],
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
 
@@ -105,14 +106,14 @@ module.exports = {
       await interaction.reply({
         embeds: [embed],
         components: [row],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
 
     } catch (error) {
       console.error('Erro no comando vipbuy:', error);
       return interaction.reply({
         embeds: [createErrorEmbed('Ocorreu um erro ao processar sua solicitação.')],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   },

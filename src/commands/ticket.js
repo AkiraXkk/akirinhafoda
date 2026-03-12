@@ -1,7 +1,8 @@
 const { 
   SlashCommandBuilder, PermissionFlagsBits, ChannelType, ActionRowBuilder, 
   ButtonBuilder, ButtonStyle, EmbedBuilder, StringSelectMenuBuilder, 
-  StringSelectMenuOptionBuilder, RoleSelectMenuBuilder, ChannelSelectMenuBuilder 
+  StringSelectMenuOptionBuilder, RoleSelectMenuBuilder, ChannelSelectMenuBuilder,
+  MessageFlags, 
 } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
@@ -74,7 +75,7 @@ module.exports = {
     const logService = interaction.client.services?.log;
     const ticketConfig = loadTicketCategories();
 
-    if (!ticketConfig) return interaction.reply({ embeds: [createErrorEmbed("ticketCategories.json não encontrado.")], ephemeral: true });
+    if (!ticketConfig) return interaction.reply({ embeds: [createErrorEmbed("ticketCategories.json não encontrado.")], flags: MessageFlags.Ephemeral });
 
     // ==========================================
     // 1. SETUP ADMINISTRATIVO INTERATIVO
@@ -109,7 +110,7 @@ module.exports = {
           new ActionRowBuilder().addComponents(selectCategorias),
           new ActionRowBuilder().addComponents(btnEnviar)
         ], 
-        ephemeral: true 
+        flags: MessageFlags.Ephemeral 
       });
     }
 
@@ -118,13 +119,13 @@ module.exports = {
       const allTickets = tickets["global"] || tickets; 
       const openTickets = Object.entries(allTickets).filter(([id, info]) => id !== "counters" && info && !info.closedAt && info.openedAt).sort((a, b) => b[1].openedAt - a[1].openedAt);
 
-      if (openTickets.length === 0) return interaction.reply({ embeds: [createEmbed({ title: "📋 Tickets Abertos", description: "Não há tickets abertos no momento.", color: 0x3498db })], ephemeral: true });
+      if (openTickets.length === 0) return interaction.reply({ embeds: [createEmbed({ title: "📋 Tickets Abertos", description: "Não há tickets abertos no momento.", color: 0x3498db })], flags: MessageFlags.Ephemeral });
 
       const fields = openTickets.slice(0, 10).map(([channelId, info]) => ({
         name: `🎫 ${info.channelName} (ID: ${info.ticketId})`, value: `Criado por <@${info.userId}>\nAberto em <t:${Math.floor(info.openedAt / 1000)}>`, inline: false
       }));
 
-      await interaction.reply({ embeds: [createEmbed({ title: "📋 Tickets Abertos", description: `Mostrando os ${Math.min(openTickets.length, 10)} mais recentes.`, fields, color: 0x3498db })], ephemeral: true });
+      await interaction.reply({ embeds: [createEmbed({ title: "📋 Tickets Abertos", description: `Mostrando os ${Math.min(openTickets.length, 10)} mais recentes.`, fields, color: 0x3498db })], flags: MessageFlags.Ephemeral });
     }
 
     if (sub === "close") {
@@ -136,19 +137,19 @@ module.exports = {
     const tickets = await ticketStore.load();
     const ticketInfo = tickets[interaction.channelId] || (tickets["global"] && tickets["global"][interaction.channelId]);
 
-    if (!ticketInfo) return interaction.reply({ embeds: [createErrorEmbed("Este não é um ticket válido.")], ephemeral: true });
-    if (ticketInfo.closedAt) return interaction.reply({ content: "❌ Este ticket já foi arquivado.", ephemeral: true });
+    if (!ticketInfo) return interaction.reply({ embeds: [createErrorEmbed("Este não é um ticket válido.")], flags: MessageFlags.Ephemeral });
+    if (ticketInfo.closedAt) return interaction.reply({ content: "❌ Este ticket já foi arquivado.", flags: MessageFlags.Ephemeral });
 
     const member = await interaction.guild.members.fetch(interaction.user.id);
     const isAuthor = ticketInfo.userId === interaction.user.id;
     const isAssumer = ticketInfo.assumedBy === interaction.user.id;
     const hasManageGuild = member.permissions.has("ManageGuild");
     if (!isAuthor && !isAssumer && !hasManageGuild) {
-      return interaction.reply({ embeds: [createErrorEmbed("Apenas o autor, o staff responsável ou um administrador pode fechar este ticket.")], ephemeral: true });
+      return interaction.reply({ embeds: [createErrorEmbed("Apenas o autor, o staff responsável ou um administrador pode fechar este ticket.")], flags: MessageFlags.Ephemeral });
     }
 
     // Defer para evitar o erro de timeout!
-    await interaction.deferReply({ ephemeral: true }); 
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral }); 
     const canal = interaction.channel;
     
     try {
@@ -204,7 +205,7 @@ module.exports = {
   async handleButton(interaction) {
     const logService = interaction.client.services?.log;
     const ticketConfig = loadTicketCategories();
-    if (!ticketConfig) return interaction.reply({ content: "Sistema não configurado.", ephemeral: true });
+    if (!ticketConfig) return interaction.reply({ content: "Sistema não configurado.", flags: MessageFlags.Ephemeral });
 
     // --- LÓGICA DO SETUP ADMINISTRATIVO ---
     if (interaction.customId === "setup_select_cat") {
@@ -245,7 +246,7 @@ module.exports = {
         return { ...guildData, [categoryKey]: { ...catData, roleId } };
       });
 
-      await interaction.reply({ content: `✅ Cargo salvo para **${categoryKey}**! Retorne ao menu para continuar.`, ephemeral: true });
+      await interaction.reply({ content: `✅ Cargo salvo para **${categoryKey}**! Retorne ao menu para continuar.`, flags: MessageFlags.Ephemeral });
     }
 
     if (interaction.customId.startsWith("setup_channel_")) {
@@ -258,7 +259,7 @@ module.exports = {
         return { ...guildData, [categoryKey]: { ...catData, categoryId } };
       });
 
-      await interaction.reply({ content: `✅ Categoria salva para **${categoryKey}**! Retorne ao menu para continuar.`, ephemeral: true });
+      await interaction.reply({ content: `✅ Categoria salva para **${categoryKey}**! Retorne ao menu para continuar.`, flags: MessageFlags.Ephemeral });
     }
 
     if (interaction.customId === "setup_back") {
@@ -314,7 +315,7 @@ module.exports = {
           )
         );
 
-      await interaction.reply({ embeds: [menuEmbed], components: [new ActionRowBuilder().addComponents(selectType)], ephemeral: true });
+      await interaction.reply({ embeds: [menuEmbed], components: [new ActionRowBuilder().addComponents(selectType)], flags: MessageFlags.Ephemeral });
     }
 
     if (interaction.customId === "user_select_ticket_type") {
@@ -415,7 +416,7 @@ module.exports = {
       
       // Bloqueia o autor do ticket de assumir o próprio ticket
       if (ticketInfo && ticketInfo.userId === interaction.user.id) {
-        return interaction.reply({ embeds: [createErrorEmbed("❌ Você não pode assumir seu próprio ticket.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("❌ Você não pode assumir seu próprio ticket.")], flags: MessageFlags.Ephemeral });
       }
 
       let isSpecificStaff = false;
@@ -426,7 +427,7 @@ module.exports = {
       }
 
       if (!isStaff(member) && !isSpecificStaff) {
-        return interaction.reply({ embeds: [createErrorEmbed("Apenas responsáveis por esta área podem assumir o ticket.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas responsáveis por esta área podem assumir o ticket.")], flags: MessageFlags.Ephemeral });
       }
 
       // Salva quem assumiu o ticket
@@ -444,7 +445,7 @@ module.exports = {
       const ticketInfo = tickets[interaction.channelId] || (tickets["global"] && tickets["global"][interaction.channelId]);
 
       if (!ticketInfo || ticketInfo.closedAt) {
-        return interaction.reply({ embeds: [createErrorEmbed("Este ticket já foi encerrado ou não é válido.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Este ticket já foi encerrado ou não é válido.")], flags: MessageFlags.Ephemeral });
       }
 
       // Permissão para fechar: autor do ticket, staff que assumiu, ou ManageGuild
@@ -454,7 +455,7 @@ module.exports = {
       const hasManageGuild = member.permissions.has("ManageGuild");
 
       if (!isAuthor && !isAssumer && !hasManageGuild) {
-        return interaction.reply({ embeds: [createErrorEmbed("Apenas o autor, o staff responsável ou um administrador pode fechar este ticket.")], ephemeral: true });
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas o autor, o staff responsável ou um administrador pode fechar este ticket.")], flags: MessageFlags.Ephemeral });
       }
 
       const motivoMenu = new StringSelectMenuBuilder()
@@ -470,7 +471,7 @@ module.exports = {
       return interaction.reply({
         embeds: [createEmbed({ title: "🔒 Fechar Ticket", description: "Selecione o motivo do fechamento abaixo:", color: 0xe74c3c })],
         components: [new ActionRowBuilder().addComponents(motivoMenu)],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
 
@@ -482,8 +483,8 @@ module.exports = {
 
     if (interaction.customId === "delete_ticket_btn") {
       const member = await interaction.guild.members.fetch(interaction.user.id);
-      if (!isStaff(member)) return interaction.reply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de tickets.")], ephemeral: true });
-      await interaction.reply({ content: "💥 O canal será destruído em 5 segundos...", ephemeral: false });
+      if (!isStaff(member)) return interaction.reply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de tickets.")], flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: "💥 O canal será destruído em 5 segundos..." });
       setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     }
   }

@@ -4,6 +4,7 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  MessageFlags,
 } = require("discord.js");
 const { createEmbed, createErrorEmbed, createSuccessEmbed } = require("../embeds");
 const { getGuildConfig, setGuildConfig } = require("../config/guildConfig");
@@ -24,11 +25,11 @@ module.exports = {
 
   async execute(interaction) {
     if (!interaction.inGuild()) {
-      return interaction.reply({ embeds: [createErrorEmbed("Use este comando em um servidor.")], ephemeral: true });
+      return interaction.reply({ embeds: [createErrorEmbed("Use este comando em um servidor.")], flags: MessageFlags.Ephemeral });
     }
 
     if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores podem usar isso.")], ephemeral: true });
+      return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores podem usar isso.")], flags: MessageFlags.Ephemeral });
     }
 
     const sub = interaction.options.getSubcommand();
@@ -69,7 +70,7 @@ module.exports = {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    return interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+    return interaction.reply({ embeds: [embed], components: [row], flags: MessageFlags.Ephemeral });
   },
 
   async handleButton(interaction) {
@@ -81,11 +82,11 @@ module.exports = {
 
     const entry = pending.get(token);
     if (!entry) {
-      return interaction.reply({ embeds: [createErrorEmbed("Confirmação expirada. Use o comando novamente.")], ephemeral: true });
+      return interaction.reply({ embeds: [createErrorEmbed("Confirmação expirada. Use o comando novamente.")], flags: MessageFlags.Ephemeral });
     }
 
     if (interaction.user.id !== entry.userId || interaction.guildId !== entry.guildId) {
-      return interaction.reply({ embeds: [createErrorEmbed("Você não pode confirmar/cancelar esta ação.")], ephemeral: true });
+      return interaction.reply({ embeds: [createErrorEmbed("Você não pode confirmar/cancelar esta ação.")], flags: MessageFlags.Ephemeral });
     }
 
     pending.delete(token);
@@ -179,7 +180,7 @@ module.exports = {
 
     return interaction.followUp({
       embeds: [createSuccessEmbed("Reset concluído. Agora reconfigure VIP/Tiers/Família do zero." )],
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   },
 };
