@@ -1,10 +1,49 @@
 const { Events } = require("discord.js");
 const { logger } = require("../logger");
+const { createDataStore } = require("../store/dataStore");
+
+const ticketStore = createDataStore("tickets.json");
+const chatStore = createDataStore("sejawda_chats.json");
 
 module.exports = {
   name: Events.MessageCreate,
   async execute(message, client) {
     if (message.author.bot || !message.guild) return;
+
+    // ── SLA: Atualiza lastMessageAt/lastMessageBy nos tickets ──
+    try {
+      const tickets = await ticketStore.load();
+      const ticketInfo = tickets[message.channelId];
+      if (ticketInfo && !ticketInfo.closedAt && ticketInfo.userId) {
+        const isOwner = message.author.id === ticketInfo.userId;
+        await ticketStore.update(message.channelId, (info) => info ? {
+          ...info,
+          lastMessageAt: Date.now(),
+          lastMessageBy: isOwner ? "user" : "staff",
+          ping30Sent: false,
+          ping90Sent: false
+        } : null);
+      }
+    } catch (err) {
+      logger.error({ err }, "Erro ao atualizar SLA do ticket");
+    }
+
+    try {
+      const chats = await chatStore.load();
+      const chatInfo = chats[message.channelId];
+      if (chatInfo && !chatInfo.closedAt && chatInfo.userId) {
+        const isOwner = message.author.id === chatInfo.userId;
+        await chatStore.update(message.channelId, (info) => info ? {
+          ...info,
+          lastMessageAt: Date.now(),
+          lastMessageBy: isOwner ? "user" : "staff",
+          ping30Sent: false,
+          ping90Sent: false
+        } : null);
+      }
+    } catch (err) {
+      logger.error({ err }, "Erro ao atualizar SLA do sejawda");
+    }
 
     // AFK: verifica menções a usuários AFK e auto-remove AFK de quem falar
     const afkCommand = client.commands.get("afk");

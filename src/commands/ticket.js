@@ -132,7 +132,7 @@ module.exports = {
     }
   },
 
-  async archiveTicket(interaction, ticketStore, logService) {
+  async archiveTicket(interaction, ticketStore, logService, motivo) {
     const tickets = await ticketStore.load();
     const ticketInfo = tickets[interaction.channelId] || (tickets["global"] && tickets["global"][interaction.channelId]);
 
@@ -169,9 +169,10 @@ module.exports = {
       });
     }
 
+    const motivoTexto = motivo ? `\n📋 **Motivo:** ${motivo}` : "";
     const embedArquivado = createEmbed({
-      title: "🔒 Ticket Arquivado",
-      description: `O membro não possui mais acesso a este canal.\n\nEquipe: Quando não for mais necessário manter o histórico, clique abaixo para excluir definitivamente.`,
+      title: "�� Ticket Arquivado",
+      description: `O membro não possui mais acesso a este canal.${motivoTexto}\n\nEquipe: Quando não for mais necessário manter o histórico, clique abaixo para excluir definitivamente.`,
       color: 0x95a5a6
     });
 
@@ -374,12 +375,15 @@ module.exports = {
 
         await ticketStore.update(channel.id, () => ({
           userId: interaction.user.id, channelName: channel.name, channelId: channel.id,
-          ticketType: ticketType, ticketId: ticketId, openedAt: Date.now(), closedAt: null
+          ticketType: ticketType, ticketId: ticketId, openedAt: Date.now(), closedAt: null,
+          guildId: interaction.guildId,
+          lastMessageAt: Date.now(), lastMessageBy: "user",
+          ping30Sent: false, ping90Sent: false
         }));
 
         const embedTicket = createEmbed({
           title: `Atendimento: ${categoryConfig.title.replace(/[^a-zA-ZÀ-ÿ\s]/g, '').trim()}`,
-          description: `Olá ${interaction.user}, sua sala foi criada com sucesso!\n\nPor favor, envie sua dúvida ou prova abaixo. Nossa equipe já foi notificada.\n\n🏷️ **Protocolo:** \`${ticketId}\``,
+          description: `Olá ${interaction.user}, sua sala foi criada com sucesso!\n\nPor favor, envie sua dúvida ou prova abaixo. Nossa equipe já foi notificada.\n\n🏷️ **Protocolo:** \`${ticketId}\`\n\n⚠️ *Atenção: Tickets sem resposta do criador por mais de 2 horas serão encerrados automaticamente.*`,
           color: categoryConfig.color || 0x2ecc71
         });
 
@@ -423,7 +427,51 @@ module.exports = {
     }
 
     if (interaction.customId === "close_ticket_btn") {
-      await module.exports.archiveTicket(interaction, ticketStore, logService);
+      const tickets = await ticketStore.load();
+      const ticketInfo = tickets[interaction.channelId] || (tickets["global"] && tickets["global"][interaction.channelId]);
+
+      if (!ticketInfo || ticketInfo.closedAt) {
+        return interaction.reply({ embeds: [createErrorEmbed("Este ticket já foi encerrado ou não é válido.")], ephemeral: true });
+      }
+
+      // Bloqueia o dono do ticket de fechar
+      if (ticketInfo.userId === interaction.user.id) {
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas a equipe pode fechar este ticket.")], ephemeral: true });
+      }
+
+      const member = await interaction.guild.members.fetch(interaction.user.id);
+      let isSpecificStaff = false;
+      if (ticketInfo.ticketType) {
+        const setupData = await setupStore.load();
+        const typeSetup = (setupData[interaction.guildId] || {})[ticketInfo.ticketType] || {};
+        if (typeSetup.roleId && member.roles.cache.has(typeSetup.roleId)) isSpecificStaff = true;
+      }
+
+      if (!isStaff(member) && !isSpecificStaff) {
+        return interaction.reply({ embeds: [createErrorEmbed("Apenas a equipe pode fechar este ticket.")], ephemeral: true });
+      }
+
+      const motivoMenu = new StringSelectMenuBuilder()
+        .setCustomId("motivo_fechar_ticket")
+        .setPlaceholder("Selecione o motivo do fechamento...")
+        .addOptions(
+          new StringSelectMenuOptionBuilder().setLabel("Concluído").setValue("Concluído").setEmoji("✅"),
+          new StringSelectMenuOptionBuilder().setLabel("Inatividade do Usuário").setValue("Inatividade do Usuário").setEmoji("⏰"),
+          new StringSelectMenuOptionBuilder().setLabel("Troll/Spam").setValue("Troll/Spam").setEmoji("🚫"),
+          new StringSelectMenuOptionBuilder().setLabel("Resolvido em Call").setValue("Resolvido em Call").setEmoji("📞")
+        );
+
+      return interaction.reply({
+        embeds: [createEmbed({ title: "🔒 Fechar Ticket", description: "Selecione o motivo do fechamento abaixo:", color: 0xe74c3c })],
+        components: [new ActionRowBuilder().addComponents(motivoMenu)],
+        ephemeral: true
+      });
+    }
+
+    // Handler do motivo de fechamento do ticket
+    if (interaction.customId === "motivo_fechar_ticket") {
+      const motivo = interaction.values[0];
+      await module.exports.archiveTicket(interaction, ticketStore, logService, motivo);
     }
 
     if (interaction.customId === "delete_ticket_btn") {
