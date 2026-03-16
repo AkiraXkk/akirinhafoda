@@ -14,7 +14,7 @@ const LIDERANCA = ["Chefe", "Sub-Chefe", "Gerente", "Coordenador", "Supervisores
 const AREAS = ["Equipe Recrutamento", "Equipe Divulgação", "Equipe Eventos", "Equipe MovCall", "Equipe MovChat", "Equipe Acolhimento", "Equipe Design", "Equipe Pastime"];
 const DIAS_MINIMOS_SERVIDOR = 15;
 const DIAS_MINIMOS_CONTA = 30;
-const ID_CANAL_LOGS_STAFF = "MUDAR_ID";
+const ID_CANAL_LOGS_STAFF = "831327701214298182";
 
 const ROLE_WEIGHTS = {
   "Chefe": 60,
