@@ -31,7 +31,9 @@ for (const area of AREAS) {
 }
 
 const ASPIRANTE_ID = "1097700110126809140";
-const ROLES_VALIDOS = new Set([...LIDERANCA, ...AREAS]);
+const LIDERANCA_SET = new Set(LIDERANCA);
+const AREAS_SET = new Set(AREAS);
+const ROLES_VALIDOS = new Set([...LIDERANCA_SET, ...AREAS_SET]);
 const LIDERANCA_TOP3 = new Set(LIDERANCA.slice(0, 3)); // Chefe, Sub-Chefe, Gerente
 
 const diasDesde = (timestamp) => Math.floor((Date.now() - timestamp) / (1000 * 60 * 60 * 24));
@@ -77,12 +79,13 @@ module.exports = {
       }
 
       const isAdmin = executor.permissions.has(PermissionFlagsBits.Administrator);
-      const hasEquipeRecrutamento = executor.roles.cache.some(role => role.name === "Equipe Recrutamento");
+      const executorRoleNames = new Set(executor.roles.cache.map(r => r.name));
+      const hasEquipeRecrutamento = executorRoleNames.has("Equipe Recrutamento");
       const pesoExecutor = executor.roles.cache.reduce((max, role) => {
         const peso = ROLE_WEIGHTS[role.name] || 0;
         return peso > max ? peso : max;
       }, 0);
-      const isGerenteOuSuperior = executor.roles.cache.some(role => LIDERANCA_TOP3.has(role.name));
+      const isGerenteOuSuperior = [...LIDERANCA_TOP3].some(roleName => executorRoleNames.has(roleName));
       const pesoLimite = isAdmin ? Number.MAX_SAFE_INTEGER : pesoExecutor;
 
       if (pesoExecutor === 0 && !isAdmin && !hasEquipeRecrutamento) {
@@ -105,8 +108,7 @@ module.exports = {
         let optionsAdded = 0;
         if (isGerenteOuSuperior && !isAdmin && !hasEquipeRecrutamento) {
           for (const area of AREAS) {
-            const executorTemArea = executor.roles.cache.some(r => r.name === area);
-            if (!executorTemArea) continue;
+            if (!executorRoleNames.has(area)) continue;
             const roleNaGuild = interaction.guild.roles.cache.find(r => r.name === area);
             if (!roleNaGuild) continue;
             const temCargo = alvo.roles.cache.has(roleNaGuild.id);
@@ -157,16 +159,16 @@ module.exports = {
           const roleId = i.values[0];
           const role = interaction.guild.roles.cache.get(roleId);
           if (!role) return i.reply({ content: "❌ Cargo inválido ou inexistente.", ephemeral: true });
-          const isLideranca = LIDERANCA.includes(role.name);
-          const isArea = AREAS.includes(role.name);
+          const isLideranca = LIDERANCA_SET.has(role.name);
+          const isArea = AREAS_SET.has(role.name);
 
           if (!alvo.roles.cache.has(roleId)) {
-            const liderancasAtuais = alvo.roles.cache.filter(r => LIDERANCA.includes(r.name)).size;
+            const liderancasAtuais = alvo.roles.cache.filter(r => LIDERANCA_SET.has(r.name)).size;
             if (isLideranca && liderancasAtuais >= 1) {
               return i.reply({ content: "❌ Limite de 1 cargo de liderança por membro. Remova o cargo atual antes de atribuir outro.", ephemeral: true });
             }
 
-            const areasAtuais = alvo.roles.cache.filter(r => AREAS.includes(r.name)).size;
+            const areasAtuais = alvo.roles.cache.filter(r => AREAS_SET.has(r.name)).size;
             if (isArea && areasAtuais >= 3) {
               return i.reply({ content: "❌ Limite de 3 cargos de áreas operacionais por membro. Remova um antes de adicionar outro.", ephemeral: true });
             }
