@@ -7,21 +7,36 @@ const {
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
-  PermissionFlagsBits,
-  MessageFlags
+  PermissionFlagsBits
 } = require("discord.js");
 
-// Tabela de Hierarquia (Peso dos Cargos)
-const HIERARQUIA = {
-  "Chefe": 60, "Sub-Chefe": 50, "Gerente": 40, "Coordenador": 30, "Supervisores": 20, "Equipe Recrutamento": 10,
-  "Equipe Divulgação": 5, "Equipe Eventos": 5, "Equipe MovCall": 5, "Equipe MovChat": 5, 
-  "Equipe Acolhimento": 5, "Equipe Design": 5, "Equipe Pastime": 5, "Staff Geral": 5
-};
-
-// ⚙️ CONFIGURAÇÕES DA STAFF
-const ID_CANAL_LOGS_STAFF = "COLOQUE_O_ID_DO_CANAL_DE_LOGS_AQUI"; // Canal privado da Chefia
+const LIDERANCA = ["Chefe", "Sub-Chefe", "Gerente", "Coordenador", "Supervisores"];
+const AREAS = ["Equipe Recrutamento", "Equipe Divulgação", "Equipe Eventos", "Equipe MovCall", "Equipe MovChat", "Equipe Acolhimento", "Equipe Design", "Equipe Pastime"];
 const DIAS_MINIMOS_SERVIDOR = 15;
 const DIAS_MINIMOS_CONTA = 30;
+const ID_CANAL_LOGS_STAFF = "MUDAR_ID";
+
+const ROLE_WEIGHTS = {
+  "Chefe": 60,
+  "Sub-Chefe": 50,
+  "Gerente": 40,
+  "Coordenador": 30,
+  "Supervisores": 20,
+  "Equipe Recrutamento": 15,
+  "Staff Geral": 1
+};
+
+for (const area of AREAS) {
+  if (!ROLE_WEIGHTS[area]) ROLE_WEIGHTS[area] = 5;
+}
+
+const ASPIRANTE_ID = "1097700110126809140";
+const LIDERANCA_SET = new Set(LIDERANCA);
+const AREAS_SET = new Set(AREAS);
+const ROLES_VALIDOS = new Set([...LIDERANCA_SET, ...AREAS_SET]);
+const LIDERANCA_TOP3 = new Set(LIDERANCA.slice(0, 3)); // Chefe, Sub-Chefe, Gerente
+
+const diasDesde = (timestamp) => Math.floor((Date.now() - timestamp) / (1000 * 60 * 60 * 24));
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -52,19 +67,28 @@ module.exports = {
       // 🛡️ TRAVAS DE SEGURANÇA
       if (alvo.user.bot) return interaction.reply({ content: "❌ Bots não podem ser recrutados.", ephemeral: true });
       if (alvo.id === interaction.user.id) return interaction.reply({ content: "❌ Você não pode alterar sua própria hierarquia.", ephemeral: true });
+      const idadeConta = diasDesde(alvo.user.createdTimestamp);
+      if (idadeConta < DIAS_MINIMOS_CONTA) {
+        return interaction.reply({ content: `❌ **Recusado:** Conta suspeita. O Discord de ${alvo.user.username} foi criado há apenas ${idadeConta} dias (Mínimo: ${DIAS_MINIMOS_CONTA}).`, ephemeral: true });
+      }
 
       // 🛑 FILTRO DE PRÉ-REQUISITOS (Tempo de Servidor e Conta)
-      const diasNoServidor = Math.floor((Date.now() - alvo.joinedTimestamp) / (1000 * 60 * 60 * 24));
+      const diasNoServidor = alvo.joinedTimestamp ? diasDesde(alvo.joinedTimestamp) : 0;
       if (diasNoServidor < DIAS_MINIMOS_SERVIDOR) {
         return interaction.reply({ content: `❌ **Recusado:** ${alvo.user.username} está no servidor há apenas ${diasNoServidor} dias. O mínimo é ${DIAS_MINIMOS_SERVIDOR} dias.`, ephemeral: true });
       }
 
-      let pesoExecutor = 0;
-      executor.roles.cache.forEach(role => {
-        if (HIERARQUIA[role.name] && HIERARQUIA[role.name] > pesoExecutor) pesoExecutor = HIERARQUIA[role.name];
-      });
+      const isAdmin = executor.permissions.has(PermissionFlagsBits.Administrator);
+      const executorRoleNames = new Set(executor.roles.cache.map(r => r.name));
+      const hasEquipeRecrutamento = executorRoleNames.has("Equipe Recrutamento");
+      const pesoExecutor = executor.roles.cache.reduce((max, role) => {
+        const peso = ROLE_WEIGHTS[role.name] || 0;
+        return peso > max ? peso : max;
+      }, 0);
+      const isGerenteOuSuperior = [...LIDERANCA_TOP3].some(roleName => executorRoleNames.has(roleName));
+      const pesoLimite = isAdmin ? Number.MAX_SAFE_INTEGER : pesoExecutor;
 
-      if (pesoExecutor === 0 && !executor.permissions.has("Administrator")) {
+      if (pesoExecutor === 0 && !isAdmin && !hasEquipeRecrutamento) {
         return interaction.reply({ content: "❌ Você não tem permissão na hierarquia para usar este painel.", ephemeral: true });
       }
 
@@ -82,18 +106,35 @@ module.exports = {
           .setMaxValues(1);
 
         let optionsAdded = 0;
-        for (const [roleName, peso] of Object.entries(HIERARQUIA)) {
-          if (peso < pesoExecutor || executor.permissions.has("Administrator")) {
-            const roleNaGuild = interaction.guild.roles.cache.find(r => r.name === roleName);
-            if (roleNaGuild) {
-              const temCargo = alvo.roles.cache.has(roleNaGuild.id);
-              selectMenu.addOptions(
-                new StringSelectMenuOptionBuilder()
-                  .setLabel(roleName)
-                  .setDescription(temCargo ? "🟢 Possui (Clique para Remover)" : "🔴 Não possui (Clique para Adicionar)")
-                  .setValue(roleNaGuild.id)
-              );
-              optionsAdded++;
+        if (isGerenteOuSuperior && !isAdmin && !hasEquipeRecrutamento) {
+          for (const area of AREAS) {
+            if (!executorRoleNames.has(area)) continue;
+            const roleNaGuild = interaction.guild.roles.cache.find(r => r.name === area);
+            if (!roleNaGuild) continue;
+            const temCargo = alvo.roles.cache.has(roleNaGuild.id);
+            selectMenu.addOptions(
+              new StringSelectMenuOptionBuilder()
+                .setLabel(area)
+                .setDescription(temCargo ? "🟢 Possui (Clique para Remover)" : "🔴 Não possui (Clique para Adicionar)")
+                .setValue(roleNaGuild.id)
+            );
+            optionsAdded++;
+          }
+        } else {
+          for (const roleName of ROLES_VALIDOS) {
+            const peso = ROLE_WEIGHTS[roleName] || 0;
+            if (peso < pesoLimite) {
+              const roleNaGuild = interaction.guild.roles.cache.find(r => r.name === roleName);
+              if (roleNaGuild) {
+                const temCargo = alvo.roles.cache.has(roleNaGuild.id);
+                selectMenu.addOptions(
+                  new StringSelectMenuOptionBuilder()
+                    .setLabel(roleName)
+                    .setDescription(temCargo ? "🟢 Possui (Clique para Remover)" : "🔴 Não possui (Clique para Adicionar)")
+                    .setValue(roleNaGuild.id)
+                );
+                optionsAdded++;
+              }
             }
           }
         }
@@ -106,27 +147,42 @@ module.exports = {
       };
 
       await interaction.deferReply({ ephemeral: true }); // Painel oculto para não sujar o chat
-      const msg = await interaction.editReply({ ...buildPanel(), withResponse: true });
+      const msg = await interaction.editReply({ ...buildPanel(), fetchReply: true });
       
-      const collector = msg.resource.message.createMessageComponentCollector({ time: 120000 });
+      const collector = msg.createMessageComponentCollector({ time: 120000 });
 
       collector.on("collect", async (i) => {
         if (i.user.id !== interaction.user.id) return i.reply({ content: "❌ Este painel não é seu.", ephemeral: true });
 
         // SE CLICOU NO MENU
         if (i.isStringSelectMenu() && i.customId === "select_roles_recrutamento") {
-          await i.deferUpdate();
           const roleId = i.values[0];
           const role = interaction.guild.roles.cache.get(roleId);
+          if (!role) return i.reply({ content: "❌ Cargo inválido ou inexistente.", ephemeral: true });
+          const isLideranca = LIDERANCA_SET.has(role.name);
+          const isArea = AREAS_SET.has(role.name);
+
+          if (!alvo.roles.cache.has(roleId)) {
+            const liderancasAtuais = alvo.roles.cache.filter(r => LIDERANCA_SET.has(r.name)).size;
+            if (isLideranca && liderancasAtuais >= 1) {
+              return i.reply({ content: "❌ Limite de 1 cargo de liderança por membro. Remova o cargo atual antes de atribuir outro.", ephemeral: true });
+            }
+
+            const areasAtuais = alvo.roles.cache.filter(r => AREAS_SET.has(r.name)).size;
+            if (isArea && areasAtuais >= 3) {
+              return i.reply({ content: "❌ Limite de 3 cargos de áreas operacionais por membro. Remova um antes de adicionar outro.", ephemeral: true });
+            }
+          }
+
+          await i.deferUpdate();
 
           if (alvo.roles.cache.has(roleId)) {
-            await alvo.roles.remove(roleId).catch(()=>{});
+            await alvo.roles.remove(roleId).catch(() => {});
           } else {
-            await alvo.roles.add(roleId).catch(()=>{});
-            const aspiranteId = "1097700110126809140"; 
+            await alvo.roles.add(roleId).catch(() => {});
             const roleStaffGeral = interaction.guild.roles.cache.find(r => r.name === "Staff Geral");
-            if (!alvo.roles.cache.has(aspiranteId)) alvo.roles.add(aspiranteId).catch(()=>{});
-            if (roleStaffGeral && !alvo.roles.cache.has(roleStaffGeral.id)) alvo.roles.add(roleStaffGeral.id).catch(()=>{});
+            if (!alvo.roles.cache.has(ASPIRANTE_ID)) alvo.roles.add(ASPIRANTE_ID).catch(() => {});
+            if (roleStaffGeral && !alvo.roles.cache.has(roleStaffGeral.id)) alvo.roles.add(roleStaffGeral.id).catch(() => {});
           }
           await interaction.editReply(buildPanel());
         }
@@ -135,7 +191,7 @@ module.exports = {
         if (i.isButton() && i.customId === "finalizar_painel_recrutamento") {
           await i.deferUpdate();
           const areasSetadas = alvo.roles.cache
-            .filter(r => HIERARQUIA[r.name] && r.name !== "Staff Geral" && r.id !== "1097700110126809140")
+            .filter(r => ROLES_VALIDOS.has(r.name))
             .map(r => `**${r.name}**`);
 
           // 📢 Anúncio Público
@@ -185,9 +241,13 @@ module.exports = {
       if (candidato.id === interaction.user.id) return interaction.reply({ content: "❌ Você não pode entrevistar a si mesmo.", ephemeral: true });
 
       // 🛑 FILTRO DE PRÉ-REQUISITOS
-      const idadeConta = Math.floor((Date.now() - candidato.user.createdTimestamp) / (1000 * 60 * 60 * 24));
+      const idadeConta = diasDesde(candidato.user.createdTimestamp);
       if (idadeConta < DIAS_MINIMOS_CONTA) {
         return interaction.reply({ content: `❌ **Recusado:** Conta suspeita. O Discord de ${candidato.user.username} foi criado há apenas ${idadeConta} dias (Mínimo: ${DIAS_MINIMOS_CONTA}).`, ephemeral: true });
+      }
+      const diasServidorCandidato = candidato.joinedTimestamp ? diasDesde(candidato.joinedTimestamp) : 0;
+      if (diasServidorCandidato < DIAS_MINIMOS_SERVIDOR) {
+        return interaction.reply({ content: `❌ **Recusado:** ${candidato.user.username} está no servidor há apenas ${diasServidorCandidato} dias. O mínimo é ${DIAS_MINIMOS_SERVIDOR} dias.`, ephemeral: true });
       }
 
       await interaction.reply({ content: "⏳ Montando as salas de entrevista...", ephemeral: true });
@@ -242,11 +302,11 @@ module.exports = {
       const callId = partes[3];
 
       // Verifica se quem clicou é o recrutador original ou um Administrador
-      if (interaction.user.id !== recrutadorId && !interaction.member.permissions.has("Administrator")) {
+      if (interaction.user.id !== recrutadorId && !interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
         return interaction.reply({ content: "❌ Apenas o recrutador que abriu a sala ou um Admin pode encerrá-la.", ephemeral: true });
       }
 
-      await interaction.reply({ content: "🧹 Entrevista encerrada. Apagando as salas em 5 segundos..." });
+      await interaction.reply({ content: "🧹 Entrevista encerrada. Apagando as salas em 5 segundos...", ephemeral: true });
 
       // Apaga o canal de texto atual e o canal de voz vinculado
       setTimeout(async () => {
