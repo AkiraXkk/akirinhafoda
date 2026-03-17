@@ -32,7 +32,7 @@ const AREAS = [
   { label: "Recrutamento", value: "recrutamento" },
   { label: "Acolhimento", value: "acolhimento" },
   { label: "Design", value: "design" },
-  { label: "Pastime", value: "passtime" }
+  { label: "Passtime", value: "passtime" }
 ];
 
 function getAreaLabel(value) {
@@ -88,7 +88,7 @@ module.exports = {
               { name: "Recrutamento", value: "recrutamento" },
               { name: "Acolhimento", value: "acolhimento" },
               { name: "Design", value: "design" },
-              { name: "Pastime", value: "passtime" },
+              { name: "Passtime", value: "passtime" },
               { name: "Migração", value: "migracao" }
             )
         )
