@@ -175,7 +175,7 @@ module.exports = {
 
     const motivoTexto = motivo ? `\n📋 **Motivo:** ${motivo}` : "";
     const embedArquivado = createEmbed({
-      title: "�� Ticket Arquivado",
+      title: " Ticket Arquivado",
       description: `O membro não possui mais acesso a este canal.${motivoTexto}\n\nEquipe: Quando não for mais necessário manter o histórico, clique abaixo para excluir definitivamente.`,
       color: 0x95a5a6
     });
@@ -200,73 +200,12 @@ module.exports = {
   },
 
   // ==========================================
-  // HANDLER GERAL DE COMPONENTES (Botões e Menus)
+  // HANDLER DE BOTÕES
   // ==========================================
   async handleButton(interaction) {
     const logService = interaction.client.services?.log;
     const ticketConfig = loadTicketCategories();
     if (!ticketConfig) return interaction.reply({ content: "Sistema não configurado.", flags: MessageFlags.Ephemeral });
-
-    // --- LÓGICA DO SETUP ADMINISTRATIVO ---
-    if (interaction.customId === "setup_select_cat") {
-      await interaction.deferUpdate().catch(() => {});
-
-      const categoryKey = interaction.values[0];
-      const catInfo = ticketConfig.categories[categoryKey];
-
-      const setupData = await setupStore.load();
-      const currentConfig = (setupData[interaction.guildId] || {})[categoryKey] || {};
-
-      const embedConfig = new EmbedBuilder()
-        .setTitle(`🛠️ Configurando: ${catInfo.title}`)
-        .setDescription(`Utilize os menus abaixo para definir as regras específicas para **${catInfo.name}**.\n\n` +
-          `**Cargo Responsável:** ${currentConfig.roleId ? `<@&${currentConfig.roleId}>` : "`Não definido`"}\n` +
-          `**Categoria do Canal:** ${currentConfig.categoryId ? `<#${currentConfig.categoryId}>` : "`Não definido`"}`)
-        .setColor("#5865F2");
-
-      const roleSelect = new RoleSelectMenuBuilder().setCustomId(`setup_role_${categoryKey}`).setPlaceholder("Selecione qual cargo será mencionado...");
-      const channelSelect = new ChannelSelectMenuBuilder().setCustomId(`setup_channel_${categoryKey}`).setPlaceholder("Selecione a categoria para os tickets...").addChannelTypes(ChannelType.GuildCategory);
-      const btnVoltar = new ButtonBuilder().setCustomId("setup_back").setLabel("Voltar ao Menu Principal").setStyle(ButtonStyle.Secondary);
-
-      await interaction.editReply({ 
-        embeds: [embedConfig], 
-        components: [
-          new ActionRowBuilder().addComponents(roleSelect), 
-          new ActionRowBuilder().addComponents(channelSelect),
-          new ActionRowBuilder().addComponents(btnVoltar)
-        ] 
-      });
-    }
-
-    if (interaction.customId.startsWith("setup_role_")) {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
-
-      const categoryKey = interaction.customId.replace("setup_role_", "");
-      const roleId = interaction.values[0];
-
-      await setupStore.update(interaction.guildId, (data) => {
-        const guildData = data || {};
-        const catData = guildData[categoryKey] || {};
-        return { ...guildData, [categoryKey]: { ...catData, roleId } };
-      });
-
-      await interaction.editReply({ content: `✅ Cargo salvo para **${categoryKey}**! Retorne ao menu para continuar.` });
-    }
-
-    if (interaction.customId.startsWith("setup_channel_")) {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
-
-      const categoryKey = interaction.customId.replace("setup_channel_", "");
-      const categoryId = interaction.values[0];
-
-      await setupStore.update(interaction.guildId, (data) => {
-        const guildData = data || {};
-        const catData = guildData[categoryKey] || {};
-        return { ...guildData, [categoryKey]: { ...catData, categoryId } };
-      });
-
-      await interaction.editReply({ content: `✅ Categoria salva para **${categoryKey}**! Retorne ao menu para continuar.` });
-    }
 
     if (interaction.customId === "setup_back") {
       const embedSetup = new EmbedBuilder().setTitle("⚙️ Gerenciamento de Tickets WDA").setDescription("Utilize o menu abaixo para configurar qual **Categoria** e qual **Cargo** será acionado para cada tipo de ticket.\n\nQuando terminar, envie o painel.").setColor("#2F3136");
@@ -324,6 +263,177 @@ module.exports = {
         );
 
       await interaction.reply({ embeds: [menuEmbed], components: [new ActionRowBuilder().addComponents(selectType)], flags: MessageFlags.Ephemeral });
+    }
+
+    if (interaction.customId === "assumir_ticket_btn") {
+      await interaction.deferUpdate().catch(() => {});
+
+      const member = await interaction.guild.members.fetch(interaction.user.id);
+      
+      const tickets = await ticketStore.load();
+      const ticketInfo = tickets[interaction.channelId] || (tickets["global"] && tickets["global"][interaction.channelId]);
+      
+      // Bloqueia o autor do ticket de assumir o próprio ticket
+      if (ticketInfo && ticketInfo.userId === interaction.user.id) {
+        return interaction.followUp({ embeds: [createErrorEmbed("❌ Você não pode assumir seu próprio ticket.")], flags: MessageFlags.Ephemeral });
+      }
+
+      let isSpecificStaff = false;
+      if (ticketInfo) {
+        const setupData = await setupStore.load();
+        const typeSetup = (setupData[interaction.guildId] || {})[ticketInfo.ticketType] || {};
+        if (typeSetup.roleId && member.roles.cache.has(typeSetup.roleId)) isSpecificStaff = true;
+      }
+
+      if (!isStaff(member) && !isSpecificStaff) {
+        return interaction.followUp({ embeds: [createErrorEmbed("Apenas responsáveis por esta área podem assumir o ticket.")], flags: MessageFlags.Ephemeral });
+      }
+
+      // Salva quem assumiu o ticket
+      await ticketStore.update(interaction.channelId, (info) => (info ? { ...info, assumedBy: interaction.user.id } : null));
+
+      const rowOnlyClose = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("close_ticket_btn").setLabel("Fechar Ticket").setStyle(ButtonStyle.Danger).setEmoji("🔒"));
+      await interaction.message.edit({ components: [rowOnlyClose] });
+
+      const embedAssumir = createEmbed({ title: "🫂 Atendimento Iniciado", description: `Olá! O staff **${interaction.user.username}** assumiu este ticket e irá te ajudar a partir de agora.`, color: 0xf1c40f });
+      await interaction.followUp({ embeds: [embedAssumir] });
+    }
+
+    if (interaction.customId === "close_ticket_btn") {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+
+      const tickets = await ticketStore.load();
+      const ticketInfo = tickets[interaction.channelId] || (tickets["global"] && tickets["global"][interaction.channelId]);
+
+      if (!ticketInfo || ticketInfo.closedAt) {
+        return interaction.editReply({ embeds: [createErrorEmbed("Este ticket já foi encerrado ou não é válido.")] });
+      }
+
+      // Permissão para fechar: autor do ticket, staff que assumiu, ou ManageGuild
+      const isAuthor = ticketInfo.userId === interaction.user.id;
+      const isAssumer = ticketInfo.assumedBy === interaction.user.id;
+      const member = await interaction.guild.members.fetch(interaction.user.id);
+      const hasManageGuild = member.permissions.has("ManageGuild");
+
+      if (!isAuthor && !isAssumer && !hasManageGuild) {
+        return interaction.editReply({ embeds: [createErrorEmbed("Apenas o autor, o staff responsável ou um administrador pode fechar este ticket.")] });
+      }
+
+      const motivoMenu = new StringSelectMenuBuilder()
+        .setCustomId("motivo_fechar_ticket")
+        .setPlaceholder("Selecione o motivo do fechamento...")
+        .addOptions(
+          new StringSelectMenuOptionBuilder().setLabel("Concluído").setValue("Concluído").setEmoji("✅"),
+          new StringSelectMenuOptionBuilder().setLabel("Inatividade do Usuário").setValue("Inatividade do Usuário").setEmoji("⏰"),
+          new StringSelectMenuOptionBuilder().setLabel("Troll/Spam").setValue("Troll/Spam").setEmoji("🚫"),
+          new StringSelectMenuOptionBuilder().setLabel("Resolvido em Call").setValue("Resolvido em Call").setEmoji("📞")
+        );
+
+      return interaction.editReply({
+        embeds: [createEmbed({ title: "🔒 Fechar Ticket", description: "Selecione o motivo do fechamento abaixo:", color: 0xe74c3c })],
+        components: [new ActionRowBuilder().addComponents(motivoMenu)],
+      });
+    }
+
+    if (interaction.customId === "delete_ticket_btn") {
+      await interaction.deferReply().catch(() => {});
+
+      const member = await interaction.guild.members.fetch(interaction.user.id);
+      if (!isStaff(member)) return interaction.editReply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de tickets.")] });
+      await interaction.editReply({ content: "💥 O canal será destruído em 5 segundos..." });
+      setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+    }
+  },
+
+  // ==========================================
+  // HANDLER DE MENUS
+  // ==========================================
+  async handleSelectMenu(interaction) {
+    const logService = interaction.client.services?.log;
+    const ticketConfig = loadTicketCategories();
+    if (!ticketConfig) return interaction.reply({ content: "Sistema não configurado.", flags: MessageFlags.Ephemeral });
+
+    // --- LÓGICA DO SETUP ADMINISTRATIVO ---
+    if (interaction.customId === "setup_select_cat") {
+      await interaction.deferUpdate().catch(() => {});
+
+      const categoryKey = interaction.values[0];
+      const catInfo = ticketConfig.categories[categoryKey];
+
+      const setupData = await setupStore.load();
+      const currentConfig = (setupData[interaction.guildId] || {})[categoryKey] || {};
+
+      const embedConfig = new EmbedBuilder()
+        .setTitle(`🛠️ Configurando: ${catInfo.title}`)
+        .setDescription(`Utilize os menus abaixo para definir as regras específicas para **${catInfo.name}**.\n\n` +
+          `**Cargo Responsável:** ${currentConfig.roleId ? `<@&${currentConfig.roleId}>` : "`Não definido`"}\n` +
+          `**Categoria do Canal:** ${currentConfig.categoryId ? `<#${currentConfig.categoryId}>` : "`Não definido`"}`)
+        .setColor("#5865F2");
+
+      const roleSelect = new RoleSelectMenuBuilder().setCustomId(`setup_role_${categoryKey}`).setPlaceholder("Selecione qual cargo será mencionado...");
+      const channelSelect = new ChannelSelectMenuBuilder().setCustomId(`setup_channel_${categoryKey}`).setPlaceholder("Selecione a categoria para os tickets...").addChannelTypes(ChannelType.GuildCategory);
+      const btnVoltar = new ButtonBuilder().setCustomId("setup_back").setLabel("Voltar ao Menu Principal").setStyle(ButtonStyle.Secondary);
+
+      await interaction.editReply({ 
+        embeds: [embedConfig], 
+        components: [
+          new ActionRowBuilder().addComponents(roleSelect), 
+          new ActionRowBuilder().addComponents(channelSelect),
+          new ActionRowBuilder().addComponents(btnVoltar)
+        ] 
+      });
+    }
+
+    if (interaction.customId.startsWith("setup_role_")) {
+      await interaction.deferUpdate().catch(() => {});
+
+      const categoryKey = interaction.customId.replace("setup_role_", "");
+      const roleId = interaction.values[0];
+
+      await setupStore.update(interaction.guildId, (data) => {
+        const guildData = data || {};
+        const catData = guildData[categoryKey] || {};
+        return { ...guildData, [categoryKey]: { ...catData, roleId } };
+      });
+
+      const catInfo = ticketConfig.categories[categoryKey];
+      const setupData = await setupStore.load();
+      const currentConfig = (setupData[interaction.guildId] || {})[categoryKey] || {};
+
+      const embedConfig = new EmbedBuilder()
+        .setTitle(`🛠️ Configurando: ${catInfo.title}`)
+        .setDescription(`Utilize os menus abaixo para definir as regras específicas para **${catInfo.name}**.\n\n` +
+          `**Cargo Responsável:** ${currentConfig.roleId ? `<@&${currentConfig.roleId}>` : "`Não definido`"}\n` +
+          `**Categoria do Canal:** ${currentConfig.categoryId ? `<#${currentConfig.categoryId}>` : "`Não definido`"}`)
+        .setColor("#5865F2");
+
+      await interaction.message.edit({ embeds: [embedConfig], components: interaction.message.components });
+    }
+
+    if (interaction.customId.startsWith("setup_channel_")) {
+      await interaction.deferUpdate().catch(() => {});
+
+      const categoryKey = interaction.customId.replace("setup_channel_", "");
+      const categoryId = interaction.values[0];
+
+      await setupStore.update(interaction.guildId, (data) => {
+        const guildData = data || {};
+        const catData = guildData[categoryKey] || {};
+        return { ...guildData, [categoryKey]: { ...catData, categoryId } };
+      });
+
+      const catInfo = ticketConfig.categories[categoryKey];
+      const setupData = await setupStore.load();
+      const currentConfig = (setupData[interaction.guildId] || {})[categoryKey] || {};
+
+      const embedConfig = new EmbedBuilder()
+        .setTitle(`🛠️ Configurando: ${catInfo.title}`)
+        .setDescription(`Utilize os menus abaixo para definir as regras específicas para **${catInfo.name}**.\n\n` +
+          `**Cargo Responsável:** ${currentConfig.roleId ? `<@&${currentConfig.roleId}>` : "`Não definido`"}\n` +
+          `**Categoria do Canal:** ${currentConfig.categoryId ? `<#${currentConfig.categoryId}>` : "`Não definido`"}`)
+        .setColor("#5865F2");
+
+      await interaction.message.edit({ embeds: [embedConfig], components: interaction.message.components });
     }
 
     if (interaction.customId === "user_select_ticket_type") {
@@ -416,89 +526,10 @@ module.exports = {
       }
     }
 
-    if (interaction.customId === "assumir_ticket_btn") {
-      await interaction.deferUpdate().catch(() => {});
-
-      const member = await interaction.guild.members.fetch(interaction.user.id);
-      
-      const tickets = await ticketStore.load();
-      const ticketInfo = tickets[interaction.channelId] || (tickets["global"] && tickets["global"][interaction.channelId]);
-      
-      // Bloqueia o autor do ticket de assumir o próprio ticket
-      if (ticketInfo && ticketInfo.userId === interaction.user.id) {
-        return interaction.followUp({ embeds: [createErrorEmbed("❌ Você não pode assumir seu próprio ticket.")], flags: MessageFlags.Ephemeral });
-      }
-
-      let isSpecificStaff = false;
-      if (ticketInfo) {
-        const setupData = await setupStore.load();
-        const typeSetup = (setupData[interaction.guildId] || {})[ticketInfo.ticketType] || {};
-        if (typeSetup.roleId && member.roles.cache.has(typeSetup.roleId)) isSpecificStaff = true;
-      }
-
-      if (!isStaff(member) && !isSpecificStaff) {
-        return interaction.followUp({ embeds: [createErrorEmbed("Apenas responsáveis por esta área podem assumir o ticket.")], flags: MessageFlags.Ephemeral });
-      }
-
-      // Salva quem assumiu o ticket
-      await ticketStore.update(interaction.channelId, (info) => (info ? { ...info, assumedBy: interaction.user.id } : null));
-
-      const rowOnlyClose = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId("close_ticket_btn").setLabel("Fechar Ticket").setStyle(ButtonStyle.Danger).setEmoji("🔒"));
-      await interaction.message.edit({ components: [rowOnlyClose] });
-
-      const embedAssumir = createEmbed({ title: "🫂 Atendimento Iniciado", description: `Olá! O staff **${interaction.user.username}** assumiu este ticket e irá te ajudar a partir de agora.`, color: 0xf1c40f });
-      await interaction.followUp({ embeds: [embedAssumir] });
-    }
-
-    if (interaction.customId === "close_ticket_btn") {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
-
-      const tickets = await ticketStore.load();
-      const ticketInfo = tickets[interaction.channelId] || (tickets["global"] && tickets["global"][interaction.channelId]);
-
-      if (!ticketInfo || ticketInfo.closedAt) {
-        return interaction.editReply({ embeds: [createErrorEmbed("Este ticket já foi encerrado ou não é válido.")] });
-      }
-
-      // Permissão para fechar: autor do ticket, staff que assumiu, ou ManageGuild
-      const isAuthor = ticketInfo.userId === interaction.user.id;
-      const isAssumer = ticketInfo.assumedBy === interaction.user.id;
-      const member = await interaction.guild.members.fetch(interaction.user.id);
-      const hasManageGuild = member.permissions.has("ManageGuild");
-
-      if (!isAuthor && !isAssumer && !hasManageGuild) {
-        return interaction.editReply({ embeds: [createErrorEmbed("Apenas o autor, o staff responsável ou um administrador pode fechar este ticket.")] });
-      }
-
-      const motivoMenu = new StringSelectMenuBuilder()
-        .setCustomId("motivo_fechar_ticket")
-        .setPlaceholder("Selecione o motivo do fechamento...")
-        .addOptions(
-          new StringSelectMenuOptionBuilder().setLabel("Concluído").setValue("Concluído").setEmoji("✅"),
-          new StringSelectMenuOptionBuilder().setLabel("Inatividade do Usuário").setValue("Inatividade do Usuário").setEmoji("⏰"),
-          new StringSelectMenuOptionBuilder().setLabel("Troll/Spam").setValue("Troll/Spam").setEmoji("🚫"),
-          new StringSelectMenuOptionBuilder().setLabel("Resolvido em Call").setValue("Resolvido em Call").setEmoji("📞")
-        );
-
-      return interaction.editReply({
-        embeds: [createEmbed({ title: "🔒 Fechar Ticket", description: "Selecione o motivo do fechamento abaixo:", color: 0xe74c3c })],
-        components: [new ActionRowBuilder().addComponents(motivoMenu)],
-      });
-    }
-
     // Handler do motivo de fechamento do ticket
     if (interaction.customId === "motivo_fechar_ticket") {
       const motivo = interaction.values[0];
       await module.exports.archiveTicket(interaction, ticketStore, logService, motivo);
-    }
-
-    if (interaction.customId === "delete_ticket_btn") {
-      await interaction.deferReply().catch(() => {});
-
-      const member = await interaction.guild.members.fetch(interaction.user.id);
-      if (!isStaff(member)) return interaction.editReply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de tickets.")] });
-      await interaction.editReply({ content: "💥 O canal será destruído em 5 segundos..." });
-      setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
     }
   }
 };
