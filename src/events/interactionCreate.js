@@ -1,5 +1,4 @@
-const { Events,
-  MessageFlags, } = require("discord.js");
+const { Events, MessageFlags } = require("discord.js");
 const { logger } = require("../logger");
 
 module.exports = {
@@ -92,6 +91,10 @@ module.exports = {
           customId === "motivo_fechar_ticket"
         ) {
           commandName = "ticket";
+        }
+        // ── Diretoria / Alta Cúpula (SISTEMA NOVO) ──
+        else if (customId.startsWith("cupula_")) {
+          commandName = "diretoria";
         }
         // ── VIP Admin (ANTES de vip para capturar vipadmin_) ──
         else if (customId.startsWith("vipadmin_")) {
