@@ -116,7 +116,7 @@ module.exports = {
 
       const areaLabel = area === "migracao" ? "Migração" : getAreaLabel(area);
       return interaction.reply({
-        embeds: [createSuccessEmbed(`Cargo <@&${cargo.id}> configurado para a área **${areaLabel}**.`)],
+        embeds: [createSuccessEmbed(`Cargo <@&${cargo.id}> configurado para a área **${areaLabel}**`)],
         flags: MessageFlags.Ephemeral
       });
     }
@@ -300,6 +300,17 @@ module.exports = {
       const area = interaction.values[0];
       await chatStore.update(interaction.channelId, (data) => ({ ...data, area }));
 
+      // TRAVA O MENU PERMANENTEMENTE PARA PREVENIR SPAM DE PING
+      const disabledComponents = interaction.message.components.map(row => {
+        const builder = ActionRowBuilder.from(row);
+        builder.components.forEach(comp => {
+          if (comp.data.custom_id === "sejawda_area") {
+            comp.setDisabled(true);
+          }
+        });
+        return builder;
+      });
+
       await interaction.message.edit({
         embeds: [
           createEmbed({
@@ -308,7 +319,7 @@ module.exports = {
             color: 0x8e44ad
           })
         ],
-        components: interaction.message.components
+        components: disabledComponents
       });
 
       // Ping do cargo responsável pela área escolhida
@@ -457,7 +468,8 @@ module.exports = {
       const chats = await chatStore.load();
       const chat = chats[interaction.channelId];
 
-      if (!chat || chat.closedAt) return interaction.editReply({ embeds: [createErrorEmbed("Este chat já foi encerrado ou não é válido.")] });
+      // CORREÇÃO: Paradox removido, aceita deletar quando o chat não existir mais ativamente ou já estiver fechado
+      if (!chat) return interaction.editReply({ embeds: [createErrorEmbed("Este chat não é válido.")] });
 
       const isGlobal = isGlobalStaff(interaction.member);
       if (!isGlobal) return interaction.editReply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de solicitações.")] });
