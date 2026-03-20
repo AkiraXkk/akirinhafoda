@@ -1,4 +1,4 @@
-const { Events } = require("discord.js");
+const { Events, ChannelType, PermissionFlagsBits } = require("discord.js");
 const { logger } = require("../logger");
 
 const MINUTE_MS = 60000;
@@ -22,6 +22,20 @@ module.exports = {
 
     // 1. Usuário entrou em um canal de voz
     if (!oldState.channelId && newState.channelId) {
+      // ── TempCall: Verifica se o canal é o gatilho ──────────────────────
+      try {
+        const tempcallCmd = client.commands?.get("tempcall");
+        if (tempcallCmd) {
+          const tcConfig = await tempcallCmd.configStore.get(guildId);
+          if (tcConfig && tcConfig.canalGatilhoId && newState.channelId === tcConfig.canalGatilhoId) {
+            await handleTempCallJoin(newState, tcConfig, tempcallCmd, guildId, client);
+            return; // User will be moved; XP tracking starts on the new channel event
+          }
+        }
+      } catch (e) {
+        logger.error({ err: e }, "[TempCall] Erro ao verificar canal gatilho");
+      }
+      // ── fim TempCall ───────────────────────────────────────────────────
       const voiceChannel = newState.channel;
       
       // Se entrou mutado ou surdo, ignora completamente (não inicia a sessão)
@@ -44,6 +58,16 @@ module.exports = {
     
     // 2. Usuário saiu do canal de voz
     else if (oldState.channelId && !newState.channelId) {
+      // ── TempCall: Limpeza de call vazia ────────────────────────────────
+      try {
+        const tempcallCmd = client.commands?.get("tempcall");
+        if (tempcallCmd) {
+          await handleTempCallLeave(oldState, tempcallCmd, guildId);
+        }
+      } catch (e) {
+        logger.error({ err: e }, "[TempCall] Erro na limpeza de call (saída)");
+      }
+      // ── fim TempCall ───────────────────────────────────────────────────
       const session = voiceSessions.get(userId);
       if (session) {
         await finalizeVoiceSession(userId, session);
@@ -54,6 +78,16 @@ module.exports = {
     
     // 3. Usuário mudou de canal ou mudou o status (mutou/desmutou o mic/fone)
     else if (oldState.channelId && newState.channelId) {
+      // ── TempCall: Limpeza de call vazia (mudança de canal) ─────────────
+      try {
+        const tempcallCmd = client.commands?.get("tempcall");
+        if (tempcallCmd && oldState.channelId !== newState.channelId) {
+          await handleTempCallLeave(oldState, tempcallCmd, guildId);
+        }
+      } catch (e) {
+        logger.error({ err: e }, "[TempCall] Erro na limpeza de call (mudança de canal)");
+      }
+      // ── fim TempCall ───────────────────────────────────────────────────
       const session = voiceSessions.get(userId);
       
       if (!session) {
@@ -193,3 +227,103 @@ async function finalizeVoiceSession(userId, session) {
 }
 
 // O processamento contínuo de XP continua sendo disparado pelo timer global (ready.js)
+
+// ── TempCall Helper Functions ─────────────────────────────────────────────────
+
+/**
+ * Called when a member enters the configured trigger channel.
+ * Creates a temporary voice channel, moves the member into it, stores it, and sends the control panel.
+ */
+async function handleTempCallJoin(newState, config, tempcallCmd, guildId, client) {
+  const guild = newState.guild;
+  const member = newState.member;
+
+  // Enforce access-role restriction
+  if (config.cargoAcessoId && !member.roles.cache.has(config.cargoAcessoId)) {
+    await member.voice.disconnect("Sem permissão para usar o sistema de calls temporárias").catch(() => {});
+    return;
+  }
+
+  // Enforce VIP-only restriction
+  if (config.somenteVip && config.cargoVipId && !member.roles.cache.has(config.cargoVipId)) {
+    await member.voice.disconnect("Acesso restrito a membros VIP").catch(() => {});
+    return;
+  }
+
+  // Create the temporary voice channel (sanitize display name to respect Discord channel name rules)
+  const sanitizedName = member.displayName
+    .replace(/[^\w\s\-áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ]/g, "")
+    .trim()
+    .slice(0, 90) || "membro";
+  const tempChannel = await guild.channels.create({
+    name: `Call de ${sanitizedName}`,
+    type: ChannelType.GuildVoice,
+    parent: config.categoriaId || null,
+    permissionOverwrites: [
+      {
+        id: guild.roles.everyone.id,
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
+      },
+      {
+        id: member.id,
+        allow: [
+          PermissionFlagsBits.ManageChannels,
+          PermissionFlagsBits.MoveMembers,
+          PermissionFlagsBits.MuteMembers,
+          PermissionFlagsBits.DeafenMembers,
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.Connect,
+          PermissionFlagsBits.Speak,
+        ],
+      },
+    ],
+  });
+
+  // Move the member into the newly created channel
+  await member.voice.setChannel(tempChannel);
+
+  // Persist the active call so cleanup and panel handlers can reference it
+  const activeCalls = (await tempcallCmd.activeStore.get(guildId)) || {};
+  activeCalls[tempChannel.id] = {
+    ownerId: member.id,
+    guildId,
+    createdAt: Date.now(),
+  };
+  await tempcallCmd.activeStore.set(guildId, activeCalls);
+
+  // Send the control panel inside the voice channel's text area
+  const panelPayload = tempcallCmd.buildControlPanel(tempChannel.id, member.id);
+  await tempChannel.send(panelPayload).catch(() => {});
+
+  logger.info({ userId: member.id, channelId: tempChannel.id, guildId }, "[TempCall] Call temporária criada");
+}
+
+/**
+ * Called when a member leaves (or moves away from) a voice channel.
+ * If the channel is a tracked temp call and now has 0 non-bot members, delete it and remove from DB.
+ */
+async function handleTempCallLeave(oldState, tempcallCmd, guildId) {
+  const channelId = oldState.channelId;
+  const activeCalls = await tempcallCmd.activeStore.get(guildId);
+  if (!activeCalls || !activeCalls[channelId]) return;
+
+  const channel = oldState.channel || oldState.guild.channels.cache.get(channelId);
+  if (!channel) {
+    // Channel already gone — just clean up the DB record
+    delete activeCalls[channelId];
+    await tempcallCmd.activeStore.set(guildId, activeCalls);
+    return;
+  }
+
+  const nonBotMembers = channel.members.filter((m) => !m.user.bot);
+  if (nonBotMembers.size === 0) {
+    try {
+      await channel.delete("Call temporária vazia");
+      logger.info({ channelId, guildId }, "[TempCall] Canal temporário deletado (vazio)");
+    } catch (e) {
+      logger.error({ err: e, channelId }, "[TempCall] Erro ao deletar canal temporário vazio");
+    }
+    delete activeCalls[channelId];
+    await tempcallCmd.activeStore.set(guildId, activeCalls);
+  }
+}

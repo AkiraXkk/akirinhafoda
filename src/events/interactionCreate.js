@@ -180,6 +180,10 @@ module.exports = {
         else if (customId.startsWith("dama_")) {
           commandName = "dama";
         }
+        // ── TempCall ──
+        else if (customId.startsWith("tempcall_")) {
+          commandName = "tempcall";
+        }
         // ── Fallback dinâmico ──
         else {
           commandName = customId.split(/_|-|:/)[0];
