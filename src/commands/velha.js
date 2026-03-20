@@ -150,6 +150,13 @@ module.exports = {
     // Challenge another player
     return runPvPGame(interaction, challenger, opponent);
   },
+
+  // Handles stale velha buttons after bot restart (no active collector)
+  async handleButton(interaction) {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.reply({ content: "❌ Esta sessão do Jogo da Velha expirou. Use `/velha` para iniciar um novo jogo.", flags: MessageFlags.Ephemeral }).catch(() => {});
+    }
+  },
 };
 
 async function runBotGame(interaction, player) {

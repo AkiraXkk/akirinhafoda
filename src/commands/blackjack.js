@@ -137,11 +137,6 @@ module.exports = {
             }
 
             if (i.customId === 'bj_play_custom') {
-                // 🛡️ PROTEÇÃO: Defer ANTES de awaitar o modal
-                if (!i.deferred && !i.replied) {
-                  await i.deferUpdate().catch(() => {});
-                }
-
                 const modal = new ModalBuilder()
                     .setCustomId('bj_bet_modal')
                     .setTitle('Apostar no Blackjack');
@@ -177,7 +172,14 @@ module.exports = {
                 }
             }
         });
+    },
+
+  // Handles stale blackjack buttons after bot restart (no active collector)
+  async handleButton(interaction) {
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.reply({ content: "❌ Esta sessão de Blackjack expirou. Use `/blackjack` para iniciar um novo jogo.", flags: MessageFlags.Ephemeral }).catch(() => {});
     }
+  },
 };
 
 async function runGame(interaction, bet, eco, guildId, userId) {

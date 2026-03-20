@@ -115,7 +115,7 @@ module.exports = {
       flags: MessageFlags.Ephemeral
     });
 
-    await interaction.channel.send({ embeds: [buildPanelEmbed()], components: [row] });
+    await interaction.channel.send({ embeds: [buildPanelEmbed()], components: [row] }).catch(() => {});
   },
 
   // ────────────────────────────────────────────

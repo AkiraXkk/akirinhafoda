@@ -152,6 +152,10 @@ module.exports = {
         else if (customId.startsWith("fun_")) {
           commandName = "fun";
         }
+        // ── Blackjack ──
+        else if (customId.startsWith("bj_")) {
+          commandName = "blackjack";
+        }
         // ── Leaderboard ──
         else if (customId.startsWith("leaderboard_")) {
           commandName = "leaderboard";
