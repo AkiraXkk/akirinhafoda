@@ -16,7 +16,6 @@ const COMMAND_SECTION_MAP = {
   vip: "VIP System",
   vipbuy: "VIP System",
   vipadmin: "VIP System",
-  family: "VIP System",
   leaderboard: "Rank",
   levels: "Rank",
   leveladmin: "Rank",
@@ -245,10 +244,6 @@ module.exports = {
         else if (customId.includes("design")) {
           commandName = "design";
         }
-        // ── Family ──
-        else if (customId.startsWith("family_")) {
-          commandName = "family";
-        }
         // ── Fun (jogos casuais) ──
         else if (customId.startsWith("fun_")) {
           commandName = "fun";
@@ -280,10 +275,6 @@ module.exports = {
         // ── Boost ──
         else if (customId.startsWith("boost_")) {
           commandName = "boost";
-        }
-        // ── Dama ──
-        else if (customId.startsWith("dama_")) {
-          commandName = "dama";
         }
         // ── TempCall ──
         else if (customId.startsWith("tempcall_")) {
