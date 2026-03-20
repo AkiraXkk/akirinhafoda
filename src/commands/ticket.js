@@ -134,7 +134,7 @@ module.exports = {
   },
 
   async archiveTicket(interaction, ticketStore, logService, motivo) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
     const tickets = await ticketStore.load();
     const ticketInfo = tickets[interaction.channelId] || (tickets["global"] && tickets["global"][interaction.channelId]);
@@ -216,7 +216,7 @@ module.exports = {
 
     // --- ENVIA O PAINEL DE USUÁRIO OFICIAL ---
     if (interaction.customId === "setup_send_panel") {
-      await interaction.deferUpdate().catch(() => {});
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const mainEmbed = new EmbedBuilder()
         .setTitle("Central de Atendimento WDA")
@@ -266,7 +266,7 @@ module.exports = {
     }
 
     if (interaction.customId === "assumir_ticket_btn") {
-      await interaction.deferUpdate().catch(() => {});
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const member = await interaction.guild.members.fetch(interaction.user.id);
       
@@ -300,7 +300,7 @@ module.exports = {
     }
 
     if (interaction.customId === "close_ticket_btn") {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const tickets = await ticketStore.load();
       const ticketInfo = tickets[interaction.channelId] || (tickets["global"] && tickets["global"][interaction.channelId]);
@@ -336,12 +336,12 @@ module.exports = {
     }
 
     if (interaction.customId === "delete_ticket_btn") {
-      await interaction.deferReply().catch(() => {});
+      await interaction.deferReply().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const member = await interaction.guild.members.fetch(interaction.user.id);
       if (!isStaff(member)) return interaction.editReply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de tickets.")] });
       await interaction.editReply({ content: "💥 O canal será destruído em 5 segundos..." });
-      setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+      setTimeout(() => interaction.channel.delete().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); }), 5000);
     }
   },
 
@@ -355,7 +355,7 @@ module.exports = {
 
     // --- LÓGICA DO SETUP ADMINISTRATIVO ---
     if (interaction.customId === "setup_select_cat") {
-      await interaction.deferUpdate().catch(() => {});
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const categoryKey = interaction.values[0];
       const catInfo = ticketConfig.categories[categoryKey];
@@ -385,7 +385,7 @@ module.exports = {
     }
 
     if (interaction.customId.startsWith("setup_role_")) {
-      await interaction.deferUpdate().catch(() => {});
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const categoryKey = interaction.customId.replace("setup_role_", "");
       const roleId = interaction.values[0];
@@ -411,7 +411,7 @@ module.exports = {
     }
 
     if (interaction.customId.startsWith("setup_channel_")) {
-      await interaction.deferUpdate().catch(() => {});
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const categoryKey = interaction.customId.replace("setup_channel_", "");
       const categoryId = interaction.values[0];

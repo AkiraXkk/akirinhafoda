@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
@@ -114,13 +115,13 @@ module.exports = {
 
         if (guild && vipChannelManager?.deleteVipChannels) {
           for (const userId of userIds) {
-            await vipChannelManager.deleteVipChannels(userId, { guildId: guild.id }).catch(() => {});
+            await vipChannelManager.deleteVipChannels(userId, { guildId: guild.id }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
           }
         }
 
         if (guild && vipRoleManager?.deletePersonalRole) {
           for (const userId of userIds) {
-            await vipRoleManager.deletePersonalRole(userId, { guildId: guild.id }).catch(() => {});
+            await vipRoleManager.deletePersonalRole(userId, { guildId: guild.id }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
           }
         }
 

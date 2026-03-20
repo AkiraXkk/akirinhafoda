@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const { SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder,
   MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
@@ -235,7 +236,7 @@ module.exports = {
       const requestTime = pendingResets.get(userId);
       if (!requestTime || Date.now() - requestTime > 60000) return interaction.reply({ content: "❌ Confirmação expirada.", flags: MessageFlags.Ephemeral });
 
-      await interaction.deferUpdate().catch(() => {});
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       try {
         const levels = (await levelsStore.load()) || {};
@@ -258,7 +259,7 @@ module.exports = {
 
           for (const member of members.values()) {
             for (const roleId of Object.values(guildLevelRoles)) {
-              if (member.roles.cache.has(roleId)) await member.roles.remove(roleId).catch(() => {});
+              if (member.roles.cache.has(roleId)) await member.roles.remove(roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
             }
           }
         }

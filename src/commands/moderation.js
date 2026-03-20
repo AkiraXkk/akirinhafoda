@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
@@ -886,7 +887,7 @@ module.exports = {
                 { name: "📝 Motivo",          value: motivo,                    inline: false },
               ],
               user: interaction.user,
-            }).catch(() => {});
+            }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
           }
 
           // Atualizar o painel

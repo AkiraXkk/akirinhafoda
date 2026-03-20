@@ -115,7 +115,7 @@ module.exports = {
       flags: MessageFlags.Ephemeral
     });
 
-    await interaction.channel.send({ embeds: [buildPanelEmbed()], components: [row] }).catch(() => {});
+    await interaction.channel.send({ embeds: [buildPanelEmbed()], components: [row] }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
   },
 
   // ────────────────────────────────────────────

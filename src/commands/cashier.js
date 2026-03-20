@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const {
   SlashCommandBuilder,
   ActionRowBuilder,
@@ -148,14 +149,14 @@ module.exports = {
 
     collector.on("collect", async (i) => {
       if (i.customId === "cashier_refresh") {
-        await i.deferUpdate().catch(() => {});
+        await i.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         const accrued2 = await applyAccruedInterest(guildId, userId);
         const bankData2 = await getBankData(guildId, userId, rate);
         const wallet2 = await eco.getBalance(guildId, userId);
         await i.editReply({
           embeds: [buildPanel(interaction.user, bankData2.balance || 0, wallet2.coins || 0, rate, accrued2)],
           components: [buildButtons()],
-        }).catch(() => {});
+        }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         return;
       }
 
@@ -186,7 +187,7 @@ module.exports = {
               m.user.id === userId,
           });
 
-          await submission.deferUpdate().catch(() => {});
+          await submission.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
           const raw = submission.fields.getTextInputValue("cashier_amount").trim().toLowerCase();
           const walletNow = await eco.getBalance(guildId, userId);
@@ -200,7 +201,7 @@ module.exports = {
           }
 
           if (isNaN(amount) || amount <= 0) {
-            await submission.followUp({ content: "❌ Valor inválido.", flags: MessageFlags.Ephemeral }).catch(() => {});
+            await submission.followUp({ content: "❌ Valor inválido.", flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
             return;
           }
 
@@ -209,7 +210,7 @@ module.exports = {
 
           if (isDeposit) {
             if ((walletNow.coins || 0) < amount) {
-              await submission.followUp({ content: `❌ Saldo insuficiente! Você tem **${walletNow.coins || 0}** 🪙 na carteira.`, flags: MessageFlags.Ephemeral }).catch(() => {});
+              await submission.followUp({ content: `❌ Saldo insuficiente! Você tem **${walletNow.coins || 0}** 🪙 na carteira.`, flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
               return;
             }
             await eco.removeCoins(guildId, userId, amount);
@@ -221,7 +222,7 @@ module.exports = {
             resultMsg = `✅ **${amount}** 🪙 depositados com sucesso!`;
           } else {
             if ((bankNow.balance || 0) < amount) {
-              await submission.followUp({ content: `❌ Saldo insuficiente no banco! Você tem **${bankNow.balance || 0}** 🪙.`, flags: MessageFlags.Ephemeral }).catch(() => {});
+              await submission.followUp({ content: `❌ Saldo insuficiente no banco! Você tem **${bankNow.balance || 0}** 🪙.`, flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
               return;
             }
             await bankStore.update(key, (cur) => {
@@ -239,7 +240,7 @@ module.exports = {
             content: resultMsg,
             embeds: [buildPanel(interaction.user, bankFinal.balance || 0, walletFinal.coins || 0, rate, 0)],
             components: [buildButtons()],
-          }).catch(() => {});
+          }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         } catch {
           // Timeout no modal – ignora silenciosamente
         }
@@ -248,7 +249,7 @@ module.exports = {
 
     collector.on("end", async (_, reason) => {
       if (reason === "time") {
-        await interaction.editReply({ components: [] }).catch(() => {});
+        await interaction.editReply({ components: [] }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       }
     });
   },
@@ -257,7 +258,7 @@ module.exports = {
     // O roteador principal chama execute; os botões são gerenciados internamente pelo collector
     // Este método existe para compatibilidade com o roteador dinâmico caso seja necessário
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferUpdate().catch(() => {});
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
   },
 };

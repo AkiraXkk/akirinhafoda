@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle,
   MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
@@ -165,7 +166,7 @@ module.exports = {
       // Parse da seleção: tierId_dias_precoTotal
       const [tierId, dias, precoTotal] = selectedValue.split('_');
       
-      await interaction.deferUpdate().catch(() => {});
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       // Verificar configuração do tier
       const tierConfig = await vipConfig.getTierConfig(guildId, tierId);
@@ -257,7 +258,7 @@ module.exports = {
 
   async handleButton(interaction) {
     if (interaction.customId === 'vipbuy_open_ticket') {
-      await interaction.deferUpdate().catch(() => {});
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       // Verificar se existe canal de tickets configurado
       const guildConfig = await getGuildConfig(interaction.guildId);

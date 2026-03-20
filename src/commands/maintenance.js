@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType, EmbedBuilder,
   MessageFlags, } = require("discord.js");
 const { createDataStore } = require("../store/dataStore");
@@ -85,7 +86,7 @@ module.exports = {
           
           // Opcional: apagar a mensagem de manutenção antiga
           const oldMsg = await channel.messages.fetch(current.messageId).catch(() => null);
-          if (oldMsg) await oldMsg.delete().catch(() => {});
+          if (oldMsg) await oldMsg.delete().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       }
 
       await maintenanceStore.update("global", () => ({ enabled: false }));

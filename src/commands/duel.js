@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const {
   SlashCommandBuilder,
   ActionRowBuilder,
@@ -354,7 +355,7 @@ module.exports = {
             content: null,
             embeds: [buildResultEmbed(result.winnerUser, result.loserUser, bet, result.eloChanges, result.winStreak)],
             components: [replayRow],
-          }).catch(() => {});
+          }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
           // Replay collector
           const replayMsg = await interaction.fetchReply().catch(() => null);
@@ -369,7 +370,7 @@ module.exports = {
             });
 
             replayCollector.on("collect", async (btn) => {
-              await btn.deferUpdate().catch(() => {});
+              await btn.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
               // Create a new duel initiated by the replay requester
               const newChallenger = btn.user;
               const newTarget = btn.user.id === challenger.id ? target : challenger;
@@ -379,7 +380,7 @@ module.exports = {
                 return interaction.editReply({
                   embeds: [createErrorEmbed(`Saldo insuficiente para a revanche! Você tem **${newBal.coins || 0}** 🪙.`)],
                   components: [],
-                }).catch(() => {});
+                }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
               }
 
               const newTargetBal = await eco.getBalance(guildId, newTarget.id);
@@ -387,7 +388,7 @@ module.exports = {
                 return interaction.editReply({
                   embeds: [createErrorEmbed(`${newTarget.username} não tem moedas suficientes para a revanche!`)],
                   components: [],
-                }).catch(() => {});
+                }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
               }
 
               await eco.removeCoins(guildId, newChallenger.id, bet);
@@ -401,29 +402,29 @@ module.exports = {
                   footer: { text: FOOTER_TEXT },
                 })],
                 components: [],
-              }).catch(() => {});
+              }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
               const result2 = await runDuel(interaction, newChallenger, newTarget, bet, eco, guildId);
               await interaction.editReply({
                 embeds: [buildResultEmbed(result2.winnerUser, result2.loserUser, bet, result2.eloChanges, result2.winStreak)],
                 components: [],
-              }).catch(() => {});
+              }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
             });
 
             replayCollector.on("end", async (_, reason) => {
               if (reason === "time") {
-                await interaction.editReply({ components: [] }).catch(() => {});
+                await interaction.editReply({ components: [] }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
               }
             });
           }
         } catch (err) {
           // Refund both players on error
-          await eco.addCoins(guildId, challenger.id, bet).catch(() => {});
-          await eco.addCoins(guildId, target.id, bet).catch(() => {});
+          await eco.addCoins(guildId, challenger.id, bet).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
+          await eco.addCoins(guildId, target.id, bet).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
           await interaction.editReply({
             embeds: [createErrorEmbed("Ocorreu um erro durante o duelo. As apostas foram devolvidas.")],
             components: [],
-          }).catch(() => {});
+          }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
       }
     });
@@ -438,7 +439,7 @@ module.exports = {
             footer: { text: FOOTER_TEXT },
           })],
           components: [],
-        }).catch(() => {});
+        }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       }
     });
   },
@@ -448,7 +449,7 @@ module.exports = {
     // Botões internos (replay) são gerenciados pelo collector da execução principal
     // Este método garante compatibilidade com o roteador caso haja botões soltos
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferUpdate().catch(() => {});
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
   },
 };

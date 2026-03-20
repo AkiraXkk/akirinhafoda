@@ -1,9 +1,17 @@
+const { logger } = require("../logger");
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle,
   MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
+const { createDataStore } = require("../store/dataStore");
 
 function parseCustomId(customId) {
   return String(customId || "").split("_");
+}
+
+function parseCatalogBuyModalId(customId) {
+  const match = String(customId || "").match(/^shop_catalog_buy_(\d+)_(.+)$/);
+  if (!match) return null;
+  return { guildId: match[1], itemId: match[2] };
 }
 
 async function buildCatalogItems(shopService, guildId) {
@@ -32,7 +40,7 @@ async function renderCatalogPage({ interaction, shopService, guildId, page = 0 }
     title: "🛒 Catálogo da Loja",
     description: slice.slice(0, 15).map(formatCatalogLine).join("\n"),
     color: 0x9b59b6,
-    footer: { text: `Página ${safePage + 1}/${totalPages} • Use /shop buy item:catalog id:<ID>` }
+    footer: { text: "SEÇÃO DO COMANDO: ECONOMIA | © WDA - Todos os direitos reservados" }
   });
 
   const menu = new StringSelectMenuBuilder()
@@ -174,7 +182,7 @@ module.exports = {
 
         if (catalogItem.type === "temporary_role") {
           if (!catalogItem.roleId) return interaction.reply({ embeds: [createErrorEmbed("Item inválido (roleId ausente).")], flags: MessageFlags.Ephemeral });
-          await member.roles.add(catalogItem.roleId).catch(() => {});
+          await member.roles.add(catalogItem.roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
           if (expiresAt) {
             await shopService.registerGrant(guildId, { type: "temporary_role", userId, roleId: catalogItem.roleId, itemId: catalogItem.id, quantity, expiresAt });
           }
@@ -186,7 +194,7 @@ module.exports = {
           const ch = await interaction.guild.channels.fetch(catalogItem.channelId).catch(() => null);
           if (!ch) return interaction.reply({ embeds: [createErrorEmbed("Canal do item não encontrado.")], flags: MessageFlags.Ephemeral });
           
-          await ch.permissionOverwrites.edit(userId, { ViewChannel: true }).catch(() => {});
+          await ch.permissionOverwrites.edit(userId, { ViewChannel: true }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
           if (expiresAt) {
             await shopService.registerGrant(guildId, { type: "channel_access", userId, channelId: catalogItem.channelId, itemId: catalogItem.id, quantity, expiresAt });
           }
@@ -237,6 +245,36 @@ module.exports = {
       }
 
       return interaction.reply({ embeds: [createErrorEmbed("Item não encontrado.")], flags: MessageFlags.Ephemeral });
+    }
+  },
+  async handleButton(interaction) {
+    if (!interaction.customId.startsWith("shop_catalog_")) return;
+    if (!interaction.inGuild()) return interaction.reply({ embeds: [createErrorEmbed("Use este botão de catálogo em um servidor.")], flags: MessageFlags.Ephemeral });
+
+    const parts = parseCustomId(interaction.customId);
+    const action = parts[2];
+    const guildId = parts[3];
+    const currentPage = Number(parts[4] || 0);
+
+    if (interaction.guildId !== guildId) {
+      return interaction.reply({ embeds: [createErrorEmbed("Este botão pertence a outro servidor.")], flags: MessageFlags.Ephemeral });
+    }
+    if (!["prev", "next"].includes(action)) return;
+
+    const targetPage = action === "prev" ? currentPage - 1 : currentPage + 1;
+    try {
+      await interaction.deferUpdate();
+
+      const shopService = interaction.client.services.shop;
+      const rendered = await renderCatalogPage({ interaction, shopService, guildId, page: targetPage });
+      const { flags: _unusedFlags, ...editPayload } = rendered.payload;
+      return interaction.editReply(editPayload);
+    } catch {
+      const payload = { embeds: [createErrorEmbed("Não foi possível atualizar a página do catálogo.")], flags: MessageFlags.Ephemeral };
+      if (interaction.deferred || interaction.replied) {
+        return interaction.followUp(payload).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
+      }
+      return interaction.reply(payload).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
   },
   async handleSelectMenu(interaction) {
@@ -313,12 +351,83 @@ module.exports = {
       // Entrega o Cargo no Servidor
       if (tier.roleId) {
           const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-          if (member) await member.roles.add(tier.roleId).catch(() => {});
+          if (member) await member.roles.add(tier.roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       }
 
       return interaction.reply({ embeds: [createSuccessEmbed(`🎉 VIP **${tier.name || tier.id}** comprado por **${quantity} dia(s)** com sucesso!\n\n💸 Foram debitadas **${totalCost} 🪙** e seus benefícios já estão ativos.`)], flags: MessageFlags.Ephemeral });
     }
 
     return interaction.reply({ content: "Menu registrado.", flags: MessageFlags.Ephemeral });
+  },
+  async handleModal(interaction) {
+    if (!interaction.customId.startsWith("shop_catalog_buy_")) return;
+    if (!interaction.inGuild()) return interaction.reply({ embeds: [createErrorEmbed("Use este modal em um servidor.")], flags: MessageFlags.Ephemeral });
+
+    const parsed = parseCatalogBuyModalId(interaction.customId);
+    if (!parsed) return interaction.reply({ embeds: [createErrorEmbed("Formulário inválido.")], flags: MessageFlags.Ephemeral });
+    if (interaction.guildId !== parsed.guildId) return interaction.reply({ embeds: [createErrorEmbed("Este formulário pertence a outro servidor.")], flags: MessageFlags.Ephemeral });
+
+    const quantityRaw = interaction.fields.getTextInputValue("quantity");
+    const quantity = Number(quantityRaw);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      return interaction.reply({ embeds: [createErrorEmbed("Quantidade inválida. Use um número inteiro maior que zero.")], flags: MessageFlags.Ephemeral });
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const { economy: economyService, shop: shopService } = interaction.client.services;
+    const guildId = interaction.guildId;
+    const userId = interaction.user.id;
+
+    const catalogItem = await shopService.getItem(guildId, parsed.itemId);
+    if (!catalogItem || catalogItem.enabled === false) {
+      return interaction.editReply({ embeds: [createErrorEmbed("Item não encontrado ou desativado.")] });
+    }
+
+    const total = catalogItem.priceCoins * quantity;
+    const balance = await economyService.getBalance(guildId, userId);
+    if ((balance.coins || 0) < total) {
+      return interaction.editReply({ embeds: [createErrorEmbed(`Saldo insuficiente! Você precisa de **${total} 🪙** e tem **${balance.coins || 0} 🪙**.`)] });
+    }
+
+    await economyService.removeCoins(guildId, userId, total);
+    await shopService.deposit(guildId, total, { by: userId, source: "shop", itemId: catalogItem.id, qty: quantity });
+
+    if (catalogItem.type === "card") {
+      const userCardsStore = createDataStore("userCards.json");
+      await userCardsStore.update(userId, (current) => {
+        const uc = current || { owned: ["default"], selected: "default" };
+        if (!uc.owned.includes(catalogItem.id)) uc.owned.push(catalogItem.id);
+        return uc;
+      });
+      return interaction.editReply({ embeds: [createSuccessEmbed(`Você comprou o card **${catalogItem.name || catalogItem.id}** por **${total} 🪙**! Equipe usando \`/rank cards\`.`)] });
+    }
+
+    const member = interaction.member;
+    const durationDays = Number(catalogItem.durationDays || 0);
+    const expiresAt = durationDays > 0 ? Date.now() + (durationDays * 24 * 60 * 60 * 1000) : null;
+
+    if (catalogItem.type === "temporary_role") {
+      if (!catalogItem.roleId) return interaction.editReply({ embeds: [createErrorEmbed("Item inválido (roleId ausente).")] });
+      await member.roles.add(catalogItem.roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
+      if (expiresAt) {
+        await shopService.registerGrant(guildId, { type: "temporary_role", userId, roleId: catalogItem.roleId, itemId: catalogItem.id, quantity, expiresAt });
+      }
+      return interaction.editReply({ embeds: [createSuccessEmbed(`Você comprou o cargo **${catalogItem.id}** por **${total} 🪙**.`)] });
+    }
+
+    if (catalogItem.type === "channel_access") {
+      if (!catalogItem.channelId) return interaction.editReply({ embeds: [createErrorEmbed("Item inválido (channelId ausente).")] });
+      const ch = await interaction.guild.channels.fetch(catalogItem.channelId).catch(() => null);
+      if (!ch) return interaction.editReply({ embeds: [createErrorEmbed("Canal do item não encontrado.")] });
+
+      await ch.permissionOverwrites.edit(userId, { ViewChannel: true }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
+      if (expiresAt) {
+        await shopService.registerGrant(guildId, { type: "channel_access", userId, channelId: catalogItem.channelId, itemId: catalogItem.id, quantity, expiresAt });
+      }
+      return interaction.editReply({ embeds: [createSuccessEmbed(`Acesso ao canal concedido pelo item **${catalogItem.id}** por **${total} 🪙**.`)] });
+    }
+
+    return interaction.editReply({ embeds: [createErrorEmbed("Tipo de item ainda não suportado no shop core.")] });
   }
 };

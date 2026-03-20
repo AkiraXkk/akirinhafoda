@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 // ============================================================
 //  dama.js  —  Refatorado
 //  Novidades:
@@ -202,7 +203,7 @@ module.exports = {
 
       if (config.damaRoleId) {
         const targetMember = await interaction.guild.members.fetch(target.id).catch(() => null);
-        if (targetMember) await targetMember.roles.add(config.damaRoleId).catch(() => {});
+        if (targetMember) await targetMember.roles.add(config.damaRoleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       }
 
       return interaction.reply({ embeds: [createSuccessEmbed(`**${target.username}** agora é sua primeira dama! 💍`)], flags: MessageFlags.Ephemeral });
@@ -226,7 +227,7 @@ module.exports = {
 
         if (config?.damaRoleId) {
           const targetMember = await interaction.guild.members.fetch(target.id).catch(() => null);
-          if (targetMember) await targetMember.roles.remove(config.damaRoleId).catch(() => {});
+          if (targetMember) await targetMember.roles.remove(config.damaRoleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
 
         return interaction.reply({ embeds: [createSuccessEmbed(`**${target.username}** foi removida de suas damas.`)], flags: MessageFlags.Ephemeral });
@@ -242,7 +243,7 @@ module.exports = {
         await couplesStore.update(key, () => null);
         if (config?.damaRoleId) {
           const targetMember = await interaction.guild.members.fetch(couple.womanId).catch(() => null);
-          if (targetMember) await targetMember.roles.remove(config.damaRoleId).catch(() => {});
+          if (targetMember) await targetMember.roles.remove(config.damaRoleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
       }
 
@@ -260,7 +261,7 @@ module.exports = {
 
     // ── Fechar ─────────────────────────────────────────────────────────────────
     if (customId === "dama_cfg:close") {
-      return interaction.message.delete().catch(() => {});
+      return interaction.message.delete().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
 
     // ── Definir Cargos Base ────────────────────────────────────────────────────
@@ -430,7 +431,7 @@ module.exports = {
       const damaPermRoleId = interaction.fields.getTextInputValue("damaPermRoleId").trim();
       const vipBaseRoleId  = interaction.fields.getTextInputValue("vipBaseRoleId").trim() || null;
 
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const damaRole = await interaction.guild.roles.fetch(damaRoleId).catch(() => null);
       const permRole = await interaction.guild.roles.fetch(damaPermRoleId).catch(() => null);
@@ -458,7 +459,7 @@ module.exports = {
       const vipSepId = interaction.fields.getTextInputValue("vipRoleSeparatorId").trim()    || null;
       const famSepId = interaction.fields.getTextInputValue("familyRoleSeparatorId").trim() || null;
 
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       for (const [label, id] of [["Separador VIP", vipSepId], ["Separador Família", famSepId]]) {
         if (id) {
@@ -486,7 +487,7 @@ module.exports = {
         return interaction.reply({ embeds: [createErrorEmbed("Número inválido. Insira um inteiro maior que 0.")], flags: MessageFlags.Ephemeral });
       }
 
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const config       = await getGuildConfig(guildId);
       const damaVipRoles = { ...(config?.damaVipRoles || {}) };

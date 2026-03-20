@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType,
   MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
@@ -78,7 +79,7 @@ module.exports = {
         collector.stop("started");
         // 🛡️ PROTEÇÃO: Defer imediatamente
         if (!i.deferred && !i.replied) {
-          await i.deferUpdate().catch(() => {});
+          await i.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
         const value = parseInt(i.customId.split("_")[2], 10);
         return runGame(i, value, eco, guildId, userId);
@@ -101,7 +102,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
       flags: MessageFlags.Ephemeral,
     };
     if (interaction.replied || interaction.deferred)
-      return interaction.followUp(insufficient).catch(() => {});
+      return interaction.followUp(insufficient).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     return interaction.reply(insufficient);
   }
 
@@ -260,7 +261,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
 
           replayCollector.on("end", async (_, reason) => {
             if (reason === "time") {
-              await interaction.editReply({ components: [] }).catch(() => {});
+              await interaction.editReply({ components: [] }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
             }
           });
         } else {
@@ -304,7 +305,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
               if (reason === "time") {
                 await interaction
                   .editReply({ components: [] })
-                  .catch(() => {});
+                  .catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
               }
             });
           } else {
@@ -350,7 +351,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
 
         replayCollector.on("end", async (_, reason) => {
           if (reason === "time") {
-            await interaction.editReply({ components: [] }).catch(() => {});
+            await interaction.editReply({ components: [] }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
           }
         });
       }
@@ -368,12 +369,12 @@ async function runGame(interaction, bet, eco, guildId, userId) {
             content: "⏱️ Tempo esgotado! A aposta foi devolvida.",
             components: [],
           })
-          .catch(() => {});
+          .catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       }
     });
   } catch (error) {
     if (!gameResolved) {
-      await eco.addCoins(guildId, userId, originalBet).catch(() => {});
+      await eco.addCoins(guildId, userId, originalBet).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
     if (interaction.replied || interaction.deferred) {
       await interaction
@@ -382,14 +383,14 @@ async function runGame(interaction, bet, eco, guildId, userId) {
           embeds: [],
           components: [],
         })
-        .catch(() => {});
+        .catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     } else {
       await interaction
         .reply({
           content: "Ocorreu um erro no jogo. Sua aposta foi devolvida.",
           flags: MessageFlags.Ephemeral,
         })
-        .catch(() => {});
+        .catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
   }
 }

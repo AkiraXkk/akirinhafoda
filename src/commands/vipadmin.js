@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 // ============================================================
 //  vipadmin.js  —  Refatorado
 //  Novidades:
@@ -409,7 +410,7 @@ module.exports = {
 
     // ── ✖ Fechar ──────────────────────────────────────────────────────────────
     if (action === "close") {
-      return interaction.message.delete().catch(() => {});
+      return interaction.message.delete().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
 
     // ── 🎭 Definir Cargos Base ────────────────────────────────────────────────
@@ -664,7 +665,7 @@ module.exports = {
       const vipRoleSepId       = interaction.fields.getTextInputValue("vipRoleSeparatorId").trim() || null;
       const familyRoleSepId    = interaction.fields.getTextInputValue("familyRoleSeparatorId").trim() || null;
 
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       // Valida os IDs que foram preenchidos
       for (const [label, id] of [

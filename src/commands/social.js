@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle,
   MessageFlags, } = require("discord.js");
 const { createEmbed } = require("../embeds");
@@ -193,7 +194,7 @@ module.exports = {
               return;
           }
 
-          await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
           try {
               const postOwner = await interaction.client.users.fetch(postOwnerId);

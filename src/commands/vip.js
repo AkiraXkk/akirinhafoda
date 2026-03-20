@@ -230,7 +230,7 @@ module.exports = {
        
        if (ownerId !== interaction.user.id) return interaction.reply({ content: "Você não tem permissão.", flags: MessageFlags.Ephemeral });
 
-       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
        return processGiveVip(interaction, targetUserId, tierId);
     }
 
@@ -245,7 +245,7 @@ module.exports = {
       const selectedUserId = interaction.values?.[0];
       if (!selectedUserId) return interaction.reply({ content: "Seleção inválida.", flags: MessageFlags.Ephemeral });
 
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const target = await interaction.guild.members.fetch(selectedUserId).catch(() => null);
       if (!target) return interaction.editReply({ content: "Usuário não encontrado no servidor." });
@@ -303,7 +303,7 @@ module.exports = {
           const tier = await vipService.getMemberTier(interaction.member);
           if (tier && tier.cotaRoleId) {
               const member = await interaction.guild.members.fetch(removeUserId).catch(() => null);
-              if (member) await member.roles.remove(tier.cotaRoleId).catch(() => {});
+              if (member) await member.roles.remove(tier.cotaRoleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
           }
       } else {
           // Novo Sistema VIP Integrado
@@ -432,7 +432,7 @@ module.exports = {
       const selectedUserId = interaction.values?.[0];
       if (!selectedUserId) return interaction.reply({ content: "Seleção inválida.", flags: MessageFlags.Ephemeral });
 
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const target = await interaction.guild.members.fetch(selectedUserId).catch(() => null);
       if (!target) return interaction.editReply({ content: "Usuário não encontrado no servidor." });
@@ -503,7 +503,7 @@ module.exports = {
       if (!selectedUserId) return interaction.reply({ content: "Seleção inválida.", flags: MessageFlags.Ephemeral });
       if (selectedUserId === interaction.user.id) return interaction.reply({ content: "❌ Você não pode se definir como sua própria Primeira Dama.", flags: MessageFlags.Ephemeral });
 
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const tier = await vipService.getMemberTier(interaction.member);
       if (!tier) return interaction.editReply({ content: "❌ Você não é VIP." });
@@ -579,7 +579,7 @@ module.exports = {
     if (interaction.guildId !== guildId) return interaction.reply({ content: "Este modal pertence a outro servidor.", flags: MessageFlags.Ephemeral });
     if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas quem abriu o painel pode usar.", flags: MessageFlags.Ephemeral });
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
     const tier = await vipService.getMemberTier(interaction.member);
     if (!tier) return interaction.editReply({ content: "❌ Você não é VIP." });

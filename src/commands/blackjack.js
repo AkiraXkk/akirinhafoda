@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ComponentType,
   MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
@@ -167,7 +168,7 @@ module.exports = {
 
                 } catch (e) {
                     if (!i.replied && !i.deferred) {
-                        await i.followUp({ content: "Tempo esgotado para enviar a aposta. Clique em **Jogar Agora** novamente.", flags: MessageFlags.Ephemeral }).catch(() => {});
+                        await i.followUp({ content: "Tempo esgotado para enviar a aposta. Clique em **Jogar Agora** novamente.", flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
                     }
                 }
             }
@@ -177,7 +178,7 @@ module.exports = {
   // Handles stale blackjack buttons after bot restart (no active collector)
   async handleButton(interaction) {
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.reply({ content: "❌ Esta sessão de Blackjack expirou. Use `/blackjack` para iniciar um novo jogo.", flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.reply({ content: "❌ Esta sessão de Blackjack expirou. Use `/blackjack` para iniciar um novo jogo.", flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
   },
 };
@@ -187,7 +188,7 @@ async function runGame(interaction, bet, eco, guildId, userId) {
     const balance = await eco.getBalance(guildId, userId);
     if ((balance.coins || 0) < bet) {
         const insufficient = { embeds: [createErrorEmbed(`Saldo insuficiente! Você tem **${balance.coins || 0}** 🪙`)], flags: MessageFlags.Ephemeral };
-        if (interaction.replied || interaction.deferred) return interaction.followUp(insufficient).catch(() => {});
+        if (interaction.replied || interaction.deferred) return interaction.followUp(insufficient).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         return interaction.reply(insufficient);
     }
 
@@ -450,18 +451,18 @@ async function runGame(interaction, bet, eco, guildId, userId) {
 
         replayCollector.on("end", async (_, reason) => {
             if (reason === "time") {
-                await interaction.editReply({ components: [] }).catch(() => {});
+                await interaction.editReply({ components: [] }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
             }
         });
     }
     } catch (error) {
         if (!gameResolved && totalDebited > 0) {
-            await eco.addCoins(guildId, userId, totalDebited).catch(() => {});
+            await eco.addCoins(guildId, userId, totalDebited).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
         if (interaction.replied || interaction.deferred) {
-            await interaction.editReply({ content: "Ocorreu um erro na mesa. Sua aposta foi devolvida.", embeds: [], components: [] }).catch(() => {});
+            await interaction.editReply({ content: "Ocorreu um erro na mesa. Sua aposta foi devolvida.", embeds: [], components: [] }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         } else {
-            await interaction.reply({ content: "Ocorreu um erro na mesa. Sua aposta foi devolvida.", flags: MessageFlags.Ephemeral }).catch(() => {});
+            await interaction.reply({ content: "Ocorreu um erro na mesa. Sua aposta foi devolvida.", flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
     }
 }

@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const { 
   SlashCommandBuilder, 
   EmbedBuilder, 
@@ -398,7 +399,7 @@ module.exports = {
 
   async handleModal(interaction) {
     if (interaction.customId === "evento_submit") {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const titulo = interaction.fields.getTextInputValue("ev_titulo");
       const desc = interaction.fields.getTextInputValue("ev_desc");

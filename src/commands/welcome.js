@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const { SlashCommandBuilder, PermissionFlagsBits, ChannelType,
   MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
@@ -211,7 +212,7 @@ module.exports = {
       
       if (deleteTimeSec > 0) {
         setTimeout(() => {
-          testMessage.delete().catch(() => {});
+          testMessage.delete().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }, deleteTimeSec * 1000);
       }
 
