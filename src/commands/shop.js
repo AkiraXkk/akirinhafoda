@@ -1,13 +1,14 @@
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle,
   MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
+const { createDataStore } = require("../store/dataStore");
 
 function parseCustomId(customId) {
   return String(customId || "").split("_");
 }
 
 function parseCatalogBuyModalId(customId) {
-  const match = String(customId || "").match(/^shop_catalog_buy_([^_]+)_(.+)$/);
+  const match = String(customId || "").match(/^shop_catalog_buy_(\d+)_(.+)$/);
   if (!match) return null;
   return { guildId: match[1], itemId: match[2] };
 }
@@ -247,7 +248,7 @@ module.exports = {
   },
   async handleButton(interaction) {
     if (!interaction.customId.startsWith("shop_catalog_")) return;
-    if (!interaction.inGuild()) return interaction.reply({ embeds: [createErrorEmbed("Use este botão em um servidor.")], flags: MessageFlags.Ephemeral });
+    if (!interaction.inGuild()) return interaction.reply({ embeds: [createErrorEmbed("Use este botão de catálogo em um servidor.")], flags: MessageFlags.Ephemeral });
 
     const parts = parseCustomId(interaction.customId);
     const action = parts[2];
@@ -260,12 +261,20 @@ module.exports = {
     if (!["prev", "next"].includes(action)) return;
 
     const targetPage = action === "prev" ? currentPage - 1 : currentPage + 1;
-    await interaction.deferUpdate();
+    try {
+      await interaction.deferUpdate();
 
-    const shopService = interaction.client.services.shop;
-    const rendered = await renderCatalogPage({ interaction, shopService, guildId, page: targetPage });
-    const { flags: _ignoredFlags, ...editPayload } = rendered.payload;
-    return interaction.editReply(editPayload);
+      const shopService = interaction.client.services.shop;
+      const rendered = await renderCatalogPage({ interaction, shopService, guildId, page: targetPage });
+      const { flags: _unusedFlags, ...editPayload } = rendered.payload;
+      return interaction.editReply(editPayload);
+    } catch {
+      const payload = { embeds: [createErrorEmbed("Não foi possível atualizar a página do catálogo.")], flags: MessageFlags.Ephemeral };
+      if (interaction.deferred || interaction.replied) {
+        return interaction.followUp(payload).catch(() => {});
+      }
+      return interaction.reply(payload).catch(() => {});
+    }
   },
   async handleSelectMenu(interaction) {
     if (!interaction.customId.startsWith("shop_")) return;
@@ -384,7 +393,6 @@ module.exports = {
     await shopService.deposit(guildId, total, { by: userId, source: "shop", itemId: catalogItem.id, qty: quantity });
 
     if (catalogItem.type === "card") {
-      const { createDataStore } = require("../store/dataStore");
       const userCardsStore = createDataStore("userCards.json");
       await userCardsStore.update(userId, (current) => {
         const uc = current || { owned: ["default"], selected: "default" };
