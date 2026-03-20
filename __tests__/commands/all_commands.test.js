@@ -157,8 +157,8 @@ function loadCommand(fileName) {
   return require(filePath);
 }
 
-describe("Estrutura global dos comandos", () => {
-  test("deve encontrar arquivos .js na pasta de comandos", () => {
+describe("Global command structure", () => {
+  test("should find .js files in commands folder", () => {
     expect(commandFiles.length).toBeGreaterThan(0);
   });
 
@@ -169,18 +169,18 @@ describe("Estrutura global dos comandos", () => {
       command = loadCommand(fileName);
     });
 
-    test("exporta propriedades base do Discord (name ou data)", () => {
+    test("exports base Discord properties (name or data)", () => {
       const hasName = typeof command?.name === "string" && command.name.trim().length > 0;
       const hasData = command?.data != null;
 
       expect(hasName || hasData).toBe(true);
     });
 
-    test("exporta a função obrigatória execute", () => {
+    test("exports the required execute function", () => {
       expect(typeof command?.execute).toBe("function");
     });
 
-    test("quando roteado para botão no interactionCreate, exporta handleButton", () => {
+    test("when routed for button in interactionCreate, exports handleButton", () => {
       const fileStem = path.basename(fileName, ".js");
       const exportedName = command?.data?.name || command?.name || fileStem;
 
