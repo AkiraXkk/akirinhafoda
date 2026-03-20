@@ -5,6 +5,12 @@ const MINUTE_MS = 60000;
 const voiceSessions = new Map();
 let clientInstance = null;
 
+// @discordjs/voice is optional — loaded once at startup if available
+let _voiceLib = null;
+try {
+  _voiceLib = require("@discordjs/voice");
+} catch { /* @discordjs/voice not installed — VIP Intro Sound feature disabled */ }
+
 module.exports = {
   name: Events.VoiceStateUpdate,
   async execute(oldState, newState, client) {
@@ -36,6 +42,49 @@ module.exports = {
         logger.error({ err: e }, "[TempCall] Erro ao verificar canal gatilho");
       }
       // ── fim TempCall ───────────────────────────────────────────────────
+
+      // ── VIP Intro Sound ────────────────────────────────────────────────
+      try {
+        const vipSvc = client.services?.vip;
+        if (vipSvc && _voiceLib) {
+          const vipSettings = await vipSvc.getSettings(guildId, userId);
+          const introUrl = vipSettings?.introSoundUrl;
+          const stealth  = vipSettings?.stealthMode;
+          if (introUrl && !stealth) {
+            const {
+              joinVoiceChannel,
+              createAudioPlayer,
+              createAudioResource,
+              AudioPlayerStatus,
+              NoSubscriberBehavior,
+            } = _voiceLib;
+            const connection = joinVoiceChannel({
+              channelId: newState.channelId,
+              guildId,
+              adapterCreator: newState.guild.voiceAdapterCreator,
+              selfDeaf: true,
+              selfMute: false,
+            });
+            const player = createAudioPlayer({
+              behaviors: { noSubscriber: NoSubscriberBehavior.Stop },
+            });
+            const resource = createAudioResource(introUrl);
+            connection.subscribe(player);
+            player.play(resource);
+            let destroyed = false;
+            const cleanup = () => {
+              if (destroyed) return;
+              destroyed = true;
+              try { connection.destroy(); } catch { /* ignored */ }
+            };
+            player.once(AudioPlayerStatus.Idle, cleanup);
+            player.once("error", cleanup);
+          }
+        }
+      } catch (e) {
+        logger.debug({ err: e, userId }, "[VIP] Intro sound skipped");
+      }
+      // ── fim VIP Intro Sound ────────────────────────────────────────────
       const voiceChannel = newState.channel;
       
       // Se entrou mutado ou surdo, ignora completamente (não inicia a sessão)

@@ -68,12 +68,14 @@ async function buildTierDashEmbed(guildId, tierId, vipConfig, vipService) {
     .setDescription([
       `**Cargo:** ${tier?.roleId ? `<@&${tier.roleId}>` : "❌ Não definido"}`,
       `**Nome:** ${tier?.name || tierId}`,
+      `**Tier Booster:** ${gConf?.boosterTierId === tierId ? "✅ Este tier é o Tier Booster Exclusivo" : "—"}`,
       "",
       "**── Cargos Globais ──**",
       `🔑 Cargo Base VIP: ${gConf?.vipBaseRoleId   ? `<@&${gConf.vipBaseRoleId}>`        : "❌ Não definido"}`,
       `👻 Cargo Fantasma: ${gConf?.cargoFantasmaId  ? `<@&${gConf.cargoFantasmaId}>`      : "❌ Não definido"}`,
       `📌 Sep. VIP:       ${gConf?.vipRoleSeparatorId ? `<@&${gConf.vipRoleSeparatorId}>` : "❌ Não definido"}`,
       `📌 Sep. Família:   ${gConf?.familyRoleSeparatorId ? `<@&${gConf.familyRoleSeparatorId}>` : "❌ Não definido"}`,
+      `🚀 Tier Booster Exclusivo: ${gConf?.boosterTierId ? `\`${gConf.boosterTierId}\`` : "❌ Não definido"}`,
       "",
       "**── Benefícios ──**",
       `💰 Daily extra: \`${tier?.valor_daily_extra ?? 0}\` | Bônus inicial: \`${tier?.bonus_inicial ?? 0}\` | Midas: \`${tier?.midas ? "Sim" : "Não"}\``,
@@ -86,7 +88,7 @@ async function buildTierDashEmbed(guildId, tierId, vipConfig, vipService) {
       "",
       `**Todos os tiers:** ${allTierNames}`,
     ].join("\n"))
-    .setFooter({ text: "Use os botões abaixo para configurar." });
+    .setFooter({ text: "VIP System | © WDA - Todos os direitos reservados" });
 }
 
 // Constrói os botões do painel principal
@@ -113,6 +115,10 @@ function buildTierDashComponents(tierId, guildId, hasTiers) {
     new ButtonBuilder()
       .setCustomId(id("cotas"))
       .setLabel("⚙️ Cotas Avançadas")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(id("set_booster"))
+      .setLabel("🚀 Tier Booster Exclusivo")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(id("close"))
@@ -501,6 +507,28 @@ module.exports = {
       });
     }
 
+    // ── 🚀 Tier Booster Exclusivo ─────────────────────────────────────────────
+    if (action === "set_booster") {
+      const gConf = vipService.getGuildConfig(guildId);
+
+      const modal = new ModalBuilder()
+        .setCustomId(`vipadmin_modal_booster_${guildId}`)
+        .setTitle("🚀 Configurar Tier Booster Exclusivo")
+        .addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId("boosterTierId")
+              .setLabel("ID do Tier Booster (deixe vazio para remover)")
+              .setStyle(TextInputStyle.Short)
+              .setRequired(false)
+              .setValue(gConf?.boosterTierId || "")
+              .setPlaceholder("Ex: booster_tier"),
+          ),
+        );
+
+      return interaction.showModal(modal);
+    }
+
     // ── ⚙️ Cotas Avançadas ────────────────────────────────────────────────────
     if (action === "cotas") {
       const tier = await vipConfig.getTierConfig(guildId, tierId);
@@ -703,6 +731,29 @@ module.exports = {
               { name: "📌 Sep. Família",     value: familyRoleSepId  ? `<@&${familyRoleSepId}>`  : "—", inline: true },
             ),
         ],
+      });
+    }
+
+    // ── Tier Booster Exclusivo ────────────────────────────────────────────────
+    if (customId.startsWith("vipadmin_modal_booster_")) {
+      const guildId = customId.replace("vipadmin_modal_booster_", "");
+      const boosterTierId = interaction.fields.getTextInputValue("boosterTierId").trim() || null;
+
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
+
+      if (boosterTierId) {
+        const tierExists = await vipConfig.getTierConfig(guildId, boosterTierId).catch(() => null);
+        if (!tierExists) {
+          return interaction.editReply({ content: `❌ Tier \`${boosterTierId}\` não encontrado. Configure o tier primeiro.` });
+        }
+      }
+
+      await vipService.setGuildConfig(guildId, { boosterTierId });
+
+      return interaction.editReply({
+        content: boosterTierId
+          ? `✅ Tier Booster Exclusivo definido como \`${boosterTierId}\`. Novos Boosters após 15/03/2026 receberão este tier automaticamente.`
+          : "✅ Tier Booster removido. Novos Boosters não receberão VIP automático.",
       });
     }
 
