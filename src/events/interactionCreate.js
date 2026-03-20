@@ -1,9 +1,110 @@
 const { Events, MessageFlags } = require("discord.js");
 const { logger } = require("../logger");
 
+const FOOTER_SUFFIX = "© WDA - Todos os direitos reservados";
+
+const COMMAND_SECTION_MAP = {
+  shop: "ECONOMIA",
+  shopadmin: "ECONOMIA",
+  economy: "ECONOMIA",
+  cashier: "ECONOMIA",
+  bicho: "ECONOMIA",
+  blackjack: "ECONOMIA",
+  roleta: "ECONOMIA",
+  duel: "ECONOMIA",
+  devil: "ECONOMIA",
+  vip: "ECONOMIA",
+  vipbuy: "ECONOMIA",
+  vipadmin: "ECONOMIA",
+  family: "ECONOMIA",
+  leaderboard: "ECONOMIA",
+  levels: "ECONOMIA",
+  leveladmin: "ECONOMIA",
+  mod: "MODERAÇÃO",
+  moderation: "MODERAÇÃO",
+  automod: "MODERAÇÃO",
+  ticket: "MODERAÇÃO",
+  sejawda: "MODERAÇÃO",
+  avisos: "MODERAÇÃO",
+  verify: "MODERAÇÃO",
+  welcome: "MODERAÇÃO",
+  recrutamento: "MODERAÇÃO",
+  diretoria: "MODERAÇÃO",
+  ajuda: "UTILIDADE",
+  utility: "UTILIDADE",
+  ping: "UTILIDADE",
+  afk: "UTILIDADE",
+  lembrete: "UTILIDADE",
+  social: "UTILIDADE",
+  interacao: "UTILIDADE",
+  fun: "UTILIDADE",
+  invites: "UTILIDADE",
+  evento: "EVENTOS",
+  eventos: "EVENTOS",
+};
+
+function getFooterText(section) {
+  return `SEÇÃO DO COMANDO: ${section} | ${FOOTER_SUFFIX}`;
+}
+
+function inferSectionFromCustomId(customId) {
+  const id = String(customId || "");
+  if (id.startsWith("shop_") || id.startsWith("cashier_") || id.startsWith("leaderboard_") || id.startsWith("bj_") || id.startsWith("duel_")) return "ECONOMIA";
+  if (id.startsWith("mod_") || id.startsWith("automod_") || id.startsWith("ticket_") || id.startsWith("sejawda_") || id.startsWith("close_ticket_")) return "MODERAÇÃO";
+  if (id.startsWith("help_") || id.startsWith("select_helparea")) return "UTILIDADE";
+  if (id.startsWith("evento_")) return "EVENTOS";
+  return "GERAL";
+}
+
+function resolveSection(interaction, commandName) {
+  const fromCommand = COMMAND_SECTION_MAP[String(commandName || "").toLowerCase()];
+  if (fromCommand) return fromCommand;
+  if (interaction?.isChatInputCommand?.()) {
+    const fromSlash = COMMAND_SECTION_MAP[String(interaction.commandName || "").toLowerCase()];
+    if (fromSlash) return fromSlash;
+  }
+  return inferSectionFromCustomId(interaction?.customId);
+}
+
+function applyFooter(payload, section) {
+  if (!payload || typeof payload !== "object" || !Array.isArray(payload.embeds) || payload.embeds.length === 0) return payload;
+  const footer = { text: getFooterText(section || "GERAL") };
+  payload.embeds = payload.embeds.map((embed) => {
+    if (!embed) return embed;
+    if (typeof embed.setFooter === "function") {
+      embed.setFooter(footer);
+      return embed;
+    }
+    if (typeof embed === "object") {
+      return { ...embed, footer };
+    }
+    return embed;
+  });
+  return payload;
+}
+
+function patchInteractionResponses(interaction, commandName) {
+  if (!interaction || interaction.__wdaFooterPatched) return;
+  interaction.__wdaFooterPatched = true;
+  const methods = ["reply", "editReply", "followUp", "update"];
+  const section = resolveSection(interaction, commandName);
+
+  for (const method of methods) {
+    if (typeof interaction[method] !== "function") continue;
+    const original = interaction[method].bind(interaction);
+    interaction[method] = async (...args) => {
+      if (args.length > 0 && typeof args[0] === "object" && args[0] !== null) {
+        args[0] = applyFooter(args[0], section);
+      }
+      return original(...args);
+    };
+  }
+}
+
 module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction, client) {
+    patchInteractionResponses(interaction);
 
     // 1. COMANDOS SLASH
     if (interaction.isChatInputCommand()) {
@@ -13,6 +114,7 @@ module.exports = {
         return;
       }
       try {
+        patchInteractionResponses(interaction, interaction.commandName);
         await command.execute(interaction);
       } catch (error) {
         logger.error({ err: error, command: interaction.commandName }, "Erro no comando slash");
@@ -199,6 +301,7 @@ module.exports = {
         logger.debug({ commandName, customId }, "Comando de interação não encontrado");
         return;
       }
+      patchInteractionResponses(interaction, commandName);
 
       // Define qual função disparar dentro do arquivo do comando
       let handlerName = "";
