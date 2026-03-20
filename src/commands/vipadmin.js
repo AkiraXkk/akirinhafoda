@@ -151,7 +151,11 @@ module.exports = {
   },
 
   async handleButton(interaction) {
-    if (!interaction.customId?.startsWith("vipadmin_")) return;
+    if (
+      !interaction.customId?.startsWith("vipadmin_dash:")
+      && !interaction.customId?.startsWith("vipadmin_tier_section:")
+      && !interaction.customId?.startsWith("vipadmin_cotas:")
+    ) return;
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
       return interaction.reply({ content: "❌ Você não tem permissão.", flags: MessageFlags.Ephemeral });
     }
@@ -463,16 +467,21 @@ module.exports = {
       if (action === "set_dama_roles") {
         const gConf = await vipService.getGuildConfig(guildId) || {};
         const currentIds = gConf?.primeraDamaRoleIds || (gConf?.damaRoleId ? [gConf.damaRoleId] : []);
+        const safeDefaultRoleIds = [];
+        for (const roleId of currentIds.filter(Boolean)) {
+          const exists = await interaction.guild.roles.fetch(roleId).catch(() => null);
+          if (exists) safeDefaultRoleIds.push(roleId);
+        }
         const roleSelect = new RoleSelectMenuBuilder()
           .setCustomId(`vipadmin_roleselmenu_dama_${guildId}`)
           .setPlaceholder("Selecione os cargos de Primeira Dama")
           .setMinValues(0)
           .setMaxValues(10)
-          .setDefaultRoles(currentIds.filter(Boolean));
+          .setDefaultRoles(safeDefaultRoleIds);
         const embed = new EmbedBuilder()
           .setTitle("💍 Configurar Cargos de Primeira Dama")
           .setColor(0xe91e63)
-          .setDescription(currentIds.length ? `Configuração atual: ${currentIds.map((id) => `<@&${id}>`).join(", ")}` : "Nenhum cargo configurado atualmente.");
+          .setDescription(safeDefaultRoleIds.length ? `Configuração atual: ${safeDefaultRoleIds.map((id) => `<@&${id}>`).join(", ")}` : "Nenhum cargo configurado atualmente.");
         return interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(roleSelect)] });
       }
 
@@ -686,6 +695,7 @@ module.exports = {
 
     if (customId.startsWith("vipadmin_modal_create_tier_")) {
       const guildId = customId.replace("vipadmin_modal_create_tier_", "");
+      if (guildId !== interaction.guildId) return interaction.reply({ content: "Este modal pertence a outro servidor.", flags: MessageFlags.Ephemeral });
       const tierId = interaction.fields.getTextInputValue("tierId").trim().toLowerCase();
       const roleId = interaction.fields.getTextInputValue("roleId").trim();
       const tierNameRaw = interaction.fields.getTextInputValue("tierName").trim();
@@ -699,6 +709,7 @@ module.exports = {
     if (customId.startsWith("vipadmin_modal_member_give_")) {
       const rest = customId.replace("vipadmin_modal_member_give_", "");
       const [guildId, targetId] = rest.split("_");
+      if (guildId !== interaction.guildId) return interaction.reply({ content: "Este modal pertence a outro servidor.", flags: MessageFlags.Ephemeral });
       const tierId = interaction.fields.getTextInputValue("tierId").trim().toLowerCase();
       const dias = parseInt(interaction.fields.getTextInputValue("dias").trim(), 10);
       if (!Number.isFinite(dias) || dias < 1) return interaction.reply({ content: "❌ Duração inválida.", flags: MessageFlags.Ephemeral });
@@ -715,7 +726,8 @@ module.exports = {
 
     if (customId.startsWith("vipadmin_modal_family_limit_")) {
       const rest = customId.replace("vipadmin_modal_family_limit_", "");
-      const [, ownerId] = rest.split("_");
+      const [guildId, ownerId] = rest.split("_");
+      if (guildId !== interaction.guildId) return interaction.reply({ content: "Este modal pertence a outro servidor.", flags: MessageFlags.Ephemeral });
       const vagas = parseInt(interaction.fields.getTextInputValue("vagas").trim(), 10);
       if (!Number.isFinite(vagas) || vagas < 1) return interaction.reply({ content: "❌ Limite inválido.", flags: MessageFlags.Ephemeral });
       const family = await familyService.getFamilyByOwner(ownerId);
