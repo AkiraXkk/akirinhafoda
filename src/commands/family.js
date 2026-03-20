@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 // ============================================================
 //  family.js  —  Refatorado
 //  Novidades:
@@ -198,10 +199,10 @@ module.exports = {
           // Posiciona abaixo do separador de família
           if (separadorFamId) {
             const sep = await interaction.guild.roles.fetch(separadorFamId).catch(() => null);
-            if (sep) await role.setPosition(sep.position - 1).catch(() => {});
+            if (sep) await role.setPosition(sep.position - 1).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
           }
 
-          await interaction.member.roles.add(role).catch(() => {});
+          await interaction.member.roles.add(role).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         } catch (e) {
           interaction.client.services?.log?.error?.({ err: e }, "Falha ao criar cargo de família");
         }
@@ -258,17 +259,17 @@ module.exports = {
 
         for (const memberId of family.members) {
           const member = await interaction.guild.members.fetch(memberId).catch(() => null);
-          if (member && family.roleId) await member.roles.remove(family.roleId).catch(() => {});
+          if (member && family.roleId) await member.roles.remove(family.roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
 
         if (family.roleId) {
           const role = await interaction.guild.roles.fetch(family.roleId).catch(() => null);
-          if (role) await role.delete().catch(() => {});
+          if (role) await role.delete().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
 
         if (family.channelId) {
           const channel = await interaction.guild.channels.fetch(family.channelId).catch(() => null);
-          if (channel) await channel.delete().catch(() => {});
+          if (channel) await channel.delete().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
 
         await familyStore.update(family.id, () => null);
@@ -316,7 +317,7 @@ module.exports = {
 
         if (family.roleId) {
           const member = await interaction.guild.members.fetch(userId).catch(() => null);
-          if (member) await member.roles.remove(family.roleId).catch(() => {});
+          if (member) await member.roles.remove(family.roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
 
         return interaction.reply({ embeds: [createSuccessEmbed(`✅ Você saiu da família **${family.name}**!`)] });
@@ -335,7 +336,7 @@ module.exports = {
 
         if (family.roleId) {
           const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-          if (member) await member.roles.add(family.roleId).catch(() => {});
+          if (member) await member.roles.add(family.roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
 
         return interaction.reply({
@@ -360,7 +361,7 @@ module.exports = {
 
         if (family.roleId) {
           const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-          if (member) await member.roles.remove(family.roleId).catch(() => {});
+          if (member) await member.roles.remove(family.roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
 
         return interaction.reply({ embeds: [createSuccessEmbed(`✅ **${targetUser.username}** removido de **${family.name}**!`)] });
@@ -408,11 +409,11 @@ module.exports = {
 
         if (family.roleId) {
           const role = await interaction.guild.roles.fetch(family.roleId).catch(() => null);
-          if (role) await role.setName(`🏠 ${newName}`).catch(() => {});
+          if (role) await role.setName(`🏠 ${newName}`).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
         if (family.channelId) {
           const channel = await interaction.guild.channels.fetch(family.channelId).catch(() => null);
-          if (channel) await channel.setName(`🏠-${newName.toLowerCase().replace(/\s+/g, "-")}`).catch(() => {});
+          if (channel) await channel.setName(`🏠-${newName.toLowerCase().replace(/\s+/g, "-")}`).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
 
         return interaction.reply({ embeds: [createSuccessEmbed(`✅ Família renomeada para **${newName}**!`)] });
@@ -428,7 +429,7 @@ module.exports = {
 
         if (family.roleId) {
           const role = await interaction.guild.roles.fetch(family.roleId).catch(() => null);
-          if (role) await role.setColor(parseInt(color.replace("#", ""), 16)).catch(() => {});
+          if (role) await role.setColor(parseInt(color.replace("#", ""), 16)).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
         }
 
         return interaction.reply({ embeds: [createSuccessEmbed(`✅ Cor alterada para **${color}**!`)] });
@@ -605,7 +606,7 @@ module.exports = {
     if (selectedUser.bot) return interaction.reply({ content: "❌ Não é possível convidar bots.", flags: MessageFlags.Ephemeral });
     if (selectedUser.id === userId) return interaction.reply({ content: "❌ Você não pode se convidar.", flags: MessageFlags.Ephemeral });
 
-    await interaction.deferUpdate().catch(() => {});
+    await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
     const families     = await familyStore.load();
 
@@ -622,7 +623,7 @@ module.exports = {
 
     if (myFamily.roleId) {
       const member = await interaction.guild.members.fetch(selectedUser.id).catch(() => null);
-      if (member) await member.roles.add(myFamily.roleId).catch(() => {});
+      if (member) await member.roles.add(myFamily.roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
 
     await interaction.editReply({ content: `✅ **${selectedUser.username}** convidado!`, components: [] });

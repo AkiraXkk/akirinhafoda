@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const { 
   SlashCommandBuilder, 
   EmbedBuilder, 
@@ -177,12 +178,12 @@ module.exports = {
           await i.deferUpdate();
 
           if (alvo.roles.cache.has(roleId)) {
-            await alvo.roles.remove(roleId).catch(() => {});
+            await alvo.roles.remove(roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
           } else {
-            await alvo.roles.add(roleId).catch(() => {});
+            await alvo.roles.add(roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
             const roleStaffGeral = interaction.guild.roles.cache.find(r => r.name === "Staff Geral");
-            if (!alvo.roles.cache.has(ASPIRANTE_ID)) alvo.roles.add(ASPIRANTE_ID).catch(() => {});
-            if (roleStaffGeral && !alvo.roles.cache.has(roleStaffGeral.id)) alvo.roles.add(roleStaffGeral.id).catch(() => {});
+            if (!alvo.roles.cache.has(ASPIRANTE_ID)) alvo.roles.add(ASPIRANTE_ID).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
+            if (roleStaffGeral && !alvo.roles.cache.has(roleStaffGeral.id)) alvo.roles.add(roleStaffGeral.id).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
           }
           await interaction.editReply(buildPanel());
         }
@@ -204,7 +205,7 @@ module.exports = {
           await interaction.channel.send({ content: `${alvo.user}`, embeds: [embedAnuncio] });
           
           // 📨 Notificação na DM do Candidato
-          alvo.send({ content: `🎉 Parabéns, ${alvo.user.username}! Você foi oficialmente integrado à Staff da WDA por ${executor.user.username}. Leia os canais da equipe e bom trabalho!` }).catch(() => {});
+          alvo.send({ content: `🎉 Parabéns, ${alvo.user.username}! Você foi oficialmente integrado à Staff da WDA por ${executor.user.username}. Leia os canais da equipe e bom trabalho!` }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
           // 👁️ Log de Auditoria Privado
           const canalLogs = interaction.guild.channels.cache.get(ID_CANAL_LOGS_STAFF);

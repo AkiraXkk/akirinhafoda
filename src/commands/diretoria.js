@@ -157,7 +157,7 @@ module.exports = {
       if (!isAdmin) return interaction.reply({ embeds: [createErrorEmbed("Apenas Administradores podem destruir estes registros.")], flags: MessageFlags.Ephemeral });
       
       await interaction.reply({ content: "💥 Os registros estão sendo apagados em 5 segundos..." });
-      setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+      setTimeout(() => interaction.channel.delete().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); }), 5000);
     }
   },
 

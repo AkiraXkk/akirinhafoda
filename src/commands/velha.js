@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType,
   MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
@@ -154,7 +155,7 @@ module.exports = {
   // Handles stale velha buttons after bot restart (no active collector)
   async handleButton(interaction) {
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.reply({ content: "❌ Esta sessão do Jogo da Velha expirou. Use `/velha` para iniciar um novo jogo.", flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.reply({ content: "❌ Esta sessão do Jogo da Velha expirou. Use `/velha` para iniciar um novo jogo.", flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
   },
 };
@@ -280,7 +281,7 @@ async function runBotGame(interaction, player) {
           ],
           components: getBoardButtons(board, true),
         })
-        .catch(() => {});
+        .catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
   });
 }
@@ -356,7 +357,7 @@ async function runPvPGame(interaction, challenger, opponent) {
           ],
           components: [],
         })
-        .catch(() => {});
+        .catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
   });
 }
@@ -481,7 +482,7 @@ async function startPvPMatch(
           ],
           components: getBoardButtons(board, true),
         })
-        .catch(() => {});
+        .catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
   });
 }

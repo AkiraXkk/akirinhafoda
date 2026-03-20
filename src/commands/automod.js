@@ -794,9 +794,9 @@ module.exports = {
       logger.error({ err }, "Erro no comando /automod");
       const errPayload = { embeds: [createErrorEmbed("Ocorreu um erro ao processar o comando.")] };
       if (interaction.deferred || interaction.replied) {
-        return interaction.editReply(errPayload).catch(() => {});
+        return interaction.editReply(errPayload).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       }
-      return interaction.reply({ ...errPayload, flags: MessageFlags.Ephemeral }).catch(() => {});
+      return interaction.reply({ ...errPayload, flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
   },
 
@@ -928,7 +928,7 @@ module.exports = {
       return interaction.reply({
         embeds: [createErrorEmbed("Ocorreu um erro ao processar a ação.")],
         flags: MessageFlags.Ephemeral,
-      }).catch(() => {});
+      }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
   },
 
@@ -1078,7 +1078,7 @@ module.exports = {
       logger.error({ err, customId }, "Erro no handleModal do automod");
       return interaction.editReply({
         embeds: [createErrorEmbed("Ocorreu um erro ao processar a ação.")],
-      }).catch(() => {});
+      }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
   },
 };

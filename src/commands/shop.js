@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle,
   MessageFlags, } = require("discord.js");
 const { createEmbed, createSuccessEmbed, createErrorEmbed } = require("../embeds");
@@ -181,7 +182,7 @@ module.exports = {
 
         if (catalogItem.type === "temporary_role") {
           if (!catalogItem.roleId) return interaction.reply({ embeds: [createErrorEmbed("Item inválido (roleId ausente).")], flags: MessageFlags.Ephemeral });
-          await member.roles.add(catalogItem.roleId).catch(() => {});
+          await member.roles.add(catalogItem.roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
           if (expiresAt) {
             await shopService.registerGrant(guildId, { type: "temporary_role", userId, roleId: catalogItem.roleId, itemId: catalogItem.id, quantity, expiresAt });
           }
@@ -193,7 +194,7 @@ module.exports = {
           const ch = await interaction.guild.channels.fetch(catalogItem.channelId).catch(() => null);
           if (!ch) return interaction.reply({ embeds: [createErrorEmbed("Canal do item não encontrado.")], flags: MessageFlags.Ephemeral });
           
-          await ch.permissionOverwrites.edit(userId, { ViewChannel: true }).catch(() => {});
+          await ch.permissionOverwrites.edit(userId, { ViewChannel: true }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
           if (expiresAt) {
             await shopService.registerGrant(guildId, { type: "channel_access", userId, channelId: catalogItem.channelId, itemId: catalogItem.id, quantity, expiresAt });
           }
@@ -271,9 +272,9 @@ module.exports = {
     } catch {
       const payload = { embeds: [createErrorEmbed("Não foi possível atualizar a página do catálogo.")], flags: MessageFlags.Ephemeral };
       if (interaction.deferred || interaction.replied) {
-        return interaction.followUp(payload).catch(() => {});
+        return interaction.followUp(payload).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       }
-      return interaction.reply(payload).catch(() => {});
+      return interaction.reply(payload).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
     }
   },
   async handleSelectMenu(interaction) {
@@ -350,7 +351,7 @@ module.exports = {
       // Entrega o Cargo no Servidor
       if (tier.roleId) {
           const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
-          if (member) await member.roles.add(tier.roleId).catch(() => {});
+          if (member) await member.roles.add(tier.roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       }
 
       return interaction.reply({ embeds: [createSuccessEmbed(`🎉 VIP **${tier.name || tier.id}** comprado por **${quantity} dia(s)** com sucesso!\n\n💸 Foram debitadas **${totalCost} 🪙** e seus benefícios já estão ativos.`)], flags: MessageFlags.Ephemeral });
@@ -408,7 +409,7 @@ module.exports = {
 
     if (catalogItem.type === "temporary_role") {
       if (!catalogItem.roleId) return interaction.editReply({ embeds: [createErrorEmbed("Item inválido (roleId ausente).")] });
-      await member.roles.add(catalogItem.roleId).catch(() => {});
+      await member.roles.add(catalogItem.roleId).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       if (expiresAt) {
         await shopService.registerGrant(guildId, { type: "temporary_role", userId, roleId: catalogItem.roleId, itemId: catalogItem.id, quantity, expiresAt });
       }
@@ -420,7 +421,7 @@ module.exports = {
       const ch = await interaction.guild.channels.fetch(catalogItem.channelId).catch(() => null);
       if (!ch) return interaction.editReply({ embeds: [createErrorEmbed("Canal do item não encontrado.")] });
 
-      await ch.permissionOverwrites.edit(userId, { ViewChannel: true }).catch(() => {});
+      await ch.permissionOverwrites.edit(userId, { ViewChannel: true }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       if (expiresAt) {
         await shopService.registerGrant(guildId, { type: "channel_access", userId, channelId: catalogItem.channelId, itemId: catalogItem.id, quantity, expiresAt });
       }

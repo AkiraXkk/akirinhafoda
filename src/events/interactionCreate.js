@@ -104,8 +104,6 @@ function patchInteractionResponses(interaction, commandName) {
 module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction, client) {
-    patchInteractionResponses(interaction);
-
     // 1. COMANDOS SLASH
     if (interaction.isChatInputCommand()) {
       const command = client.commands.get(interaction.commandName);

@@ -53,9 +53,9 @@ module.exports = {
       logger.error({ err: error, command: "afk" }, "Erro no comando /afk");
       const msg = { content: "❌ Ocorreu um erro ao definir seu AFK.", flags: MessageFlags.Ephemeral };
       if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(msg).catch(() => {});
+        await interaction.followUp(msg).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       } else {
-        await interaction.reply(msg).catch(() => {});
+        await interaction.reply(msg).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       }
     }
   },
@@ -80,7 +80,7 @@ module.exports = {
         content: `👋 Bem-vindo de volta, ${message.author}! Você ficou AFK por **${timeText}**.`,
         allowedMentions: { repliedUser: false },
       }).catch(() => null);
-      if (reply) setTimeout(() => reply.delete().catch(() => {}), 10000);
+      if (reply) setTimeout(() => reply.delete().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); }), 10000);
     }
 
     // Notifica se alguém mencionou um usuário AFK
@@ -93,7 +93,7 @@ module.exports = {
           content: `💤 **${mentioned.username}** está AFK: *${afkData.reason}* (há **${timeText}**)`,
           allowedMentions: { repliedUser: false },
         }).catch(() => null);
-        if (reply) setTimeout(() => reply.delete().catch(() => {}), 15000);
+        if (reply) setTimeout(() => reply.delete().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); }), 15000);
       }
     }
   },

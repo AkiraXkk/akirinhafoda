@@ -1,3 +1,4 @@
+const { logger } = require("../logger");
 const {
   SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType,
   MessageFlags,
@@ -242,7 +243,7 @@ module.exports = {
     if (!interaction.customId.startsWith("boost_parceria_")) return;
     const searchId = interaction.customId.replace("boost_parceria_", "");
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
     const partners = await partnersStore.load();
     const pData = partners[searchId];

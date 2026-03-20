@@ -93,9 +93,9 @@ module.exports = {
       logger.error({ err: error, command: "cor" }, "Erro no comando /cor");
       const msg = { content: "❌ Ocorreu um erro ao processar a cor.", flags: MessageFlags.Ephemeral };
       if (interaction.replied || interaction.deferred) {
-        await interaction.followUp(msg).catch(() => {});
+        await interaction.followUp(msg).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       } else {
-        await interaction.reply(msg).catch(() => {});
+        await interaction.reply(msg).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       }
     }
   },

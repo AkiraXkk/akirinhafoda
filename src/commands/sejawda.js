@@ -387,7 +387,7 @@ module.exports = {
   async handleButton(interaction) {
     // ASSUMIR TICKET
     if (interaction.customId === "sejawda_assumir") {
-      await interaction.deferUpdate().catch(() => {});
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const chats = await chatStore.load();
       const chat = chats[interaction.channelId];
@@ -425,7 +425,7 @@ module.exports = {
 
     // FECHAR TICKET — Mostra menu de motivos
     if (interaction.customId === "sejawda_close") {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => {});
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const chats = await chatStore.load();
       const chat = chats[interaction.channelId];
@@ -463,7 +463,7 @@ module.exports = {
 
     // DELETAR TICKET PERMANENTEMENTE
     if (interaction.customId === "sejawda_delete") {
-      await interaction.deferReply().catch(() => {});
+      await interaction.deferReply().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
       const chats = await chatStore.load();
       const chat = chats[interaction.channelId];
@@ -475,7 +475,7 @@ module.exports = {
       if (!isGlobal) return interaction.editReply({ embeds: [createErrorEmbed("Apenas a Liderança pode deletar o histórico de solicitações.")] });
 
       await interaction.editReply({ content: "💥 O canal será destruído em 5 segundos..." });
-      setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+      setTimeout(() => interaction.channel.delete().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); }), 5000);
     }
   }
 };
