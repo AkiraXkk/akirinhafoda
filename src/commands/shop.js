@@ -39,7 +39,7 @@ async function renderCatalogPage({ interaction, shopService, guildId, page = 0 }
     title: "🛒 Catálogo da Loja",
     description: slice.slice(0, 15).map(formatCatalogLine).join("\n"),
     color: 0x9b59b6,
-    footer: { text: `Página ${safePage + 1}/${totalPages} • Use /shop buy item:catalog id:<ID>` }
+    footer: { text: "SEÇÃO DO COMANDO: ECONOMIA | © WDA - Todos os direitos reservados" }
   });
 
   const menu = new StringSelectMenuBuilder()
