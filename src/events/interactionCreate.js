@@ -303,10 +303,6 @@ module.exports = {
       // Lógica original para os outros comandos:
       else if (interaction.isButton()) {
         handlerName = "handleButton";
-        // Exceção para vipadmin
-        if (commandName === "vipadmin" && (customId.startsWith("vipadmin_tier_section:") || customId.startsWith("vipadmin_cotas:"))) {
-          handlerName = "handleButtonSecondary";
-        }
       }
       else if (interaction.isModalSubmit()) {
         handlerName = "handleModal";
