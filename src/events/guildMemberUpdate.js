@@ -56,6 +56,46 @@ module.exports = {
         await vipRole.deletePersonalRole(newMember.id, { guildId: newMember.guild.id }).catch(() => {});
         await vipChannel.deleteVipChannels(newMember.id, { guildId: newMember.guild.id }).catch(() => {});
       }
+
+      // ── Booster VIP Auto-Grant (após 15/03/2026) ───────────────────────────
+      try {
+        const BOOSTER_CUTOFF = new Date("2026-03-15").getTime();
+        const wasNotBoosting = !oldMember.premiumSinceTimestamp;
+        const isNowBoosting  = !!newMember.premiumSinceTimestamp;
+        const boostedAfterCutoff = isNowBoosting && newMember.premiumSinceTimestamp >= BOOSTER_CUTOFF;
+
+        if (wasNotBoosting && isNowBoosting && boostedAfterCutoff) {
+          const gConf = vip.getGuildConfig(newMember.guild.id);
+          const boosterTierId = gConf?.boosterTierId;
+
+          if (boosterTierId) {
+            const vipConfigSvc = newMember.client?.services?.vipConfig || client?.services?.vipConfig;
+            const tierConfig = vipConfigSvc ? await vipConfigSvc.getTierConfig(newMember.guild.id, boosterTierId).catch(() => null) : null;
+
+            if (tierConfig) {
+              await vip.addVip(newMember.guild.id, newMember.id, {
+                tierId: boosterTierId,
+                source: "booster_auto",
+                addedAt: Date.now(),
+              });
+
+              await vipRole.assignTierRole(newMember.id, boosterTierId, { guildId: newMember.guild.id }).catch(() => {});
+
+              if (tierConfig.canCall || tierConfig.chat_privado) {
+                await vipChannel.ensureVipChannels(newMember.id, { guildId: newMember.guild.id }).catch(() => {});
+              }
+
+              await newMember.send({
+                content: `🎉 Obrigado por dar Boost no servidor! Você recebeu o VIP **${tierConfig.name || boosterTierId}** automaticamente como benefício de Booster! 💎 Acesse \`/vip info\` para ver seus benefícios.`,
+              }).catch(() => {});
+
+              logger.info({ userId: newMember.id, guildId: newMember.guild.id, tierId: boosterTierId }, "[GuildMemberUpdate] Booster VIP concedido automaticamente");
+            }
+          }
+        }
+      } catch (e) {
+        logger.error({ err: e, userId: newMember.id }, "[GuildMemberUpdate] Erro ao conceder VIP de Booster");
+      }
     } catch (e) {
       logger.error({ err: e }, "Erro no GuildMemberUpdate VIP cleanup");
     }

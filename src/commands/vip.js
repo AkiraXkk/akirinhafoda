@@ -15,6 +15,9 @@ const {
 const { getGuildConfig } = require("../config/guildConfig");
 const { logger } = require("../logger");
 
+// Approximate milliseconds per month (30-day month) for streak calculation
+const APPROX_MS_PER_MONTH = 30 * 24 * 60 * 60 * 1000;
+
 function parseCustomId(customId) {
   return String(customId || "").split("_");
 }
@@ -87,13 +90,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("vip")
     .setDescription("Gerencie suas vantagens VIP")
-    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos e painel VIP"))
-    .addSubcommand(s => s.setName("call").setDescription("Mudar nome da call").addStringOption(o => o.setName("nome").setDescription("Novo nome").setRequired(true)))
-    .addSubcommand(s => s.setName("dar").setDescription("Dar VIP da sua cota")
-        .addUserOption(o => o.setName("membro").setDescription("Quem recebe").setRequired(true))
-        .addStringOption(o => o.setName("tier").setDescription("Qual tier deseja dar (se houver mais de um)").setRequired(false))
-    )
-    .addSubcommand(s => s.setName("customizar").setDescription("Editar cargo pessoal").addStringOption(o => o.setName("nome").setDescription("Nome do cargo (opcional)")).addStringOption(o => o.setName("cor").setDescription("Cor em hex (opcional)"))),
+    .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos e painel VIP")),
 
   async execute(interaction) {
     const { vip: vipService, vipRole, vipChannel, vipConfig } = interaction.client.services;
@@ -103,15 +100,22 @@ module.exports = {
     const sub = interaction.options.getSubcommand();
 
     if (sub === "info") {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em deferReply no /vip info"); });
+
       await vipChannel.ensureVipChannels(interaction.user.id, { guildId: interaction.guildId }).catch((err) => {
         logger.warn({ err, userId: interaction.user.id }, "Falha ao garantir canais VIP no /vip info");
       });
 
       const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
       const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
+      const stealthMode = settings.stealthMode === true;
       const cotasUsadas = settings.cotasUsadas || {};
       const tierConfig = await vipConfig.getTierConfig(interaction.guildId, tier.id);
-      
+
+      // ── Calcular VIP Streak (meses consecutivos) ───────────────────────
+      const addedAt = data?.addedAt;
+      const streakMonths = addedAt ? Math.floor((Date.now() - addedAt) / APPROX_MS_PER_MONTH) : 0;
+
       const regras = Array.isArray(tierConfig?.cotasConfig) ? tierConfig.cotasConfig : (tierConfig?.cotasConfig ? [tierConfig.cotasConfig] : []);
 
       let cotasText = regras.map((r) => {
@@ -126,92 +130,76 @@ module.exports = {
       if (!cotasText) cotasText = "Nenhuma cota configurada para o seu plano.";
 
       const expiresAt = data?.expiresAt;
-      const embed = new EmbedBuilder().setTitle("💎 Painel VIP").setColor("Gold")
+
+      const embed = new EmbedBuilder()
+        .setTitle("💎 Dashboard VIP")
+        .setColor("Gold")
+        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .addFields(
-          { name: "👑 Seu Plano", value: `\`${tier.name || tier.id}\``, inline: true },
-          { name: "⏳ Expiração", value: expiresAt ? `<t:${Math.floor(expiresAt/1000)}:R>` : "Permanente", inline: true },
-          { name: "🎁 Minhas Cotas", value: cotasText, inline: false }
-        );
+          { name: "👑 Plano Ativo", value: `\`${tier.name || tier.id}\``, inline: true },
+          { name: "⏳ Expiração", value: expiresAt ? `<t:${Math.floor(expiresAt / 1000)}:R>` : "Permanente", inline: true },
+          { name: "🔥 VIP Streak", value: `${streakMonths} ${streakMonths === 1 ? "mês" : "meses"} consecutivo(s)`, inline: true },
+          { name: "🕵️ Stealth Mode", value: stealthMode ? "✅ Ativo" : "❌ Inativo", inline: true },
+          { name: "🎁 Minhas Cotas", value: cotasText, inline: false },
+        )
+        .setFooter({ text: "VIP System | © WDA - Todos os direitos reservados" });
 
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId(`vip_action_${interaction.guildId}_${interaction.user.id}`)
-        .setPlaceholder("Escolha uma ação")
-        .addOptions(
-          new StringSelectMenuOptionBuilder().setLabel("Criar/Sincronizar Canais").setValue("create_channels").setEmoji("🗂️"),
-          new StringSelectMenuOptionBuilder().setLabel("Renomear Call Privada").setValue("call_rename").setEmoji("✏️"),
-          new StringSelectMenuOptionBuilder().setLabel("Customizar Cargo Pessoal").setValue("custom_role").setEmoji("🎨"),
-          new StringSelectMenuOptionBuilder().setLabel("Dar VIP da sua cota").setValue("give_quota").setEmoji("🎁"),
-          new StringSelectMenuOptionBuilder().setLabel("Gerenciar cotas dadas").setValue("manage_quota").setEmoji("⚙️"),
-          new StringSelectMenuOptionBuilder().setLabel("Compartilhar Cargo Personalizado").setValue("share_role").setEmoji("🤝")
-        );
+      // ── Row 1: Social ─────────────────────────────────────────────────
+      const row1 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`vip_btn_family_${interaction.guildId}_${interaction.user.id}`)
+          .setLabel("Família")
+          .setEmoji("👨‍👩‍👧‍👦")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`vip_btn_primeiradama_${interaction.guildId}_${interaction.user.id}`)
+          .setLabel("Primeira Dama")
+          .setEmoji("💍")
+          .setStyle(ButtonStyle.Secondary),
+      );
 
-      const btnPrimeiraDama = new ButtonBuilder()
-        .setCustomId(`vip_btn_primeiradama_${interaction.guildId}_${interaction.user.id}`)
-        .setLabel("Primeira Dama")
-        .setEmoji("👑")
-        .setStyle(ButtonStyle.Secondary);
+      // ── Row 2: Privacidade ────────────────────────────────────────────
+      const row2 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`vip_btn_voice_${interaction.guildId}_${interaction.user.id}`)
+          .setLabel("Canal de Voz")
+          .setEmoji("🎙️")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`vip_btn_chat_${interaction.guildId}_${interaction.user.id}`)
+          .setLabel("Chat Privado")
+          .setEmoji("💬")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`vip_btn_stealth_${interaction.guildId}_${interaction.user.id}`)
+          .setLabel(stealthMode ? "Stealth: ON" : "Stealth: OFF")
+          .setEmoji("🕵️")
+          .setStyle(stealthMode ? ButtonStyle.Success : ButtonStyle.Secondary),
+      );
 
-      return interaction.reply({
+      // ── Row 3: Personalização ─────────────────────────────────────────
+      const row3 = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`vip_btn_role_${interaction.guildId}_${interaction.user.id}`)
+          .setLabel("Cargo Pessoal")
+          .setEmoji("🎭")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`vip_btn_intro_${interaction.guildId}_${interaction.user.id}`)
+          .setLabel("Som de Entrada")
+          .setEmoji("✨")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`vip_btn_quota_${interaction.guildId}_${interaction.user.id}`)
+          .setLabel("Cotas de Presente")
+          .setEmoji("🎁")
+          .setStyle(ButtonStyle.Secondary),
+      );
+
+      return interaction.editReply({
         embeds: [embed],
-        components: [
-          new ActionRowBuilder().addComponents(menu),
-          new ActionRowBuilder().addComponents(btnPrimeiraDama),
-        ],
-        flags: MessageFlags.Ephemeral,
+        components: [row1, row2, row3],
       });
-    }
-
-    if (sub === "call") {
-      if (!tier.canCall) return interaction.reply("❌ Seu tier não permite Call Privada.");
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const res = await vipChannel.updateChannelName(interaction.user.id, interaction.options.getString("nome"), { guildId: interaction.guildId });
-      return interaction.editReply(res.ok ? "✅ Nome atualizado!" : `❌ ${res.reason}`);
-    }
-
-    if (sub === "dar") {
-      const target = interaction.options.getMember("membro");
-      const chosenTierId = interaction.options.getString("tier")?.toLowerCase();
-
-      if (target.id === interaction.user.id) return interaction.reply({ content: "❌ Você não pode dar VIP para si mesmo.", flags: MessageFlags.Ephemeral });
-      if (target.user?.bot) return interaction.reply({ content: "❌ Você não pode dar VIP para bots.", flags: MessageFlags.Ephemeral });
-
-      const validTiers = [];
-      const orderedTiers = await vipService.getOrderedTiers(interaction.guildId);
-      for (const t of orderedTiers) {
-         const check = await vipService.verificarCota(interaction.guildId, interaction.user.id, t.id);
-         if (check.ok) validTiers.push(t);
-      }
-
-      if (validTiers.length === 0) return interaction.reply({ content: "❌ Você não possui cotas disponíveis ou esgotou seu limite.", flags: MessageFlags.Ephemeral });
-
-      let targetTierId = chosenTierId;
-      if (!targetTierId) {
-         if (validTiers.length === 1) {
-             targetTierId = validTiers[0].id;
-         } else {
-            const menu = new StringSelectMenuBuilder()
-              .setCustomId(`vip_give_tier_${interaction.guildId}_${interaction.user.id}_${target.id}`)
-              .setPlaceholder("Selecione qual VIP deseja dar")
-              .addOptions(validTiers.map(t => new StringSelectMenuOptionBuilder().setLabel(t.name || t.id).setValue(t.id)));
-
-            return interaction.reply({ content: `Você tem opções de cota. Qual VIP deseja dar para <@${target.id}>?`, components: [new ActionRowBuilder().addComponents(menu)], flags: MessageFlags.Ephemeral });
-         }
-      } else {
-         const check = await vipService.verificarCota(interaction.guildId, interaction.user.id, targetTierId);
-         if (!check.ok) return interaction.reply({ content: `❌ ${check.reason}`, flags: MessageFlags.Ephemeral });
-      }
-
-      return processGiveVip(interaction, target.id, targetTierId);
-    }
-
-    if (sub === "customizar") {
-      if (!tier.hasCustomRole) return interaction.reply("❌ Seu tier não permite cargo personalizado.");
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const res = await vipRole.updatePersonalRole(interaction.user.id, { 
-        roleName: interaction.options.getString("nome"), 
-        roleColor: interaction.options.getString("cor") 
-      }, { guildId: interaction.guildId });
-      return interaction.editReply(res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar.");
     }
   },
   async handleSelectMenu(interaction) {
@@ -532,11 +520,46 @@ module.exports = {
 
   async handleButton(interaction) {
     if (!interaction.inGuild()) return;
-    if (!interaction.customId?.startsWith("vip_btn_")) return;
+    if (!interaction.customId?.startsWith("vip_btn_") &&
+        !interaction.customId?.startsWith("vip_quota_give_") &&
+        !interaction.customId?.startsWith("vip_quota_manage_")) return;
 
-    const { vip: vipService } = interaction.client.services;
+    const { vip: vipService, vipChannel } = interaction.client.services;
 
-    // ── Botão: Primeira Dama ──
+    // ── Botão: Família ────────────────────────────────────────────────────────
+    if (interaction.customId.startsWith("vip_btn_family_")) {
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[3];
+      const ownerId = parts[4];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", flags: MessageFlags.Ephemeral });
+
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
+
+      const familyService = interaction.client.services?.family;
+      if (!familyService) return interaction.editReply({ content: "❌ Sistema de família indisponível." });
+
+      const family = await familyService.getFamilyByOwner(ownerId).catch(() => null)
+                  || await familyService.getFamilyByMember(ownerId).catch(() => null);
+
+      if (!family) {
+        return interaction.editReply({ content: "❌ Você não possui uma família. Use `/family criar` para criar uma." });
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle(`👨‍👩‍👧‍👦 Família: ${family.name}`)
+        .setColor("Purple")
+        .addFields(
+          { name: "👤 Líder", value: `<@${family.ownerId}>`, inline: true },
+          { name: "👥 Membros", value: `${(family.members || []).length} / ${family.maxMembers || "?"}`, inline: true },
+        )
+        .setFooter({ text: "VIP System | © WDA - Todos os direitos reservados" });
+
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    // ── Botão: Primeira Dama ──────────────────────────────────────────────────
     if (interaction.customId.startsWith("vip_btn_primeiradama_")) {
       const parts = parseCustomId(interaction.customId);
       // ["vip", "btn", "primeiradama", guildId, ownerId]
@@ -563,6 +586,243 @@ module.exports = {
         components: [new ActionRowBuilder().addComponents(userSelect)],
         flags: MessageFlags.Ephemeral,
       });
+    }
+
+    // ── Botão: Canal de Voz ────────────────────────────────────────────────────
+    if (interaction.customId.startsWith("vip_btn_voice_")) {
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[3];
+      const ownerId = parts[4];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", flags: MessageFlags.Ephemeral });
+
+      const tier = await vipService.getMemberTier(interaction.member);
+      if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", flags: MessageFlags.Ephemeral });
+      if (!tier.canCall) return interaction.reply({ content: "❌ Seu plano não inclui Canal de Voz privado.", flags: MessageFlags.Ephemeral });
+
+      const modal = new ModalBuilder()
+        .setCustomId(`vip_modal_call_${guildId}_${ownerId}`)
+        .setTitle("🎙️ Renomear Canal de Voz");
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("nome")
+            .setLabel("Novo nome para sua Call Privada")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setPlaceholder("Ex: Call da Família"),
+        ),
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    // ── Botão: Chat Privado ────────────────────────────────────────────────────
+    if (interaction.customId.startsWith("vip_btn_chat_")) {
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[3];
+      const ownerId = parts[4];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", flags: MessageFlags.Ephemeral });
+
+      const tier = await vipService.getMemberTier(interaction.member);
+      if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", flags: MessageFlags.Ephemeral });
+      if (!tier.chat_privado) return interaction.reply({ content: "❌ Seu plano não inclui Chat Privado.", flags: MessageFlags.Ephemeral });
+
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
+
+      await vipChannel.ensureVipChannels(ownerId, { guildId }).catch((err) => {
+        logger.warn({ err, userId: ownerId }, "[VIP] Falha ao garantir canais via botão chat");
+      });
+
+      return interaction.editReply({ content: "✅ Canal de chat privado sincronizado!" });
+    }
+
+    // ── Botão: Stealth Mode ───────────────────────────────────────────────────
+    if (interaction.customId.startsWith("vip_btn_stealth_")) {
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[3];
+      const ownerId = parts[4];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", flags: MessageFlags.Ephemeral });
+
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
+
+      const settings = await vipService.getSettings(guildId, ownerId) || {};
+      const newStealth = !settings.stealthMode;
+      await vipService.setSettings(guildId, ownerId, { stealthMode: newStealth });
+
+      return interaction.editReply({
+        content: `🕵️ Stealth Mode **${newStealth ? "ativado" : "desativado"}**! Suas entradas em call ${newStealth ? "não serão" : "serão"} anunciadas.`,
+      });
+    }
+
+    // ── Botão: Som de Entrada ─────────────────────────────────────────────────
+    if (interaction.customId.startsWith("vip_btn_intro_")) {
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[3];
+      const ownerId = parts[4];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", flags: MessageFlags.Ephemeral });
+
+      const tier = await vipService.getMemberTier(interaction.member);
+      if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", flags: MessageFlags.Ephemeral });
+      if (!tier.canCall && !tier.hasIntroSound) return interaction.reply({ content: "❌ Seu plano não suporta Som de Entrada.", flags: MessageFlags.Ephemeral });
+
+      const modal = new ModalBuilder()
+        .setCustomId(`vip_modal_intro_${guildId}_${ownerId}`)
+        .setTitle("🎵 Configurar Som de Entrada");
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("url")
+            .setLabel("URL do Áudio (MP3/WAV)")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false)
+            .setPlaceholder("https://exemplo.com/audio.mp3 (vazio para remover)"),
+        ),
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    // ── Botão: Cargo Pessoal ──────────────────────────────────────────────────
+    if (interaction.customId.startsWith("vip_btn_role_")) {
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[3];
+      const ownerId = parts[4];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", flags: MessageFlags.Ephemeral });
+
+      const tier = await vipService.getMemberTier(interaction.member);
+      if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", flags: MessageFlags.Ephemeral });
+      if (!tier.hasCustomRole) return interaction.reply({ content: "❌ Seu plano não inclui Cargo Personalizado.", flags: MessageFlags.Ephemeral });
+
+      const modal = new ModalBuilder()
+        .setCustomId(`vip_modal_role_${guildId}_${ownerId}`)
+        .setTitle("🎭 Customizar Cargo Pessoal");
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("nome")
+            .setLabel("Nome do cargo (opcional)")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false),
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId("cor")
+            .setLabel("Cor em hex (ex: #ff0000) (opcional)")
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false),
+        ),
+      );
+
+      return interaction.showModal(modal);
+    }
+
+    // ── Botão: Cotas de Presente ──────────────────────────────────────────────
+    if (interaction.customId.startsWith("vip_btn_quota_")) {
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[3];
+      const ownerId = parts[4];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", flags: MessageFlags.Ephemeral });
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`vip_quota_give_${guildId}_${ownerId}`)
+          .setLabel("Dar VIP da Minha Cota")
+          .setStyle(ButtonStyle.Primary)
+          .setEmoji("🎁"),
+        new ButtonBuilder()
+          .setCustomId(`vip_quota_manage_${guildId}_${ownerId}`)
+          .setLabel("Gerenciar Cotas Dadas")
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji("⚙️"),
+      );
+
+      return interaction.reply({
+        content: "O que deseja fazer com suas cotas?",
+        components: [row],
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    // ── Botão: Dar VIP da Cota (sub-ação) ────────────────────────────────────
+    if (interaction.customId.startsWith("vip_quota_give_")) {
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[3];
+      const ownerId = parts[4];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", flags: MessageFlags.Ephemeral });
+
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
+
+      const validTiers = [];
+      const orderedTiers = await vipService.getOrderedTiers(guildId);
+      for (const t of orderedTiers) {
+        const check = await vipService.verificarCota(guildId, ownerId, t.id);
+        if (check.ok) validTiers.push(t);
+      }
+
+      if (validTiers.length === 0) return interaction.editReply({ content: "❌ Você não possui cotas disponíveis ou esgotou seu limite." });
+
+      const userPick = new UserSelectMenuBuilder()
+        .setCustomId(`vip_give_${guildId}_${ownerId}`)
+        .setPlaceholder("Selecione quem vai receber")
+        .setMinValues(1)
+        .setMaxValues(1);
+
+      return interaction.editReply({ content: "Selecione o usuário para receber o VIP da sua cota:", components: [new ActionRowBuilder().addComponents(userPick)] });
+    }
+
+    // ── Botão: Gerenciar Cotas Dadas (sub-ação) ───────────────────────────────
+    if (interaction.customId.startsWith("vip_quota_manage_")) {
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[3];
+      const ownerId = parts[4];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", flags: MessageFlags.Ephemeral });
+
+      const settings = await vipService.getSettings(guildId, ownerId) || {};
+      const dados = settings.vipsDados || [];
+
+      if (!dados.length) return interaction.reply({ content: "Você ainda não deu VIP para ninguém.", flags: MessageFlags.Ephemeral });
+
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
+
+      const userOptions = await Promise.all(
+        dados.slice(0, 25).map(async (data) => {
+          const uid = typeof data === "string" ? data : data.userId;
+          const tId = typeof data === "string" ? "Legado" : data.tierId;
+          try {
+            const user = await interaction.client.users.fetch(uid).catch(() => null);
+            const label = user ? `${user.username} (Tier: ${tId})` : `${uid} (${tId})`;
+            return new StringSelectMenuOptionBuilder().setLabel(label.slice(0, 100)).setValue(uid);
+          } catch {
+            return new StringSelectMenuOptionBuilder().setLabel(`${uid} (${tId})`).setValue(uid);
+          }
+        }),
+      );
+
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId(`vip_quota_remove_${guildId}_${ownerId}`)
+        .setPlaceholder("Selecione quem remover da sua cota")
+        .addOptions(userOptions);
+
+      return interaction.editReply({ content: "Remover VIP e recuperar sua cota:", components: [new ActionRowBuilder().addComponents(menu)] });
     }
   },
 
@@ -597,6 +857,16 @@ module.exports = {
       const roleColor = (interaction.fields.getTextInputValue("cor") || "").trim() || null;
       const res = await vipRole.updatePersonalRole(interaction.user.id, { roleName, roleColor }, { guildId: interaction.guildId });
       return interaction.editReply({ content: res.ok ? "✅ Cargo atualizado!" : "❌ Erro ao atualizar." });
+    }
+
+    if (modalType === "intro") {
+      if (!tier.canCall && !tier.hasIntroSound) return interaction.editReply({ content: "❌ Seu tier não suporta Som de Entrada." });
+      const url = (interaction.fields.getTextInputValue("url") || "").trim() || null;
+      if (url && !/^https?:\/\/.+\.(mp3|wav|ogg|opus|webm)(\?.*)?$/i.test(url)) {
+        return interaction.editReply({ content: "❌ URL inválida. Use um link direto para um arquivo de áudio (mp3, wav, ogg, opus, webm)." });
+      }
+      await vipService.setSettings(guildId, ownerId, { introSoundUrl: url });
+      return interaction.editReply({ content: url ? `✅ Som de entrada configurado!` : "✅ Som de entrada removido." });
     }
   }
 };

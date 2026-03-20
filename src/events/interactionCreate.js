@@ -4,55 +4,55 @@ const { logger } = require("../logger");
 const FOOTER_SUFFIX = "© WDA - Todos os direitos reservados";
 
 const COMMAND_SECTION_MAP = {
-  shop: "ECONOMIA",
-  shopadmin: "ECONOMIA",
-  economy: "ECONOMIA",
-  cashier: "ECONOMIA",
-  bicho: "ECONOMIA",
-  blackjack: "ECONOMIA",
-  roleta: "ECONOMIA",
-  duel: "ECONOMIA",
-  devil: "ECONOMIA",
-  vip: "ECONOMIA",
-  vipbuy: "ECONOMIA",
-  vipadmin: "ECONOMIA",
-  family: "ECONOMIA",
-  leaderboard: "ECONOMIA",
-  levels: "ECONOMIA",
-  leveladmin: "ECONOMIA",
-  mod: "MODERAÇÃO",
-  moderation: "MODERAÇÃO",
-  automod: "MODERAÇÃO",
-  ticket: "MODERAÇÃO",
-  sejawda: "MODERAÇÃO",
-  avisos: "MODERAÇÃO",
-  verify: "MODERAÇÃO",
-  welcome: "MODERAÇÃO",
-  recrutamento: "MODERAÇÃO",
-  diretoria: "MODERAÇÃO",
-  ajuda: "UTILIDADE",
-  utility: "UTILIDADE",
-  ping: "UTILIDADE",
-  afk: "UTILIDADE",
-  lembrete: "UTILIDADE",
-  social: "UTILIDADE",
-  interacao: "UTILIDADE",
-  fun: "UTILIDADE",
-  invites: "UTILIDADE",
-  evento: "EVENTOS",
-  eventos: "EVENTOS",
+  shop: "Loja",
+  shopadmin: "Loja",
+  economy: "Economia",
+  cashier: "Economia",
+  bicho: "Economia",
+  blackjack: "Economia",
+  roleta: "Economia",
+  duel: "Economia",
+  devil: "Economia",
+  vip: "VIP System",
+  vipbuy: "VIP System",
+  vipadmin: "VIP System",
+  leaderboard: "Rank",
+  levels: "Rank",
+  leveladmin: "Rank",
+  mod: "Moderação",
+  moderation: "Moderação",
+  automod: "Moderação",
+  ticket: "Suporte",
+  sejawda: "Suporte",
+  avisos: "Moderação",
+  verify: "Moderação",
+  welcome: "Moderação",
+  recrutamento: "Recrutamento",
+  diretoria: "Diretoria",
+  ajuda: "Utilitários",
+  utility: "Utilitários",
+  ping: "Utilitários",
+  afk: "Utilitários",
+  lembrete: "Utilitários",
+  social: "Social",
+  interacao: "Social",
+  fun: "Social",
+  invites: "Utilitários",
+  evento: "Eventos",
+  eventos: "Eventos",
 };
 
 function getFooterText(section) {
-  return `SEÇÃO DO COMANDO: ${section} | ${FOOTER_SUFFIX}`;
+  return `${section} | ${FOOTER_SUFFIX}`;
 }
 
 function inferSectionFromCustomId(customId) {
   const id = String(customId || "");
-  if (id.startsWith("shop_") || id.startsWith("cashier_") || id.startsWith("leaderboard_") || id.startsWith("bj_") || id.startsWith("duel_")) return "ECONOMIA";
-  if (id.startsWith("mod_") || id.startsWith("automod_") || id.startsWith("ticket_") || id.startsWith("sejawda_") || id.startsWith("close_ticket_")) return "MODERAÇÃO";
-  if (id.startsWith("help_") || id.startsWith("select_helparea")) return "UTILIDADE";
-  if (id.startsWith("evento_")) return "EVENTOS";
+  if (id.startsWith("vip_") || id.startsWith("vipadmin_")) return "VIP System";
+  if (id.startsWith("shop_") || id.startsWith("cashier_") || id.startsWith("leaderboard_") || id.startsWith("bj_") || id.startsWith("duel_")) return "Economia";
+  if (id.startsWith("mod_") || id.startsWith("automod_") || id.startsWith("ticket_") || id.startsWith("sejawda_") || id.startsWith("close_ticket_")) return "Moderação";
+  if (id.startsWith("help_") || id.startsWith("select_helparea")) return "Utilitários";
+  if (id.startsWith("evento_")) return "Eventos";
   return "GERAL";
 }
 
@@ -244,10 +244,6 @@ module.exports = {
         else if (customId.includes("design")) {
           commandName = "design";
         }
-        // ── Family ──
-        else if (customId.startsWith("family_")) {
-          commandName = "family";
-        }
         // ── Fun (jogos casuais) ──
         else if (customId.startsWith("fun_")) {
           commandName = "fun";
@@ -279,10 +275,6 @@ module.exports = {
         // ── Boost ──
         else if (customId.startsWith("boost_")) {
           commandName = "boost";
-        }
-        // ── Dama ──
-        else if (customId.startsWith("dama_")) {
-          commandName = "dama";
         }
         // ── TempCall ──
         else if (customId.startsWith("tempcall_")) {
