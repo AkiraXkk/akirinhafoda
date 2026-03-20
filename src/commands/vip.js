@@ -18,6 +18,68 @@ const { logger } = require("../logger");
 // Approximate milliseconds per month (30-day month) for streak calculation
 const APPROX_MS_PER_MONTH = 30 * 24 * 60 * 60 * 1000;
 
+// ── VIP Milestones ────────────────────────────────────────────────────────────
+const VIP_MILESTONES = [
+  { months: 0,  label: "🥉 Estreante", multiplier: 0  },
+  { months: 1,  label: "🥈 Fiel",      multiplier: 5  },
+  { months: 3,  label: "🏅 Leal",      multiplier: 10 },
+  { months: 6,  label: "🥇 Veterano",  multiplier: 15 },
+  { months: 12, label: "💎 Lendário",  multiplier: 25 },
+];
+
+function resolveVipMilestone(streakMonths) {
+  let current = VIP_MILESTONES[0];
+  for (const m of VIP_MILESTONES) {
+    if (streakMonths >= m.months) current = m;
+  }
+  return current;
+}
+
+// ── Dashboard Builders ────────────────────────────────────────────────────────
+function buildVipDashboardEmbed(userId, avatarUrl, tier, data, settings) {
+  const addedAt = data?.addedAt;
+  const streakMonths = addedAt ? Math.floor((Date.now() - addedAt) / APPROX_MS_PER_MONTH) : 0;
+  const milestone = resolveVipMilestone(streakMonths);
+  const expiresAt = data?.expiresAt;
+  const stealthMode = settings?.stealthMode === true;
+
+  return new EmbedBuilder()
+    .setTitle("💎 Dashboard VIP")
+    .setColor("Gold")
+    .setThumbnail(avatarUrl)
+    .addFields(
+      { name: "👑 Plano Ativo",  value: `\`${tier.name || tier.id}\``, inline: true },
+      { name: "⏳ Expiração",    value: expiresAt ? `<t:${Math.floor(expiresAt / 1000)}:R>` : "Permanente", inline: true },
+      { name: "🔥 VIP Streak",   value: `${streakMonths} ${streakMonths === 1 ? "mês" : "meses"} consecutivo(s)`, inline: true },
+      { name: "🏆 Milestone",    value: `${milestone.label} (+${milestone.multiplier}% economia)`, inline: true },
+      { name: "🕵️ Stealth Mode", value: stealthMode ? "✅ Ativo" : "❌ Inativo", inline: true },
+    )
+    .setFooter({ text: "vip | © WDA - Todos os direitos reservados" });
+}
+
+function buildVipCategoryMenu(guildId, userId) {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId(`vip_cat_${guildId}_${userId}`)
+    .setPlaceholder("🗂️ Navegar entre categorias...")
+    .addOptions(
+      new StringSelectMenuOptionBuilder().setLabel("👨‍👩‍👧‍👦 Social").setValue("social").setDescription("Família e Primeira Dama"),
+      new StringSelectMenuOptionBuilder().setLabel("🎭 Estética").setValue("estetica").setDescription("Cargo Personalizado e Som de Entrada"),
+      new StringSelectMenuOptionBuilder().setLabel("🎙️ Privacidade").setValue("privacidade").setDescription("Canais Privados e Stealth Mode"),
+      new StringSelectMenuOptionBuilder().setLabel("🪙 Economia").setValue("economia").setDescription("Milestones e Bônus Ativos"),
+      new StringSelectMenuOptionBuilder().setLabel("🎁 Presentes").setValue("presentes").setDescription("Cotas de VIP para amigos"),
+    );
+  return new ActionRowBuilder().addComponents(menu);
+}
+
+function buildBackRow(guildId, userId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`vip_btn_back_${guildId}_${userId}`)
+      .setLabel("⬅ Voltar ao Hub")
+      .setStyle(ButtonStyle.Secondary),
+  );
+}
+
 function parseCustomId(customId) {
   return String(customId || "").split("_");
 }
@@ -93,7 +155,7 @@ module.exports = {
     .addSubcommand(s => s.setName("info").setDescription("Ver benefícios ativos e painel VIP")),
 
   async execute(interaction) {
-    const { vip: vipService, vipRole, vipChannel, vipConfig } = interaction.client.services;
+    const { vip: vipService, vipChannel } = interaction.client.services;
     const tier = await vipService.getMemberTier(interaction.member);
     if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", flags: MessageFlags.Ephemeral });
 
@@ -108,97 +170,18 @@ module.exports = {
 
       const data = await vipService.getVipData(interaction.guildId, interaction.user.id);
       const settings = await vipService.getSettings(interaction.guildId, interaction.user.id) || {};
-      const stealthMode = settings.stealthMode === true;
-      const cotasUsadas = settings.cotasUsadas || {};
-      const tierConfig = await vipConfig.getTierConfig(interaction.guildId, tier.id);
 
-      // ── Calcular VIP Streak (meses consecutivos) ───────────────────────
-      const addedAt = data?.addedAt;
-      const streakMonths = addedAt ? Math.floor((Date.now() - addedAt) / APPROX_MS_PER_MONTH) : 0;
-
-      const regras = Array.isArray(tierConfig?.cotasConfig) ? tierConfig.cotasConfig : (tierConfig?.cotasConfig ? [tierConfig.cotasConfig] : []);
-
-      let cotasText = regras.map((r) => {
-        if (r.modo === "A") return `🔹 **Modo A:** ${r.quantidade} cota(s) de tiers inferiores`;
-        if (r.modo === "B") {
-           const used = cotasUsadas[r.targetTierId] || 0;
-           return `🔸 **Modo B:** ${used}/${r.quantidade} cota(s) do tier \`${r.targetTierId}\``;
-        }
-        return "";
-      }).filter(Boolean).join("\n");
-
-      if (!cotasText) cotasText = "Nenhuma cota configurada para o seu plano.";
-
-      const expiresAt = data?.expiresAt;
-
-      const embed = new EmbedBuilder()
-        .setTitle("💎 Dashboard VIP")
-        .setColor("Gold")
-        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-        .addFields(
-          { name: "👑 Plano Ativo", value: `\`${tier.name || tier.id}\``, inline: true },
-          { name: "⏳ Expiração", value: expiresAt ? `<t:${Math.floor(expiresAt / 1000)}:R>` : "Permanente", inline: true },
-          { name: "🔥 VIP Streak", value: `${streakMonths} ${streakMonths === 1 ? "mês" : "meses"} consecutivo(s)`, inline: true },
-          { name: "🕵️ Stealth Mode", value: stealthMode ? "✅ Ativo" : "❌ Inativo", inline: true },
-          { name: "🎁 Minhas Cotas", value: cotasText, inline: false },
-        )
-        .setFooter({ text: "VIP System | © WDA - Todos os direitos reservados" });
-
-      // ── Row 1: Social ─────────────────────────────────────────────────
-      const row1 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`vip_btn_family_${interaction.guildId}_${interaction.user.id}`)
-          .setLabel("Família")
-          .setEmoji("👨‍👩‍👧‍👦")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`vip_btn_primeiradama_${interaction.guildId}_${interaction.user.id}`)
-          .setLabel("Primeira Dama")
-          .setEmoji("💍")
-          .setStyle(ButtonStyle.Secondary),
-      );
-
-      // ── Row 2: Privacidade ────────────────────────────────────────────
-      const row2 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`vip_btn_voice_${interaction.guildId}_${interaction.user.id}`)
-          .setLabel("Canal de Voz")
-          .setEmoji("🎙️")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`vip_btn_chat_${interaction.guildId}_${interaction.user.id}`)
-          .setLabel("Chat Privado")
-          .setEmoji("💬")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`vip_btn_stealth_${interaction.guildId}_${interaction.user.id}`)
-          .setLabel(stealthMode ? "Stealth: ON" : "Stealth: OFF")
-          .setEmoji("🕵️")
-          .setStyle(stealthMode ? ButtonStyle.Success : ButtonStyle.Secondary),
-      );
-
-      // ── Row 3: Personalização ─────────────────────────────────────────
-      const row3 = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`vip_btn_role_${interaction.guildId}_${interaction.user.id}`)
-          .setLabel("Cargo Pessoal")
-          .setEmoji("🎭")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`vip_btn_intro_${interaction.guildId}_${interaction.user.id}`)
-          .setLabel("Som de Entrada")
-          .setEmoji("✨")
-          .setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder()
-          .setCustomId(`vip_btn_quota_${interaction.guildId}_${interaction.user.id}`)
-          .setLabel("Cotas de Presente")
-          .setEmoji("🎁")
-          .setStyle(ButtonStyle.Secondary),
+      const embed = buildVipDashboardEmbed(
+        interaction.user.id,
+        interaction.user.displayAvatarURL({ dynamic: true }),
+        tier,
+        data,
+        settings,
       );
 
       return interaction.editReply({
         embeds: [embed],
-        components: [row1, row2, row3],
+        components: [buildVipCategoryMenu(interaction.guildId, interaction.user.id)],
       });
     }
   },
@@ -206,7 +189,199 @@ module.exports = {
     if (!interaction.inGuild()) return;
     if (!interaction.customId?.startsWith("vip_")) return;
 
-    const { vip: vipService, vipRole, vipChannel } = interaction.client.services;
+    const { vip: vipService, vipRole, vipChannel, vipConfig } = interaction.client.services;
+
+    // ── Navegação por categorias (Hub principal) ──────────────────────────────
+    if (interaction.customId.startsWith("vip_cat_")) {
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[2];
+      const ownerId = parts[3];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este menu pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do painel pode navegar.", flags: MessageFlags.Ephemeral });
+
+      const category = interaction.values?.[0];
+      const tier = await vipService.getMemberTier(interaction.member);
+      if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", flags: MessageFlags.Ephemeral });
+
+      const tierConfig = await vipConfig.getTierConfig(guildId, tier.id).catch(() => null);
+      const backRow = buildBackRow(guildId, ownerId);
+
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em deferUpdate no vip_cat"); });
+
+      // ── Social ──────────────────────────────────────────────────────────
+      if (category === "social") {
+        const familyService = interaction.client.services?.family;
+        const family = familyService
+          ? (await familyService.getFamilyByOwner(ownerId).catch(() => null) || await familyService.getFamilyByMember(ownerId).catch(() => null))
+          : null;
+        const gConf = await getGuildConfig(guildId).catch(() => ({}));
+        const damaRoleIds = gConf?.primeraDamaRoleIds?.length
+          ? gConf.primeraDamaRoleIds
+          : (gConf?.damaRoleId ? [gConf.damaRoleId] : []);
+
+        const embed = new EmbedBuilder()
+          .setTitle("👨‍👩‍👧‍👦 Categoria: Social")
+          .setColor("Purple")
+          .addFields(
+            { name: "🏠 Família", value: family ? `**${family.name}** — ${family.members.length}/${family.maxMembers} membros` : "Sem família ativa. Use `/family criar`.", inline: false },
+            { name: "💍 Cargos de Primeira Dama", value: damaRoleIds.length ? damaRoleIds.map(id => `<@&${id}>`).join(", ") : "Não configurado pelo admin.", inline: false },
+            { name: "💳 Vagas de Família (Tier)", value: `\`${tierConfig?.vagas_familia ?? 0}\` vagas`, inline: true },
+            { name: "👑 Cotas de Dama (Tier)", value: `\`${tierConfig?.primeiras_damas ?? 0}\` cota(s)`, inline: true },
+          )
+          .setFooter({ text: "vip | © WDA - Todos os direitos reservados" });
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`vip_btn_primeiradama_${guildId}_${ownerId}`)
+            .setLabel("💍 Definir Primeira Dama")
+            .setStyle(ButtonStyle.Primary),
+        );
+
+        return interaction.editReply({ embeds: [embed], components: [row, backRow] });
+      }
+
+      // ── Estética ─────────────────────────────────────────────────────────
+      if (category === "estetica") {
+        const settings = await vipService.getSettings(guildId, ownerId) || {};
+        const hasRole = !!settings.roleId;
+        const hasIntro = !!settings.introSoundUrl;
+
+        const embed = new EmbedBuilder()
+          .setTitle("🎭 Categoria: Estética")
+          .setColor(0x9b59b6)
+          .addFields(
+            { name: "🎭 Cargo Personalizado", value: hasRole ? `<@&${settings.roleId}>` : "Não configurado", inline: true },
+            { name: "✨ Som de Entrada", value: hasIntro ? "✅ Configurado" : "❌ Não definido", inline: true },
+            { name: "📋 Permissões do Tier", value: `Cargo Custom: ${tierConfig?.hasCustomRole ? "✅" : "❌"} | Intro Sound: ${(tierConfig?.hasIntroSound || tierConfig?.canCall) ? "✅" : "❌"}`, inline: false },
+          )
+          .setFooter({ text: "vip | © WDA - Todos os direitos reservados" });
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`vip_btn_role_${guildId}_${ownerId}`)
+            .setLabel("🎭 Customizar Cargo")
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(!tierConfig?.hasCustomRole),
+          new ButtonBuilder()
+            .setCustomId(`vip_btn_intro_${guildId}_${ownerId}`)
+            .setLabel("✨ Som de Entrada")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(!tierConfig?.hasIntroSound && !tierConfig?.canCall),
+        );
+
+        return interaction.editReply({ embeds: [embed], components: [row, backRow] });
+      }
+
+      // ── Privacidade ───────────────────────────────────────────────────────
+      if (category === "privacidade") {
+        const settings = await vipService.getSettings(guildId, ownerId) || {};
+        const stealthMode = settings.stealthMode === true;
+
+        const embed = new EmbedBuilder()
+          .setTitle("🎙️ Categoria: Privacidade")
+          .setColor(0x2f3136)
+          .addFields(
+            { name: "🎙️ Canal de Voz",  value: tierConfig?.canCall ? "✅ Disponível no seu tier" : "❌ Não disponível", inline: true },
+            { name: "💬 Chat Privado",   value: tierConfig?.chat_privado ? "✅ Disponível no seu tier" : "❌ Não disponível", inline: true },
+            { name: "🕵️ Stealth Mode",  value: stealthMode ? "✅ Ativo — Entradas silenciosas" : "❌ Inativo — Entradas normais", inline: false },
+          )
+          .setFooter({ text: "vip | © WDA - Todos os direitos reservados" });
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`vip_btn_voice_${guildId}_${ownerId}`)
+            .setLabel("🎙️ Renomear Voz")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(!tierConfig?.canCall),
+          new ButtonBuilder()
+            .setCustomId(`vip_btn_chat_${guildId}_${ownerId}`)
+            .setLabel("💬 Sincronizar Chat")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(!tierConfig?.chat_privado),
+          new ButtonBuilder()
+            .setCustomId(`vip_btn_stealth_${guildId}_${ownerId}`)
+            .setLabel(stealthMode ? "🕵️ Stealth: ON" : "🕵️ Stealth: OFF")
+            .setStyle(stealthMode ? ButtonStyle.Success : ButtonStyle.Secondary),
+        );
+
+        return interaction.editReply({ embeds: [embed], components: [row, backRow] });
+      }
+
+      // ── Economia / Milestones ─────────────────────────────────────────────
+      if (category === "economia") {
+        const data = await vipService.getVipData(guildId, ownerId);
+        const addedAt = data?.addedAt;
+        const streakMonths = addedAt ? Math.floor((Date.now() - addedAt) / APPROX_MS_PER_MONTH) : 0;
+        const milestone = resolveVipMilestone(streakMonths);
+        const nextMilestone = VIP_MILESTONES.slice().reverse().find(m => m.months > streakMonths) || null;
+
+        const allMedals = VIP_MILESTONES.map(m => {
+          const reached = streakMonths >= m.months;
+          return `${reached ? "✅" : "⬜"} ${m.label} (${m.months === 0 ? "Inicial" : `${m.months}m`}) — +${m.multiplier}%`;
+        }).join("\n");
+
+        const embed = new EmbedBuilder()
+          .setTitle("🪙 Categoria: Economia")
+          .setColor("Gold")
+          .addFields(
+            { name: "🔥 VIP Streak",            value: `${streakMonths} ${streakMonths === 1 ? "mês" : "meses"} consecutivo(s)`, inline: true },
+            { name: "🏆 Milestone Atual",        value: milestone.label, inline: true },
+            { name: "📈 Multiplicador Ativo",    value: `+${milestone.multiplier}% em economia`, inline: true },
+            { name: "💰 Bônus Diário (Tier)",    value: `+${tierConfig?.valor_daily_extra ?? 0} 🪙 por coleta`, inline: true },
+            { name: "🎁 Bônus Inicial (Tier)",   value: `${tierConfig?.bonus_inicial ?? 0} 🪙 ao receber VIP`, inline: true },
+            nextMilestone
+              ? { name: "🎯 Próxima Conquista", value: `${nextMilestone.label} em ${nextMilestone.months - streakMonths} ${nextMilestone.months - streakMonths === 1 ? "mês" : "meses"}`, inline: false }
+              : { name: "🎯 Status", value: "Você atingiu o nível máximo! 💎", inline: false },
+            { name: "📊 Trilha de Medalhas", value: allMedals, inline: false },
+          )
+          .setFooter({ text: "vip | © WDA - Todos os direitos reservados" });
+
+        return interaction.editReply({ embeds: [embed], components: [backRow] });
+      }
+
+      // ── Presentes ─────────────────────────────────────────────────────────
+      if (category === "presentes") {
+        const settings = await vipService.getSettings(guildId, ownerId) || {};
+        const cotasUsadas = settings.cotasUsadas || {};
+        const vipsDados = settings.vipsDados || [];
+        const regras = Array.isArray(tierConfig?.cotasConfig) ? tierConfig.cotasConfig : (tierConfig?.cotasConfig ? [tierConfig.cotasConfig] : []);
+
+        const cotasText = regras.map((r) => {
+          if (r.modo === "A") return `🔹 **Modo A:** ${r.quantidade} cota(s) de tiers inferiores`;
+          if (r.modo === "B") {
+            const used = cotasUsadas[r.targetTierId] || 0;
+            return `🔸 **Modo B:** ${used}/${r.quantidade} usadas do tier \`${r.targetTierId}\``;
+          }
+          return "";
+        }).filter(Boolean).join("\n") || "Nenhuma cota disponível no seu plano.";
+
+        const embed = new EmbedBuilder()
+          .setTitle("🎁 Categoria: Presentes")
+          .setColor(0xf1c40f)
+          .addFields(
+            { name: "📋 Suas Cotas", value: cotasText, inline: false },
+            { name: "🎁 VIPs Dados", value: vipsDados.length ? `${vipsDados.length} presente(s) registrado(s)` : "Nenhum.", inline: true },
+          )
+          .setFooter({ text: "vip | © WDA - Todos os direitos reservados" });
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`vip_quota_give_${guildId}_${ownerId}`)
+            .setLabel("🎁 Dar VIP da Cota")
+            .setStyle(ButtonStyle.Primary),
+          new ButtonBuilder()
+            .setCustomId(`vip_quota_manage_${guildId}_${ownerId}`)
+            .setLabel("⚙️ Gerenciar Cotas")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(!vipsDados.length),
+        );
+
+        return interaction.editReply({ embeds: [embed], components: [row, backRow] });
+      }
+
+      return interaction.editReply({ content: "Categoria desconhecida.", embeds: [], components: [] });
+    }
 
     // ── Resposta ao selecionar o Tier que vai dar ──
     if (interaction.customId.startsWith("vip_give_tier_")) {
@@ -500,19 +675,23 @@ module.exports = {
       if (!targetMember) return interaction.editReply({ content: "❌ Membro não encontrado no servidor." });
       if (targetMember.user?.bot) return interaction.editReply({ content: "❌ Você não pode definir um bot como Primeira Dama." });
 
-      // Recupera o cargo de Primeira Dama das configurações do servidor
+      // Recupera o(s) cargo(s) de Primeira Dama das configurações do servidor
       const gConfig = await getGuildConfig(guildId);
-      const damaRoleId = gConfig?.damaRoleId;
+      const damaRoleIds = gConfig?.primeraDamaRoleIds?.length
+        ? gConfig.primeraDamaRoleIds
+        : (gConfig?.damaRoleId ? [gConfig.damaRoleId] : []);
 
-      if (!damaRoleId) {
-        return interaction.editReply({ content: "❌ O cargo de Primeira Dama não está configurado neste servidor. Peça a um administrador para usar `/dama config`." });
+      if (!damaRoleIds.length) {
+        return interaction.editReply({ content: "❌ Os cargos de Primeira Dama não estão configurados neste servidor. Peça a um administrador para usar `/vipadmin config`." });
       }
 
       try {
-        await targetMember.roles.add(damaRoleId);
+        for (const roleId of damaRoleIds) {
+          await targetMember.roles.add(roleId).catch((err) => { logger.warn({ err, roleId }, "Falha ao adicionar cargo de Primeira Dama"); });
+        }
         return interaction.editReply({ content: `👑 **${targetMember.user.username}** agora é sua Primeira Dama! 💍` });
       } catch (err) {
-        console.error(`[VIP] Falha ao adicionar cargo de Primeira Dama userId=${selectedUserId}:`, err.message);
+        logger.error({ err, userId: selectedUserId }, "[VIP] Falha ao adicionar cargo de Primeira Dama");
         return interaction.editReply({ content: "❌ Não foi possível adicionar o cargo. Verifique se o cargo do bot tem permissão suficiente na hierarquia do servidor." });
       }
     }
@@ -525,6 +704,30 @@ module.exports = {
         !interaction.customId?.startsWith("vip_quota_manage_")) return;
 
     const { vip: vipService, vipChannel } = interaction.client.services;
+
+    // ── Botão: Voltar ao Hub principal ────────────────────────────────────────
+    if (interaction.customId.startsWith("vip_btn_back_")) {
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[3];
+      const ownerId = parts[4];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", flags: MessageFlags.Ephemeral });
+
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em deferUpdate no back button"); });
+
+      const tier = await vipService.getMemberTier(interaction.member);
+      if (!tier) return interaction.editReply({ content: "❌ Você não é VIP.", embeds: [], components: [] });
+
+      const data = await vipService.getVipData(guildId, ownerId);
+      const settings = await vipService.getSettings(guildId, ownerId) || {};
+      const embed = buildVipDashboardEmbed(ownerId, interaction.user.displayAvatarURL({ dynamic: true }), tier, data, settings);
+
+      return interaction.editReply({
+        embeds: [embed],
+        components: [buildVipCategoryMenu(guildId, ownerId)],
+      });
+    }
 
     // ── Botão: Família ────────────────────────────────────────────────────────
     if (interaction.customId.startsWith("vip_btn_family_")) {
@@ -554,7 +757,7 @@ module.exports = {
           { name: "👤 Líder", value: `<@${family.ownerId}>`, inline: true },
           { name: "👥 Membros", value: `${(family.members || []).length} / ${family.maxMembers || "?"}`, inline: true },
         )
-        .setFooter({ text: "VIP System | © WDA - Todos os direitos reservados" });
+        .setFooter({ text: "vip | © WDA - Todos os direitos reservados" });
 
       return interaction.editReply({ embeds: [embed] });
     }

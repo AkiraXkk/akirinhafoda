@@ -121,6 +121,10 @@ function buildTierDashComponents(tierId, guildId, hasTiers) {
       .setLabel("🚀 Tier Booster Exclusivo")
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
+      .setCustomId(id("set_dama_roles"))
+      .setLabel("💍 Cargos de Primeira Dama")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
       .setCustomId(id("close"))
       .setLabel("✖ Fechar")
       .setStyle(ButtonStyle.Secondary),
@@ -529,6 +533,38 @@ module.exports = {
       return interaction.showModal(modal);
     }
 
+    // ── 💍 Cargos de Primeira Dama (Multi-Role) ───────────────────────────────
+    if (action === "set_dama_roles") {
+      const gConf = await vipService.getGuildConfig(guildId) || {};
+      const currentIds = gConf?.primeraDamaRoleIds || (gConf?.damaRoleId ? [gConf.damaRoleId] : []);
+
+      const roleSelect = new RoleSelectMenuBuilder()
+        .setCustomId(`vipadmin_roleselmenu_dama_${guildId}`)
+        .setPlaceholder("Selecione os cargos de Primeira Dama")
+        .setMinValues(0)
+        .setMaxValues(10)
+        .setDefaultRoles(currentIds.filter(Boolean));
+
+      const embed = new EmbedBuilder()
+        .setTitle("💍 Configurar Cargos de Primeira Dama")
+        .setColor(0xe91e63)
+        .setDescription([
+          "Selecione **um ou mais cargos** que serão concedidos ao membro definido como Primeira Dama de um VIP.",
+          "",
+          currentIds.length
+            ? `**Configuração atual:** ${currentIds.map(id => `<@&${id}>`).join(", ")}`
+            : "**Nenhum cargo configurado atualmente.**",
+          "",
+          "⚠️ Para **remover** todos os cargos, limpe a seleção e confirme.",
+        ].join("\n"))
+        .setFooter({ text: "vipadmin | © WDA - Todos os direitos reservados" });
+
+      return interaction.update({
+        embeds: [embed],
+        components: [new ActionRowBuilder().addComponents(roleSelect)],
+      });
+    }
+
     // ── ⚙️ Cotas Avançadas ────────────────────────────────────────────────────
     if (action === "cotas") {
       const tier = await vipConfig.getTierConfig(guildId, tierId);
@@ -899,6 +935,42 @@ module.exports = {
       });
       return interaction.reply({ content: `✅ Loja do tier \`${tierId}\` atualizada.`, flags: MessageFlags.Ephemeral });
     }
+  },
+
+  // ── 💍 RoleSelectMenu: Cargos de Primeira Dama ────────────────────────────
+  async handleRoleSelectMenu(interaction) {
+    if (!interaction.inGuild()) return;
+    if (!interaction.customId?.startsWith("vipadmin_roleselmenu_dama_")) return;
+
+    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return interaction.reply({ content: "❌ Você precisa de permissão **ManageGuild** para isso.", flags: MessageFlags.Ephemeral });
+    }
+
+    const parts = interaction.customId.split("_");
+    // vipadmin_roleselmenu_dama_{guildId}
+    const guildId = parts[3];
+
+    if (interaction.guildId !== guildId) return interaction.reply({ content: "Este menu pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+
+    const { vip: vipService } = interaction.client.services;
+
+    const selectedRoleIds = interaction.values || [];
+
+    await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em deferUpdate no vipadmin roleselmenu dama"); });
+
+    await vipService.setGuildConfig(guildId, { primeraDamaRoleIds: selectedRoleIds });
+
+    const embed = new EmbedBuilder()
+      .setTitle("✅ Cargos de Primeira Dama Atualizados")
+      .setColor(0xe91e63)
+      .setDescription(
+        selectedRoleIds.length
+          ? `Os seguintes cargos foram configurados:\n${selectedRoleIds.map(id => `• <@&${id}>`).join("\n")}`
+          : "Todos os cargos de Primeira Dama foram **removidos**.",
+      )
+      .setFooter({ text: "vipadmin | © WDA - Todos os direitos reservados" });
+
+    return interaction.editReply({ embeds: [embed], components: [] });
   },
 };
 
