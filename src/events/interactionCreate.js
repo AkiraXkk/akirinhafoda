@@ -296,18 +296,13 @@ module.exports = {
       // Define qual função disparar dentro do arquivo do comando
       let handlerName = "";
 
-      // MÁGICA: Se for o Ticket, joga TUDO (Botões e Menus) para o handleButton
-      if (commandName === "ticket") {
+      // Lógica de detecção automática (sem força-bruta para ticket)
+      // A ordem importa: tipos específicos primeiro
+      if (interaction.isButton()) {
         handlerName = "handleButton";
-      }
-      // Lógica original para os outros comandos:
-      else if (interaction.isButton()) {
-        handlerName = "handleButton";
-      }
-      else if (interaction.isModalSubmit()) {
+      } else if (interaction.isModalSubmit()) {
         handlerName = "handleModal";
-      }
-      else if (interaction.isAnySelectMenu()) {
+      } else if (interaction.isAnySelectMenu()) {
         if (interaction.isRoleSelectMenu() && typeof command.handleRoleSelectMenu === "function") {
           handlerName = "handleRoleSelectMenu";
         } else if (interaction.isUserSelectMenu() && typeof command.handleUserSelectMenu === "function") {
@@ -317,14 +312,24 @@ module.exports = {
         }
       }
 
+      // 🛡️ Validação extra: se não encontrou handler, logar e retornar
+      if (!handlerName) {
+        logger.warn({ commandName, customId: interaction.customId }, "Nenhum handler detectado para interação");
+        return;
+      }
+
       // Executa o handler dinamicamente
       if (typeof command[handlerName] === "function") {
         try {
+          logger.debug({ commandName, handlerName, customId: interaction.customId }, "Executando handler de interação");
           return await command[handlerName](interaction);
         } catch (e) {
           // Se der erro 10062 (Unknown Interaction), o Discord demorou a responder
-          if (e.code === 10062) return;
-          logger.error({ err: e, handler: handlerName, command: commandName }, "Erro no handler de interação");
+          if (e.code === 10062) {
+            logger.debug({ commandName, customId: interaction.customId }, "Erro 10062: Interação expirada no Discord");
+            return;
+          }
+          logger.error({ err: e, handler: handlerName, command: commandName, customId: interaction.customId }, "Erro no handler de interação");
           // Resposta de fallback para não deixar a interação sem resposta
           const errPayload = { content: "❌ Ocorreu um erro ao processar esta interação.", flags: MessageFlags.Ephemeral };
           if (interaction.replied || interaction.deferred) {
@@ -334,7 +339,7 @@ module.exports = {
           }
         }
       } else {
-        logger.debug({ commandName, handlerName }, "Handler não encontrado no comando");
+        logger.warn({ commandName, handlerName, available: Object.keys(command).filter(k => typeof command[k] === "function") }, "Handler não encontrado no comando");
       }
     }
   },
