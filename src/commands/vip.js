@@ -67,6 +67,7 @@ function buildVipCategoryMenu(guildId, userId) {
       new StringSelectMenuOptionBuilder().setLabel("🎙️ Privacidade").setValue("privacidade").setDescription("Canais Privados e Stealth Mode"),
       new StringSelectMenuOptionBuilder().setLabel("🪙 Economia").setValue("economia").setDescription("Milestones e Bônus Ativos"),
       new StringSelectMenuOptionBuilder().setLabel("🎁 Presentes").setValue("presentes").setDescription("Cotas de VIP para amigos"),
+      new StringSelectMenuOptionBuilder().setLabel("🛒 Loja VIP (Moedas)").setValue("loja").setDescription("Comprar VIP com WDA Coins"),
     );
   return new ActionRowBuilder().addComponents(menu);
 }
@@ -86,6 +87,19 @@ function parseCustomId(customId) {
 
 function isSameUser(interaction, expectedUserId) {
   return interaction.user?.id === expectedUserId;
+}
+
+// ── Helper: Resolve o preço de compra para um tier e período ──
+function resolveShopPrice(tierConfig, days) {
+  if (days === 7) {
+    if (Number.isFinite(tierConfig.shop_price_7d)) return tierConfig.shop_price_7d;
+    if (Number.isFinite(tierConfig.shop_price_per_day)) return Math.round(tierConfig.shop_price_per_day * 7);
+    return null;
+  }
+  if (Number.isFinite(tierConfig.shop_price_30d)) return tierConfig.shop_price_30d;
+  if (Number.isFinite(tierConfig.shop_fixed_price)) return tierConfig.shop_fixed_price;
+  if (Number.isFinite(tierConfig.shop_price_per_day)) return Math.round(tierConfig.shop_price_per_day * 30);
+  return null;
 }
 
 // ── Helper: Função Central para Dar o VIP da Cota ──
@@ -201,13 +215,14 @@ module.exports = {
       if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do painel pode navegar.", flags: MessageFlags.Ephemeral });
 
       const category = interaction.values?.[0];
-      const tier = await vipService.getMemberTier(interaction.member);
-      if (!tier) return interaction.reply({ content: "❌ Você não é VIP.", flags: MessageFlags.Ephemeral });
-
-      const tierConfig = await vipConfig.getTierConfig(guildId, tier.id).catch(() => null);
       const backRow = buildBackRow(guildId, ownerId);
 
       await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em deferUpdate no vip_cat"); });
+
+      const tier = await vipService.getMemberTier(interaction.member);
+      if (!tier) return interaction.editReply({ content: "❌ Você não é VIP.", embeds: [], components: [] });
+
+      const tierConfig = await vipConfig.getTierConfig(guildId, tier.id).catch(() => null);
 
       // ── Social ──────────────────────────────────────────────────────────
       if (category === "social") {
@@ -380,7 +395,114 @@ module.exports = {
         return interaction.editReply({ embeds: [embed], components: [row, backRow] });
       }
 
+      // ── Loja VIP (Moedas) ─────────────────────────────────────────────────
+      if (category === "loja") {
+        const allTiers = await vipConfig.getGuildTiers(guildId);
+        const shopTiers = [];
+        for (const [tId, tData] of Object.entries(allTiers)) {
+          const tConfig = await vipConfig.getTierConfig(guildId, tId).catch(() => null);
+          if (!tConfig?.shop_enabled) continue;
+          const price7d = resolveShopPrice(tConfig, 7);
+          const price30d = resolveShopPrice(tConfig, 30);
+          if (price7d === null && price30d === null) continue;
+          shopTiers.push({ id: tId, name: tConfig.name || tData.name || tId, price7d, price30d });
+        }
+
+        if (!shopTiers.length) {
+          return interaction.editReply({ content: "❌ Não há tiers disponíveis na loja no momento.", embeds: [], components: [backRow] });
+        }
+
+        const embed = new EmbedBuilder()
+          .setTitle("🛒 Loja VIP (Moedas)")
+          .setColor(0xf1c40f)
+          .setDescription("Escolha um Tier abaixo para ver os planos e preços:")
+          .addFields(shopTiers.map(t => ({
+            name: `💎 ${t.name}`,
+            value: [
+              t.price7d !== null ? `• **7 dias:** ${t.price7d} 🪙` : null,
+              t.price30d !== null ? `• **30 dias:** ${t.price30d} 🪙` : null,
+            ].filter(Boolean).join("\n"),
+            inline: true,
+          })))
+          .setFooter({ text: "vip | © WDA - Todos os direitos reservados" });
+
+        const shopMenu = new StringSelectMenuBuilder()
+          .setCustomId(`vip_shop_tier_${guildId}_${ownerId}`)
+          .setPlaceholder("Selecione o Tier que deseja comprar")
+          .addOptions(shopTiers.slice(0, 25).map(t =>
+            new StringSelectMenuOptionBuilder()
+              .setLabel(t.name)
+              .setValue(t.id)
+              .setDescription([
+                t.price7d !== null ? `7d: ${t.price7d}🪙` : null,
+                t.price30d !== null ? `30d: ${t.price30d}🪙` : null,
+              ].filter(Boolean).join(" | ").slice(0, 100)),
+          ));
+
+        return interaction.editReply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(shopMenu), backRow] });
+      }
+
       return interaction.editReply({ content: "Categoria desconhecida.", embeds: [], components: [] });
+    }
+
+    // ── Seleção de Tier na Loja VIP ───────────────────────────────────────────
+    if (interaction.customId.startsWith("vip_shop_tier_")) {
+      // customId: vip_shop_tier_GUILDID_USERID
+      const parts = parseCustomId(interaction.customId);
+      const guildId = parts[3];
+      const ownerId = parts[4];
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este menu pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do painel pode usar.", flags: MessageFlags.Ephemeral });
+
+      const tierId = interaction.values?.[0];
+      if (!tierId) return interaction.reply({ content: "Seleção inválida.", flags: MessageFlags.Ephemeral });
+
+      await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em deferUpdate no vip_shop_tier"); });
+
+      const tierConfig = await vipConfig.getTierConfig(guildId, tierId).catch(() => null);
+      if (!tierConfig?.shop_enabled) return interaction.editReply({ content: "❌ Este tier não está disponível na loja.", embeds: [], components: [] });
+
+      const price7d = resolveShopPrice(tierConfig, 7);
+      const price30d = resolveShopPrice(tierConfig, 30);
+
+      const economyService = interaction.client.services.economy;
+      const balance = await economyService.getBalance(guildId, ownerId).catch(() => ({ coins: 0 }));
+      const coins = balance?.coins || 0;
+
+      const embed = new EmbedBuilder()
+        .setTitle(`🛒 Comprar VIP: ${tierConfig.name || tierId}`)
+        .setColor(0xf1c40f)
+        .addFields(
+          { name: "💰 Seu saldo", value: `${coins} 🪙`, inline: false },
+          ...(price7d !== null ? [{ name: "📅 Plano 7 Dias", value: `**${price7d} 🪙** ${coins >= price7d ? "✅ Saldo suficiente" : "❌ Saldo insuficiente"}`, inline: true }] : []),
+          ...(price30d !== null ? [{ name: "📅 Plano 30 Dias", value: `**${price30d} 🪙** ${coins >= price30d ? "✅ Saldo suficiente" : "❌ Saldo insuficiente"}`, inline: true }] : []),
+        )
+        .setFooter({ text: "vip | © WDA - Todos os direitos reservados" });
+
+      const buttons = [];
+      if (price7d !== null) {
+        buttons.push(
+          new ButtonBuilder()
+            .setCustomId(`vip_shop_buy_7_${guildId}_${ownerId}_${tierId}`)
+            .setLabel(`🛒 7 Dias — ${price7d} 🪙`)
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(coins < price7d),
+        );
+      }
+      if (price30d !== null) {
+        buttons.push(
+          new ButtonBuilder()
+            .setCustomId(`vip_shop_buy_30_${guildId}_${ownerId}_${tierId}`)
+            .setLabel(`🛒 30 Dias — ${price30d} 🪙`)
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(coins < price30d),
+        );
+      }
+
+      const backRow = buildBackRow(guildId, ownerId);
+      const buttonRow = new ActionRowBuilder().addComponents(...buttons);
+      return interaction.editReply({ embeds: [embed], components: [buttonRow, backRow] });
     }
 
     // ── Resposta ao selecionar o Tier que vai dar ──
@@ -701,9 +823,10 @@ module.exports = {
     if (!interaction.inGuild()) return;
     if (!interaction.customId?.startsWith("vip_btn_") &&
         !interaction.customId?.startsWith("vip_quota_give_") &&
-        !interaction.customId?.startsWith("vip_quota_manage_")) return;
+        !interaction.customId?.startsWith("vip_quota_manage_") &&
+        !interaction.customId?.startsWith("vip_shop_buy_")) return;
 
-    const { vip: vipService, vipChannel } = interaction.client.services;
+    const { vip: vipService, vipChannel, vipRole, vipConfig } = interaction.client.services;
 
     // ── Botão: Voltar ao Hub principal ────────────────────────────────────────
     if (interaction.customId.startsWith("vip_btn_back_")) {
@@ -1026,6 +1149,62 @@ module.exports = {
         .addOptions(userOptions);
 
       return interaction.editReply({ content: "Remover VIP e recuperar sua cota:", components: [new ActionRowBuilder().addComponents(menu)] });
+    }
+
+    // ── Botão: Comprar VIP na Loja (Moedas) ──────────────────────────────────
+    if (interaction.customId.startsWith("vip_shop_buy_")) {
+      // customId: vip_shop_buy_DAYS_GUILDID_USERID_TIERID
+      const raw = interaction.customId.replace("vip_shop_buy_", "");
+      const firstUnderscore = raw.indexOf("_");
+      const days = parseInt(raw.substring(0, firstUnderscore), 10);
+      const rest = raw.substring(firstUnderscore + 1);
+      // rest = GUILDID_USERID_TIERID  — guildId and userId are snowflakes (numeric, no underscores), tierId may have underscores
+      const restParts = rest.split("_");
+      if (restParts.length < 3) return interaction.reply({ content: "❌ ID de compra inválido.", flags: MessageFlags.Ephemeral });
+      const guildId = restParts[0];
+      const ownerId = restParts[1];
+      const tierId = restParts.slice(2).join("_");
+
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      if (!isSameUser(interaction, ownerId)) return interaction.reply({ content: "Apenas o dono do VIP pode usar esta opção.", flags: MessageFlags.Ephemeral });
+
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em deferReply no vip_shop_buy"); });
+
+      const tierConfig = await vipConfig.getTierConfig(guildId, tierId).catch(() => null);
+      if (!tierConfig?.shop_enabled) return interaction.editReply({ content: "❌ Este tier não está mais disponível na loja." });
+
+      const price = resolveShopPrice(tierConfig, days);
+      if (price === null || price < 0) return interaction.editReply({ content: "❌ Preço não configurado para este plano. Contate um administrador." });
+
+      const economyService = interaction.client.services.economy;
+      const balance = await economyService.getBalance(guildId, ownerId).catch(() => ({ coins: 0 }));
+      const coins = balance?.coins || 0;
+
+      if (coins < price) {
+        return interaction.editReply({ content: `❌ Saldo insuficiente! Você tem **${coins} 🪙** mas precisa de **${price} 🪙** para **${days} dias** de **${tierConfig.name || tierId}**.` });
+      }
+
+      const debited = await economyService.removeCoins(guildId, ownerId, price);
+      if (!debited) return interaction.editReply({ content: "❌ Falha ao debitar moedas. Tente novamente." });
+
+      const expiresAt = Date.now() + days * 24 * 60 * 60 * 1000;
+
+      try {
+        await vipService.addVip(guildId, ownerId, { tierId, expiresAt, addedBy: "shop", source: "shop" });
+      } catch (err) {
+        logger.error({ err, guildId, ownerId, tierId }, "Falha em addVip no vip_shop_buy — reembolsando moedas");
+        await economyService.addCoins(guildId, ownerId, price).catch(() => {});
+        return interaction.editReply({ content: "❌ Erro ao registrar o VIP. Suas moedas foram reembolsadas. Tente novamente." });
+      }
+
+      await vipRole.assignTierRole(ownerId, tierId, { guildId }).catch((err) => { logger.warn({ err }, "Falha ao atribuir cargo no vip_shop_buy"); });
+      if (tierConfig.canCall || tierConfig.chat_privado) {
+        await vipChannel.ensureVipChannels(ownerId, { guildId }).catch((err) => { logger.warn({ err }, "Falha ao criar canais no vip_shop_buy"); });
+      }
+
+      return interaction.editReply({
+        content: `✅ Parabéns! Você adquiriu **${tierConfig.name || tierId}** por **${days} dias** usando **${price} 🪙**!\nExpira: <t:${Math.floor(expiresAt / 1000)}:R>\nSeu saldo atual: **${coins - price} 🪙**`,
+      });
     }
   },
 
