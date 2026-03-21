@@ -106,8 +106,8 @@ async function buildTierDashEmbed(guildId, tierId, vipConfig, vipService) {
       "",
       `💰 Daily extra: \`${tier?.valor_daily_extra ?? 0}\` | Bônus inicial: \`${tier?.bonus_inicial ?? 0}\` | Midas: \`${tier?.midas ? "Sim" : "Não"}\``,
       `👨‍👩‍👧 Família: \`${tier?.vagas_familia ?? 0}\` vagas | Damas: \`${tier?.primeiras_damas ?? 0}\``,
-      `⚡ Call: \`${tier?.canCall ? "Sim" : "Não"}\` | Chat: \`${tier?.chat_privado ? "Sim" : "Não"}\` | Cargo Custom: \`${tier?.hasCustomRole ? "Sim" : "Não"}\``,
-      `🛒 Shop: \`${tier?.shop_enabled ? "Ativo" : "Inativo"}\` — Preço: \`${tier?.shop_fixed_price ?? "—"}\` fixo / \`${tier?.shop_price_per_day ?? "—"}\` por dia`,
+      `⚡ Call: \`${tier?.canCall ? "Sim" : "Não"}\` | Chat: \`${tier?.chat_privado ? "Sim" : "Não"}\` | Cargo Custom: \`${tier?.hasCustomRole ? "Sim" : "Não"}\` | Ícone Custom: \`${tier?.hasCustomIcon ? "Sim" : "Não"}\``,
+      `🛒 Shop: \`${tier?.shop_enabled ? "Ativo" : "Inativo"}\` — 7d: \`${Number.isFinite(tier?.shop_price_7d) ? tier.shop_price_7d : (Number.isFinite(tier?.shop_price_per_day) ? Math.round(tier.shop_price_per_day * 7) : "—")}\` / 30d: \`${Number.isFinite(tier?.shop_price_30d) ? tier.shop_price_30d : (Number.isFinite(tier?.shop_fixed_price) ? tier.shop_fixed_price : "—")}\` 🪙`,
       "",
       "Cotas:",
       cotasDesc,
@@ -844,28 +844,27 @@ module.exports = {
       const chat_privado = parseBool(interaction.fields.getTextInputValue("chat_privado"));
       const hasCustomRole = parseBool(interaction.fields.getTextInputValue("hasCustomRole"));
       const high_quality_voice = parseBool(interaction.fields.getTextInputValue("high_quality_voice"));
+      const hasCustomIcon = parseBool(interaction.fields.getTextInputValue("hasCustomIcon"));
       await vipConfig.updateTier(guildId, tierId, "tec", {
         ...(canCall !== null ? { canCall } : {}),
         ...(chat_privado !== null ? { chat_privado } : {}),
         ...(hasCustomRole !== null ? { hasCustomRole } : {}),
         ...(high_quality_voice !== null ? { high_quality_voice } : {}),
+        ...(hasCustomIcon !== null ? { hasCustomIcon } : {}),
       });
       return interaction.reply({ content: `✅ Configuração técnica do tier \`${tierId}\` atualizada.`, flags: MessageFlags.Ephemeral });
     }
 
     if (section === "shop") {
       const shop_enabled = parseBool(interaction.fields.getTextInputValue("shop_enabled"));
-      const shop_price_per_day = parseNum(interaction.fields.getTextInputValue("shop_price_per_day"));
-      const shop_fixed_price = parseNum(interaction.fields.getTextInputValue("shop_fixed_price"));
-      const shop_default_days = parseNum(interaction.fields.getTextInputValue("shop_default_days"));
-      if (shop_price_per_day !== null && shop_price_per_day < 0) return interaction.reply({ content: "Preço por dia inválido.", flags: MessageFlags.Ephemeral });
-      if (shop_fixed_price !== null && shop_fixed_price < 0) return interaction.reply({ content: "Preço fixo inválido.", flags: MessageFlags.Ephemeral });
-      if (shop_default_days !== null && shop_default_days < 0) return interaction.reply({ content: "Dias padrão inválidos.", flags: MessageFlags.Ephemeral });
+      const shop_price_7d = parseNum(interaction.fields.getTextInputValue("shop_price_7d"));
+      const shop_price_30d = parseNum(interaction.fields.getTextInputValue("shop_price_30d"));
+      if (shop_price_7d !== null && shop_price_7d < 0) return interaction.reply({ content: "Preço 7 dias inválido.", flags: MessageFlags.Ephemeral });
+      if (shop_price_30d !== null && shop_price_30d < 0) return interaction.reply({ content: "Preço 30 dias inválido.", flags: MessageFlags.Ephemeral });
       await vipConfig.updateTier(guildId, tierId, "shop", {
         ...(shop_enabled !== null ? { shop_enabled } : {}),
-        ...(shop_price_per_day !== null ? { shop_price_per_day } : {}),
-        ...(shop_fixed_price !== null ? { shop_fixed_price } : {}),
-        ...(shop_default_days !== null ? { shop_default_days } : {}),
+        ...(shop_price_7d !== null ? { shop_price_7d } : {}),
+        ...(shop_price_30d !== null ? { shop_price_30d } : {}),
       });
       return interaction.reply({ content: `✅ Loja do tier \`${tierId}\` atualizada.`, flags: MessageFlags.Ephemeral });
     }
@@ -951,11 +950,16 @@ async function showSectionModal(interaction, section, guildId, tierId, tier) {
         new ActionRowBuilder().addComponents(
           new TextInputBuilder().setCustomId("high_quality_voice").setLabel("Áudio high quality? (1=sim, 0=não)").setStyle(TextInputStyle.Short).setRequired(false).setValue(tier.high_quality_voice === true ? "1" : (tier.high_quality_voice === false ? "0" : "")),
         ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder().setCustomId("hasCustomIcon").setLabel("Ícone de cargo custom? (1=sim, 0=não)").setStyle(TextInputStyle.Short).setRequired(false).setValue(tier.hasCustomIcon === true ? "1" : (tier.hasCustomIcon === false ? "0" : "")),
+        ),
       );
     return interaction.showModal(modal);
   }
 
   if (section === "shop") {
+    const legacyPrice7d = Number.isFinite(tier.shop_price_7d) ? tier.shop_price_7d : (Number.isFinite(tier.shop_price_per_day) ? Math.round(tier.shop_price_per_day * 7) : null);
+    const legacyPrice30d = Number.isFinite(tier.shop_price_30d) ? tier.shop_price_30d : (Number.isFinite(tier.shop_fixed_price) ? tier.shop_fixed_price : (Number.isFinite(tier.shop_price_per_day) ? Math.round(tier.shop_price_per_day * 30) : null));
     const modal = new ModalBuilder()
       .setCustomId(`vipadmin_modal_shop_${guildId}_${tierId}`)
       .setTitle(`🛒 Loja VIP: ${String(tier.name || tierId).substring(0, 30)}`)
@@ -964,13 +968,10 @@ async function showSectionModal(interaction, section, guildId, tierId, tier) {
           new TextInputBuilder().setCustomId("shop_enabled").setLabel("Habilitar compra? (1=sim, 0=não)").setStyle(TextInputStyle.Short).setRequired(false).setValue(tier.shop_enabled === true ? "1" : (tier.shop_enabled === false ? "0" : "")),
         ),
         new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId("shop_price_per_day").setLabel("Preço/dia. Vazio=não usar").setStyle(TextInputStyle.Short).setRequired(false).setValue(Number.isFinite(tier.shop_price_per_day) ? String(tier.shop_price_per_day) : ""),
+          new TextInputBuilder().setCustomId("shop_price_7d").setLabel("Preço 7 dias (WDA Coins). Vazio=sem plano").setStyle(TextInputStyle.Short).setRequired(false).setValue(legacyPrice7d !== null ? String(legacyPrice7d) : ""),
         ),
         new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId("shop_fixed_price").setLabel("Preço fixo. Vazio=não usar").setStyle(TextInputStyle.Short).setRequired(false).setValue(Number.isFinite(tier.shop_fixed_price) ? String(tier.shop_fixed_price) : ""),
-        ),
-        new ActionRowBuilder().addComponents(
-          new TextInputBuilder().setCustomId("shop_default_days").setLabel("Dias padrão. Vazio=usar tier").setStyle(TextInputStyle.Short).setRequired(false).setValue(Number.isFinite(tier.shop_default_days) ? String(tier.shop_default_days) : ""),
+          new TextInputBuilder().setCustomId("shop_price_30d").setLabel("Preço 30 dias (WDA Coins). Vazio=sem plano").setStyle(TextInputStyle.Short).setRequired(false).setValue(legacyPrice30d !== null ? String(legacyPrice30d) : ""),
         ),
       );
     return interaction.showModal(modal);
