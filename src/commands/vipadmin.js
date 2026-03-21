@@ -1,18 +1,4 @@
 const { logger } = require("../logger");
-// ============================================================
-//  vipadmin.js  —  Refatorado
-//  Novidades:
-//   • Sub-menu /tiers tier substituído por Dashboard de Botões
-//   • Botão "🎭 Definir Cargos Base" → modal com vipBaseRoleId,
-//     cargoFantasmaId, vipRoleSeparatorId, familyRoleSeparatorId
-//   • Botão "➕ Adicionar/Editar Tier VIP" → mantém modais eco/soc/tec/shop
-//   • Botão "🗑️ Remover Tier VIP" → confirma e deleta
-//   • Botão "⚙️ Cotas Avançadas" → painel de configuração Modo A e B
-//   • Botão "✖ Fechar"
-//   • /membros add e remove integrados com cargo base VIP
-//     via vipService (internamente) e vipRole.assignTierRole
-// ============================================================
-
 const {
   SlashCommandBuilder,
   PermissionFlagsBits,
@@ -23,13 +9,11 @@ const {
   TextInputBuilder,
   TextInputStyle,
   EmbedBuilder,
-  ChannelType,
   RoleSelectMenuBuilder,
   StringSelectMenuBuilder,
+  UserSelectMenuBuilder,
   MessageFlags,
 } = require("discord.js");
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseBool(raw) {
   if (raw === "" || raw == null) return null;
@@ -42,22 +26,67 @@ function parseNum(raw) {
   return Number.isFinite(n) ? n : null;
 }
 
-// Constrói a embed do painel principal de um tier
+function buildMainDashEmbed(guildId, gConf, tiersCount) {
+  return new EmbedBuilder()
+    .setTitle("👑 Painel Supremo VIP")
+    .setColor(0x5865f2)
+    .setDescription([
+      "Central de gestão VIP e Família.",
+      "",
+      "⚙️ Infraestrutura & Setup",
+      "👑 Gestão de Tiers",
+      "👤 Gerenciar Membros",
+      "🏠 Gestão de Família (Force)",
+      "",
+      `Servidor: \`${guildId}\``,
+      `Tiers cadastrados: **${tiersCount}**`,
+      `Canal de logs: ${gConf?.logChannelId ? `<#${gConf.logChannelId}>` : "Não definido"}`,
+    ].join("\n"));
+}
+
+function buildMainDashComponents(guildId) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`vipadmin_dash:infra:${guildId}:root`).setLabel("⚙️ Infraestrutura & Setup").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`vipadmin_dash:tiers:${guildId}:root`).setLabel("👑 Gestão de Tiers").setStyle(ButtonStyle.Primary),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`vipadmin_dash:members:${guildId}:root`).setLabel("👤 Gerenciar Membros").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`vipadmin_dash:family:${guildId}:root`).setLabel("🏠 Gestão de Família").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`vipadmin_dash:close:${guildId}:root`).setLabel("✖ Fechar").setStyle(ButtonStyle.Secondary),
+    ),
+  ];
+}
+
+function buildTierDashComponents(tierId, guildId, hasTiers) {
+  const id = (action) => `vipadmin_dash:${action}:${guildId}:${tierId}`;
+
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(id("set_base_roles")).setLabel("🎭 Definir Cargos Base").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(id("add_tier")).setLabel("➕ Adicionar/Editar Tier").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(id("remove_tier")).setLabel("🗑️ Remover Tier").setStyle(ButtonStyle.Danger).setDisabled(!hasTiers),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(id("cotas")).setLabel("⚙️ Cotas Avançadas").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(id("set_booster")).setLabel("🚀 Tier Booster Exclusivo").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(id("set_dama_roles")).setLabel("💍 Cargos de Primeira Dama").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`vipadmin_dash:tiers:${guildId}:root`).setLabel("◀ Tiers").setStyle(ButtonStyle.Secondary),
+    ),
+  ];
+}
+
 async function buildTierDashEmbed(guildId, tierId, vipConfig, vipService) {
   const gConf = vipService.getGuildConfig(guildId);
-  const tier  = await vipConfig.getTierConfig(guildId, tierId);
+  const tier = await vipConfig.getTierConfig(guildId, tierId);
   const tiers = await vipConfig.getGuildTiers(guildId);
-
-  const allTierNames = Object.keys(tiers)
-    .map((id) => `\`${id}\``)
-    .join(", ") || "—";
-
+  const allTierNames = Object.keys(tiers).map((id) => `\`${id}\``).join(", ") || "—";
   const cotasDesc = (() => {
     if (!tier?.cotasConfig) return "Não configurado";
     const regras = Array.isArray(tier.cotasConfig) ? tier.cotasConfig : [tier.cotasConfig];
     return regras.map((r) => {
-      if (r.modo === "A") return `🔹 Modo A (Hierárquico): **${r.quantidade}** cotas de tiers inferiores`;
-      if (r.modo === "B") return `🔸 Modo B (Específico): **${r.quantidade}** cotas do tier \`${r.targetTierId}\``;
+      if (r.modo === "A") return `🔹 Modo A: **${r.quantidade}** cotas hierárquicas`;
+      if (r.modo === "B") return `🔸 Modo B: **${r.quantidade}** cotas do tier \`${r.targetTierId}\``;
       return "Desconhecido";
     }).join("\n");
   })();
@@ -70,638 +99,462 @@ async function buildTierDashEmbed(guildId, tierId, vipConfig, vipService) {
       `**Nome:** ${tier?.name || tierId}`,
       `**Tier Booster:** ${gConf?.boosterTierId === tierId ? "✅ Este tier é o Tier Booster Exclusivo" : "—"}`,
       "",
-      "**── Cargos Globais ──**",
-      `🔑 Cargo Base VIP: ${gConf?.vipBaseRoleId   ? `<@&${gConf.vipBaseRoleId}>`        : "❌ Não definido"}`,
-      `👻 Cargo Fantasma: ${gConf?.cargoFantasmaId  ? `<@&${gConf.cargoFantasmaId}>`      : "❌ Não definido"}`,
-      `📌 Sep. VIP:       ${gConf?.vipRoleSeparatorId ? `<@&${gConf.vipRoleSeparatorId}>` : "❌ Não definido"}`,
-      `📌 Sep. Família:   ${gConf?.familyRoleSeparatorId ? `<@&${gConf.familyRoleSeparatorId}>` : "❌ Não definido"}`,
-      `🚀 Tier Booster Exclusivo: ${gConf?.boosterTierId ? `\`${gConf.boosterTierId}\`` : "❌ Não definido"}`,
+      `🔑 Cargo Base VIP: ${gConf?.vipBaseRoleId ? `<@&${gConf.vipBaseRoleId}>` : "❌ Não definido"}`,
+      `👻 Cargo Fantasma: ${gConf?.cargoFantasmaId ? `<@&${gConf.cargoFantasmaId}>` : "❌ Não definido"}`,
+      `📌 Sep. VIP: ${gConf?.vipRoleSeparatorId ? `<@&${gConf.vipRoleSeparatorId}>` : "❌ Não definido"}`,
+      `📌 Sep. Família: ${gConf?.familyRoleSeparatorId ? `<@&${gConf.familyRoleSeparatorId}>` : "❌ Não definido"}`,
       "",
-      "**── Benefícios ──**",
       `💰 Daily extra: \`${tier?.valor_daily_extra ?? 0}\` | Bônus inicial: \`${tier?.bonus_inicial ?? 0}\` | Midas: \`${tier?.midas ? "Sim" : "Não"}\``,
       `👨‍👩‍👧 Família: \`${tier?.vagas_familia ?? 0}\` vagas | Damas: \`${tier?.primeiras_damas ?? 0}\``,
       `⚡ Call: \`${tier?.canCall ? "Sim" : "Não"}\` | Chat: \`${tier?.chat_privado ? "Sim" : "Não"}\` | Cargo Custom: \`${tier?.hasCustomRole ? "Sim" : "Não"}\``,
       `🛒 Shop: \`${tier?.shop_enabled ? "Ativo" : "Inativo"}\` — Preço: \`${tier?.shop_fixed_price ?? "—"}\` fixo / \`${tier?.shop_price_per_day ?? "—"}\` por dia`,
       "",
-      "**── Cotas Avançadas ──**",
+      "Cotas:",
       cotasDesc,
       "",
-      `**Todos os tiers:** ${allTierNames}`,
-    ].join("\n"))
-    .setFooter({ text: "VIP System | © WDA - Todos os direitos reservados" });
+      `Todos os tiers: ${allTierNames}`,
+    ].join("\n"));
 }
 
-// Constrói os botões do painel principal
-function buildTierDashComponents(tierId, guildId, hasTiers) {
-  const id = (action) => `vipadmin_dash:${action}:${guildId}:${tierId}`;
-
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(id("set_base_roles"))
-      .setLabel("🎭 Definir Cargos Base")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(id("add_tier"))
-      .setLabel("➕ Adicionar/Editar Tier")
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(id("remove_tier"))
-      .setLabel("🗑️ Remover Tier")
-      .setStyle(ButtonStyle.Danger)
-      .setDisabled(!hasTiers),
-  );
-
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(id("cotas"))
-      .setLabel("⚙️ Cotas Avançadas")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(id("set_booster"))
-      .setLabel("🚀 Tier Booster Exclusivo")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(id("set_dama_roles"))
-      .setLabel("💍 Cargos de Primeira Dama")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(id("close"))
-      .setLabel("✖ Fechar")
-      .setStyle(ButtonStyle.Secondary),
-  );
-
-  return [row1, row2];
+async function buildFamilyInfoEmbed(familyService, ownerId) {
+  const family = await familyService.getFamilyByOwner(ownerId);
+  if (!family) {
+    return new EmbedBuilder().setTitle("🏠 Família não encontrada").setColor(0xed4245).setDescription("Este usuário não lidera uma família.");
+  }
+  return new EmbedBuilder()
+    .setTitle(`🏠 Família: ${family.name}`)
+    .setColor(0x9b59b6)
+    .addFields(
+      { name: "Líder", value: `<@${family.ownerId}>`, inline: true },
+      { name: "Ocupação", value: `👥 ${family.members.length} / ${family.maxMembers}`, inline: true },
+      { name: "ID Interno", value: `\`${family.id}\`` },
+    );
 }
-
-// ─── Módulo Principal ──────────────────────────────────────────────────────────
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("vipadmin")
     .setDescription("👑 Painel Supremo de Administração VIP e Família")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
-    .addSubcommandGroup((group) =>
-      group.setName("infra").setDescription("Infraestrutura VIP")
-        .addSubcommand((sub) =>
-          sub.setName("setup").setDescription("Configura a estrutura técnica do VIP")
-            .addChannelOption((opt) => opt.setName("logs").setDescription("Canal de auditoria").setRequired(true))
-            .addChannelOption((opt) => opt.setName("categoria").setDescription("Categoria para canais VIP").addChannelTypes(ChannelType.GuildCategory).setRequired(true))
-            .addChannelOption((opt) => opt.setName("categoria_familia").setDescription("Categoria de Famílias").addChannelTypes(ChannelType.GuildCategory).setRequired(true))
-            .addChannelOption((opt) => opt.setName("canal_criar_call").setDescription("Canal '➕ Criar Call VIP'").addChannelTypes(ChannelType.GuildVoice).setRequired(true))
-            .addRoleOption((opt) => opt.setName("separador_vip").setDescription("Separador de cargos VIP personalizados").setRequired(true))
-            .addRoleOption((opt) => opt.setName("separador_familia").setDescription("Separador de cargos de Família").setRequired(false))
-            .addRoleOption((opt) => opt.setName("cargo_base_vip").setDescription("Cargo Base VIP global").setRequired(false))
-            .addRoleOption((opt) => opt.setName("fantasma").setDescription("Cargo Fantasma (Vigilante)").setRequired(false))
-        )
-    )
-
-    .addSubcommandGroup((group) =>
-      group.setName("tiers").setDescription("Gestão de Tiers")
-        .addSubcommand((sub) =>
-          sub.setName("tier").setDescription("Abre o painel de um tier (cria se não existir)")
-            .addStringOption((opt) => opt.setName("id").setDescription("ID do tier (ex: supremo, diamante)").setRequired(true))
-            .addRoleOption((opt) => opt.setName("cargo").setDescription("Cargo do Discord correspondente").setRequired(true))
-        )
-    )
-
-    .addSubcommandGroup((group) =>
-      group.setName("membros").setDescription("Controle de Membros")
-        .addSubcommand((sub) =>
-          sub.setName("add").setDescription("Ativa o VIP para um membro")
-            .addUserOption((opt) => opt.setName("membro").setDescription("Destinatário").setRequired(true))
-            .addStringOption((opt) => opt.setName("tier").setDescription("ID do Tier").setRequired(true))
-            .addIntegerOption((opt) => opt.setName("dias").setDescription("Duração em dias").setRequired(true).setMinValue(1))
-        )
-        .addSubcommand((sub) =>
-          sub.setName("remove").setDescription("Remove o VIP de um membro imediatamente")
-            .addUserOption((opt) => opt.setName("membro").setDescription("Membro a ser removido").setRequired(true))
-        )
-        .addSubcommand((sub) =>
-          sub.setName("list").setDescription("Lista Tiers configurados e membros VIP ativos")
-        )
-    )
-
-    .addSubcommandGroup((group) =>
-      group.setName("family").setDescription("Gestão de Família (Admin Force)")
-        .addSubcommand((sub) =>
-          sub.setName("info").setDescription("Detalhes técnicos de uma família")
-            .addUserOption((opt) => opt.setName("dono").setDescription("Dono da família").setRequired(true))
-        )
-        .addSubcommand((sub) =>
-          sub.setName("delete").setDescription("Apaga uma família e limpa cargos/canais")
-            .addUserOption((opt) => opt.setName("dono").setDescription("Dono da família").setRequired(true))
-        )
-        .addSubcommand((sub) =>
-          sub.setName("limit").setDescription("Altera o limite de vagas de uma família")
-            .addUserOption((opt) => opt.setName("dono").setDescription("Dono da família").setRequired(true))
-            .addIntegerOption((opt) => opt.setName("vagas").setDescription("Novo limite").setRequired(true).setMinValue(1))
-        )
-    ),
-
-  // ─── EXECUTE ────────────────────────────────────────────────────────────────
   async execute(interaction) {
-    const { vip: vipService, vipConfig, family: familyService, vipChannel, vipRole } =
-      interaction.client.services;
-    const sub     = interaction.options.getSubcommand();
-    const group   = interaction.options.getSubcommandGroup();
+    const { vip: vipService, vipConfig } = interaction.client.services;
     const guildId = interaction.guildId;
+    const gConf = vipService.getGuildConfig(guildId);
+    const tiers = await vipConfig.getGuildTiers(guildId);
 
-    // ── GRUPO: family ──────────────────────────────────────────────────────────
-    if (group === "family") {
-      const targetOwner = interaction.options.getUser("dono");
-
-      if (sub === "info") {
-        const family = await familyService.getFamilyByOwner(targetOwner.id);
-        if (!family) return interaction.reply({ content: "❌ Este utilizador não lidera uma família.", flags: MessageFlags.Ephemeral });
-
-        const embed = new EmbedBuilder()
-          .setTitle(`🏠 Família: ${family.name}`)
-          .setColor("Purple")
-          .addFields(
-            { name: "Líder",    value: `<@${family.ownerId}>`, inline: true },
-            { name: "Ocupação", value: `👥 ${family.members.length} / ${family.maxMembers} membros`, inline: true },
-            { name: "ID Interno", value: `\`${family.id}\``, inline: false },
-          );
-        return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
-      }
-
-      if (sub === "delete") {
-        await familyService.deleteFamily(interaction.guild, targetOwner.id);
-        return interaction.reply({ content: `🗑️ Família de <@${targetOwner.id}> apagada e canais limpos.`, flags: MessageFlags.Ephemeral });
-      }
-
-      if (sub === "limit") {
-        const vagas  = interaction.options.getInteger("vagas");
-        const family = await familyService.getFamilyByOwner(targetOwner.id);
-        if (!family) return interaction.reply({ content: "❌ Família não localizada.", flags: MessageFlags.Ephemeral });
-        await familyService.updateMaxMembers(family.id, vagas);
-        return interaction.reply({ content: `✅ Limite de **${family.name}** atualizado para **${vagas}**.`, flags: MessageFlags.Ephemeral });
-      }
-    }
-
-    // ── GRUPO: infra ───────────────────────────────────────────────────────────
-    if (sub === "setup") {
-      const separadorVip    = interaction.options.getRole("separador_vip");
-      const separadorFamilia = interaction.options.getRole("separador_familia");
-      const cargoBaseVip    = interaction.options.getRole("cargo_base_vip");
-      const fantasma        = interaction.options.getRole("fantasma");
-
-      await vipService.setGuildConfig(guildId, {
-        logChannelId:          interaction.options.getChannel("logs").id,
-        vipCategoryId:         interaction.options.getChannel("categoria").id,
-        familyCategoryId:      interaction.options.getChannel("categoria_familia").id,
-        criarCallChannelId:    interaction.options.getChannel("canal_criar_call").id,
-        // Separadores
-        vipRoleSeparatorId:    separadorVip?.id    || null,
-        familyRoleSeparatorId: separadorFamilia?.id || null,
-        // Legado (mantido para compatibilidade com vipRoleManager antigo)
-        separatorId:           separadorVip?.id    || null,
-        // Cargo base VIP global
-        vipBaseRoleId:         cargoBaseVip?.id    || null,
-        // Fantasma
-        cargoFantasmaId:       fantasma?.id        || null,
-      });
-
-      const embed = new EmbedBuilder()
-        .setTitle("✅ Infraestrutura VIP configurada")
-        .setColor(0x57f287)
-        .addFields(
-          { name: "📋 Logs",              value: `<#${interaction.options.getChannel("logs").id}>`, inline: true },
-          { name: "📁 Cat. VIP",          value: `<#${interaction.options.getChannel("categoria").id}>`, inline: true },
-          { name: "📁 Cat. Família",      value: `<#${interaction.options.getChannel("categoria_familia").id}>`, inline: true },
-          { name: "🔊 Criar Call",        value: `<#${interaction.options.getChannel("canal_criar_call").id}>`, inline: true },
-          { name: "📌 Sep. VIP",          value: separadorVip    ? `<@&${separadorVip.id}>`     : "—", inline: true },
-          { name: "📌 Sep. Família",      value: separadorFamilia ? `<@&${separadorFamilia.id}>` : "—", inline: true },
-          { name: "🔑 Cargo Base VIP",    value: cargoBaseVip    ? `<@&${cargoBaseVip.id}>`     : "—", inline: true },
-          { name: "👻 Cargo Fantasma",    value: fantasma        ? `<@&${fantasma.id}>`         : "—", inline: true },
-        );
-
-      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
-    }
-
-    // ── GRUPO: tiers — abre dashboard ────────────────────────────────────────
-    if (sub === "tier") {
-      const tid  = interaction.options.getString("id").toLowerCase();
-      const role = interaction.options.getRole("cargo");
-
-      // Garante que a base do tier existe
-      await vipConfig.setBase(guildId, tid, role.id, role.name);
-
-      const tiers    = await vipConfig.getGuildTiers(guildId);
-      const hasTiers = Object.keys(tiers).length > 0;
-      const embed    = await buildTierDashEmbed(guildId, tid, vipConfig, vipService);
-
-      return interaction.reply({
-        embeds:     [embed],
-        components: buildTierDashComponents(tid, guildId, hasTiers),
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-
-    // ── GRUPO: membros ─────────────────────────────────────────────────────────
-    if (sub === "add") {
-      const target  = interaction.options.getMember("membro");
-      const tid     = interaction.options.getString("tier").toLowerCase();
-      const dias    = interaction.options.getInteger("dias");
-      const tier    = await vipConfig.getTierConfig(guildId, tid);
-
-      if (!tier) {
-        return interaction.reply({ content: `❌ O Tier \`${tid}\` não existe. Configure-o em /vipadmin tiers tier.`, flags: MessageFlags.Ephemeral });
-      }
-
-      const expiresAt = Date.now() + dias * 24 * 60 * 60 * 1000;
-
-      // addVip já entrega o cargo base internamente
-      await vipService.addVip(guildId, target.id, {
-        tierId:    tid,
-        expiresAt,
-        addedBy:   interaction.user.id,
-        source:    "admin",
-      });
-
-      // Entrega e posiciona o cargo do Tier
-      await vipRole.assignTierRole(target.id, tid, { guildId }).catch((err) =>
-        interaction.client.services?.log?.error?.({ err }, "assignTierRole falhou no vipadmin add")
-      );
-
-      // Cria canais VIP se o tier exigir
-      if (tier.canCall || tier.chat_privado) {
-        await vipChannel.ensureVipChannels(target.id, { guildId });
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle("✅ VIP Ativado")
-        .setColor(0x57f287)
-        .setDescription(`<@${target.id}> agora é **${tier.name || tid.toUpperCase()}** por **${dias}** dias.`)
-        .addFields(
-          { name: "Tier",    value: `\`${tid}\``,             inline: true },
-          { name: "Expira",  value: `<t:${Math.floor(expiresAt / 1000)}:R>`, inline: true },
-          { name: "Por",     value: `<@${interaction.user.id}>`, inline: true },
-        );
-
-      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
-    }
-
-    if (sub === "remove") {
-      const target = interaction.options.getMember("membro");
-
-      await vipChannel.deleteVipChannels(target.id, { guildId });
-      await vipRole.deletePersonalRole(target.id, { guildId });
-
-      const data = await vipService.getVipData(guildId, target.id);
-      if (data?.tierId) {
-        await vipRole.removeTierRole(target.id, data.tierId, { guildId });
-      }
-
-      // removeVip remove o cargo base internamente
-      await vipService.removeVip(guildId, target.id);
-
-      return interaction.reply({
-        content:   `🚫 VIP de <@${target.id}> removido e todos os ativos apagados.`,
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-
-    if (sub === "list") {
-      const tiers  = await vipConfig.getGuildTiers(guildId);
-      const report = await vipService.getFullVipReport(guildId);
-      const gConf  = vipService.getGuildConfig(guildId);
-
-      const embed = new EmbedBuilder()
-        .setTitle("📊 Dashboard VIP")
-        .setColor(0x5865f2);
-
-      const tierText = Object.keys(tiers)
-        .map((t) => `• **${t.toUpperCase()}**: <@&${tiers[t].roleId}>`)
-        .join("\n") || "Nenhum tier configurado.";
-      embed.addFields({ name: "🏷️ Tiers Configurados", value: tierText });
-
-      const activeVips = report.activeVips || [];
-      const vipText    = activeVips
-        .map((v) => {
-          const exp = v.expiresAt ? `<t:${Math.floor(v.expiresAt / 1000)}:d>` : "Permanente";
-          return `<@${v.userId}> — \`${v.tierId}\` — Expira: ${exp}`;
-        })
-        .join("\n") || "Nenhum membro ativo.";
-      embed.addFields({ name: `👑 Membros Ativos (${activeVips.length})`, value: vipText.substring(0, 1024) });
-
-      embed.addFields(
-        { name: "🔑 Cargo Base VIP",   value: gConf?.vipBaseRoleId   ? `<@&${gConf.vipBaseRoleId}>`        : "Não definido", inline: true },
-        { name: "👻 Cargo Fantasma",   value: gConf?.cargoFantasmaId  ? `<@&${gConf.cargoFantasmaId}>`      : "Não definido", inline: true },
-        { name: "📌 Sep. VIP",         value: gConf?.vipRoleSeparatorId ? `<@&${gConf.vipRoleSeparatorId}>` : "Não definido", inline: true },
-        { name: "📌 Sep. Família",     value: gConf?.familyRoleSeparatorId ? `<@&${gConf.familyRoleSeparatorId}>` : "Não definido", inline: true },
-      );
-
-      return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
-    }
+    return interaction.reply({
+      embeds: [buildMainDashEmbed(guildId, gConf, Object.keys(tiers).length)],
+      components: buildMainDashComponents(guildId),
+      flags: MessageFlags.Ephemeral,
+    });
   },
 
-  // ─── HANDLE BUTTON ──────────────────────────────────────────────────────────
   async handleButton(interaction) {
-    if (!interaction.customId?.startsWith("vipadmin_dash:")) return;
-
-    // Valida permissão
+    if (
+      !interaction.customId?.startsWith("vipadmin_dash:")
+      && !interaction.customId?.startsWith("vipadmin_tier_section:")
+      && !interaction.customId?.startsWith("vipadmin_cotas:")
+    ) return;
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
       return interaction.reply({ content: "❌ Você não tem permissão.", flags: MessageFlags.Ephemeral });
     }
 
-    const parts   = interaction.customId.split(":");
-    // formato: vipadmin_dash:<action>:<guildId>:<tierId>
-    const action  = parts[1];
-    const guildId = parts[2];
-    const tierId  = parts[3];
+    const { vipConfig, vip: vipService, family: familyService, vipChannel, vipRole } = interaction.client.services;
 
-    if (interaction.guildId !== guildId) {
-      return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
-    }
-
-    const { vipConfig, vip: vipService } = interaction.client.services;
-
-    // ── ✖ Fechar ──────────────────────────────────────────────────────────────
-    if (action === "close") {
-      return interaction.message.delete().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
-    }
-
-    // ── 🎭 Definir Cargos Base ────────────────────────────────────────────────
-    if (action === "set_base_roles") {
-      const gConf = vipService.getGuildConfig(guildId);
-
-      const modal = new ModalBuilder()
-        .setCustomId(`vipadmin_modal_base_${guildId}`)
-        .setTitle("🎭 Definir Cargos Base VIP")
-        .addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId("vipBaseRoleId")
-              .setLabel("ID do Cargo Base VIP global")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(false)
-              .setValue(gConf?.vipBaseRoleId || ""),
-          ),
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId("cargoFantasmaId")
-              .setLabel("ID do Cargo Fantasma (Vigilante)")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(false)
-              .setValue(gConf?.cargoFantasmaId || ""),
-          ),
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId("vipRoleSeparatorId")
-              .setLabel("ID do Separador VIP")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(false)
-              .setValue(gConf?.vipRoleSeparatorId || ""),
-          ),
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId("familyRoleSeparatorId")
-              .setLabel("ID do Separador de Família")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(false)
-              .setValue(gConf?.familyRoleSeparatorId || ""),
-          ),
-        );
-
-      return interaction.showModal(modal);
-    }
-
-    // ── ➕ Adicionar/Editar Tier — mostra sub-menu de seções ──────────────────
-    if (action === "add_tier") {
-      const tier = await vipConfig.getTierConfig(guildId, tierId);
-      if (!tier) {
-        return interaction.reply({ content: `❌ Tier \`${tierId}\` não encontrado no banco.`, flags: MessageFlags.Ephemeral });
-      }
-
-      const id = (sec) => `vipadmin_tier_section:${sec}:${guildId}:${tierId}`;
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(id("eco")).setLabel("💰 Economia").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(id("soc")).setLabel("👨‍👩‍👧 Social").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(id("tec")).setLabel("⚡ Técnico").setStyle(ButtonStyle.Secondary),
-        new ButtonBuilder().setCustomId(id("shop")).setLabel("🛒 Loja").setStyle(ButtonStyle.Secondary),
-      );
-
-      return interaction.reply({
-        content:    `Qual seção deseja editar para o tier \`${tierId}\`?`,
-        components: [row],
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-
-    // ── 🗑️ Remover Tier ───────────────────────────────────────────────────────
-    if (action === "remove_tier") {
-      const tiers = await vipConfig.getGuildTiers(guildId);
-      if (!tiers[tierId]) {
-        return interaction.reply({ content: `❌ Tier \`${tierId}\` não encontrado.`, flags: MessageFlags.Ephemeral });
-      }
-
-      await vipConfig.removeTier(guildId, tierId);
-
-      const newTiers    = await vipConfig.getGuildTiers(guildId);
-      const hasTiers    = Object.keys(newTiers).length > 0;
-      const firstTierId = Object.keys(newTiers)[0] || tierId;
-      const embed       = await buildTierDashEmbed(guildId, firstTierId, vipConfig, vipService);
-
-      return interaction.update({
-        embeds:     [embed],
-        components: buildTierDashComponents(firstTierId, guildId, hasTiers),
-      });
-    }
-
-    // ── 🚀 Tier Booster Exclusivo ─────────────────────────────────────────────
-    if (action === "set_booster") {
-      const gConf = vipService.getGuildConfig(guildId);
-
-      const modal = new ModalBuilder()
-        .setCustomId(`vipadmin_modal_booster_${guildId}`)
-        .setTitle("🚀 Configurar Tier Booster Exclusivo")
-        .addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId("boosterTierId")
-              .setLabel("ID do Tier Booster (deixe vazio para remover)")
-              .setStyle(TextInputStyle.Short)
-              .setRequired(false)
-              .setValue(gConf?.boosterTierId || "")
-              .setPlaceholder("Ex: booster_tier"),
-          ),
-        );
-
-      return interaction.showModal(modal);
-    }
-
-    // ── 💍 Cargos de Primeira Dama (Multi-Role) ───────────────────────────────
-    if (action === "set_dama_roles") {
-      const gConf = await vipService.getGuildConfig(guildId) || {};
-      const currentIds = gConf?.primeraDamaRoleIds || (gConf?.damaRoleId ? [gConf.damaRoleId] : []);
-
-      const roleSelect = new RoleSelectMenuBuilder()
-        .setCustomId(`vipadmin_roleselmenu_dama_${guildId}`)
-        .setPlaceholder("Selecione os cargos de Primeira Dama")
-        .setMinValues(0)
-        .setMaxValues(10)
-        .setDefaultRoles(currentIds.filter(Boolean));
-
-      const embed = new EmbedBuilder()
-        .setTitle("💍 Configurar Cargos de Primeira Dama")
-        .setColor(0xe91e63)
-        .setDescription([
-          "Selecione **um ou mais cargos** que serão concedidos ao membro definido como Primeira Dama de um VIP.",
-          "",
-          currentIds.length
-            ? `**Configuração atual:** ${currentIds.map(id => `<@&${id}>`).join(", ")}`
-            : "**Nenhum cargo configurado atualmente.**",
-          "",
-          "⚠️ Para **remover** todos os cargos, limpe a seleção e confirme.",
-        ].join("\n"))
-        .setFooter({ text: "vipadmin | © WDA - Todos os direitos reservados" });
-
-      return interaction.update({
-        embeds: [embed],
-        components: [new ActionRowBuilder().addComponents(roleSelect)],
-      });
-    }
-
-    // ── ⚙️ Cotas Avançadas ────────────────────────────────────────────────────
-    if (action === "cotas") {
-      const tier = await vipConfig.getTierConfig(guildId, tierId);
-      const cotasConfig  = tier?.cotasConfig;
-      const regras       = Array.isArray(cotasConfig) ? cotasConfig : (cotasConfig ? [cotasConfig] : []);
-
-      const descAtual = regras.length
-        ? regras.map((r, i) => {
-            if (r.modo === "A") return `[${i+1}] Modo A: ${r.quantidade} cotas hierárquicas`;
-            if (r.modo === "B") return `[${i+1}] Modo B: ${r.quantidade} cotas do tier \`${r.targetTierId}\``;
-            return `[${i+1}] Desconhecido`;
-          }).join("\n")
-        : "Sem cotas configuradas.";
-
-      const idC = (a) => `vipadmin_cotas:${a}:${guildId}:${tierId}`;
-
-      const embed = new EmbedBuilder()
-        .setTitle(`⚙️ Cotas Avançadas — \`${tierId}\``)
-        .setColor(0xfee75c)
-        .setDescription([
-          "**Regras atuais:**",
-          descAtual,
-          "",
-          "**Modo A (Hierárquico):** o VIP pode dar X cotas de qualquer tier inferior ao seu.",
-          "**Modo B (Específico):** o VIP pode dar X cotas de um tier pré-definido.",
-          "",
-          "Use os botões para adicionar ou limpar regras.",
-        ].join("\n"));
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(idC("add_a")).setLabel("➕ Adicionar Modo A").setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(idC("add_b")).setLabel("➕ Adicionar Modo B").setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId(idC("clear")).setLabel("🗑️ Limpar Todas").setStyle(ButtonStyle.Danger),
-        new ButtonBuilder().setCustomId(idC("back")).setLabel("◀ Voltar").setStyle(ButtonStyle.Secondary),
-      );
-
-      return interaction.update({ embeds: [embed], components: [row] });
-    }
-  },
-
-  // ─── HANDLE BUTTON — Seções do Tier e Cotas ─────────────────────────────────
-  async handleButtonSecondary(interaction) {
-    const { vipConfig, vip: vipService } = interaction.client.services;
-
-    // ── Sub-seções do tier (eco / soc / tec / shop) ──────────────────────────
-    if (interaction.customId?.startsWith("vipadmin_tier_section:")) {
-      if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-        return interaction.reply({ content: "❌ Sem permissão.", flags: MessageFlags.Ephemeral });
-      }
-
-      const parts   = interaction.customId.split(":");
-      const section = parts[1];
+    if (interaction.customId.startsWith("vipadmin_dash:")) {
+      const parts = interaction.customId.split(":");
+      const action = parts[1];
       const guildId = parts[2];
-      const tierId  = parts[3];
+      const targetId = parts[3];
 
       if (interaction.guildId !== guildId) {
-        return interaction.reply({ content: "Painel de outro servidor.", flags: MessageFlags.Ephemeral });
+        return interaction.reply({ content: "Este painel pertence a outro servidor.", flags: MessageFlags.Ephemeral });
       }
 
-      const tier = await vipConfig?.getTierConfig(guildId, tierId);
-      if (!tier) {
-        return interaction.reply({ content: `Tier \`${tierId}\` não encontrado.`, flags: MessageFlags.Ephemeral });
+      if (action === "close") {
+        return interaction.message.delete().catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
       }
 
-      return _showSectionModal(interaction, section, guildId, tierId, tier);
-    }
-
-    // ── Cotas ────────────────────────────────────────────────────────────────
-    if (interaction.customId?.startsWith("vipadmin_cotas:")) {
-      if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-        return interaction.reply({ content: "❌ Sem permissão.", flags: MessageFlags.Ephemeral });
-      }
-
-      const parts   = interaction.customId.split(":");
-      const action  = parts[1];
-      const guildId = parts[2];
-      const tierId  = parts[3];
-
-      if (interaction.guildId !== guildId) {
-        return interaction.reply({ content: "Painel de outro servidor.", flags: MessageFlags.Ephemeral });
-      }
-
-      // ◀ Voltar ao painel principal
-      if (action === "back") {
-        const tiers   = await vipConfig.getGuildTiers(guildId);
-        const embed   = await buildTierDashEmbed(guildId, tierId, vipConfig, vipService);
+      if (action === "home") {
+        const gConf = vipService.getGuildConfig(guildId);
+        const tiers = await vipConfig.getGuildTiers(guildId);
         return interaction.update({
-          embeds:     [embed],
-          components: buildTierDashComponents(tierId, guildId, Object.keys(tiers).length > 0),
+          embeds: [buildMainDashEmbed(guildId, gConf, Object.keys(tiers).length)],
+          components: buildMainDashComponents(guildId),
         });
       }
 
-      // 🗑️ Limpar todas as regras de cota
+      if (action === "infra") {
+        const gConf = vipService.getGuildConfig(guildId);
+        const embed = new EmbedBuilder()
+          .setTitle("⚙️ Infraestrutura & Setup")
+          .setColor(0x5865f2)
+          .setDescription([
+            `📋 Logs: ${gConf?.logChannelId ? `<#${gConf.logChannelId}>` : "—"}`,
+            `📁 Categoria VIP: ${gConf?.vipCategoryId ? `<#${gConf.vipCategoryId}>` : "—"}`,
+            `📁 Categoria Família: ${gConf?.familyCategoryId ? `<#${gConf.familyCategoryId}>` : "—"}`,
+            `🔊 Criar Call: ${gConf?.criarCallChannelId ? `<#${gConf.criarCallChannelId}>` : "—"}`,
+            `📌 Sep. VIP: ${gConf?.vipRoleSeparatorId ? `<@&${gConf.vipRoleSeparatorId}>` : "—"}`,
+            `📌 Sep. Família: ${gConf?.familyRoleSeparatorId ? `<@&${gConf.familyRoleSeparatorId}>` : "—"}`,
+            `🔑 Cargo Base VIP: ${gConf?.vipBaseRoleId ? `<@&${gConf.vipBaseRoleId}>` : "—"}`,
+            `👻 Cargo Fantasma: ${gConf?.cargoFantasmaId ? `<@&${gConf.cargoFantasmaId}>` : "—"}`,
+          ].join("\n"));
+        return interaction.update({
+          embeds: [embed],
+          components: [
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId(`vipadmin_dash:infra_setup:${guildId}:root`).setLabel("⚙️ Configurar IDs").setStyle(ButtonStyle.Primary),
+              new ButtonBuilder().setCustomId(`vipadmin_dash:set_base_roles:${guildId}:root`).setLabel("🎭 Cargos Base").setStyle(ButtonStyle.Secondary),
+              new ButtonBuilder().setCustomId(`vipadmin_dash:home:${guildId}:root`).setLabel("◀ Voltar").setStyle(ButtonStyle.Secondary),
+            ),
+          ],
+        });
+      }
+
+      if (action === "infra_setup") {
+        const gConf = vipService.getGuildConfig(guildId);
+        const modal = new ModalBuilder()
+          .setCustomId(`vipadmin_modal_infra_${guildId}`)
+          .setTitle("⚙️ Infraestrutura VIP")
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("logChannelId").setLabel("ID do canal de logs").setStyle(TextInputStyle.Short).setRequired(false).setValue(gConf?.logChannelId || ""),
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("vipCategoryId").setLabel("ID da categoria VIP").setStyle(TextInputStyle.Short).setRequired(false).setValue(gConf?.vipCategoryId || ""),
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("familyCategoryId").setLabel("ID da categoria de família").setStyle(TextInputStyle.Short).setRequired(false).setValue(gConf?.familyCategoryId || ""),
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("criarCallChannelId").setLabel("ID do canal Criar Call").setStyle(TextInputStyle.Short).setRequired(false).setValue(gConf?.criarCallChannelId || ""),
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("vipRoleSeparatorId").setLabel("ID do separador VIP").setStyle(TextInputStyle.Short).setRequired(false).setValue(gConf?.vipRoleSeparatorId || ""),
+            ),
+          );
+        return interaction.showModal(modal);
+      }
+
+      if (action === "tiers") {
+        const tiers = await vipConfig.getGuildTiers(guildId);
+        const tierIds = Object.keys(tiers);
+        const embed = new EmbedBuilder()
+          .setTitle("👑 Gestão de Tiers")
+          .setColor(0x5865f2)
+          .setDescription(tierIds.length ? "Selecione um tier no menu para abrir o painel de edição." : "Nenhum tier cadastrado. Crie um novo tier.");
+
+        const components = [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`vipadmin_dash:create_tier:${guildId}:root`).setLabel("➕ Criar Novo Tier").setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`vipadmin_dash:home:${guildId}:root`).setLabel("◀ Voltar").setStyle(ButtonStyle.Secondary),
+          ),
+        ];
+
+        if (tierIds.length) {
+          components.unshift(
+            new ActionRowBuilder().addComponents(
+              new StringSelectMenuBuilder()
+                .setCustomId(`vipadmin_tier_select:${guildId}`)
+                .setPlaceholder("Selecione um Tier")
+                .addOptions(
+                  tierIds.slice(0, 25).map((id) => ({
+                    label: tiers[id]?.name ? `${tiers[id].name}`.slice(0, 100) : id,
+                    description: `ID: ${id}`.slice(0, 100),
+                    value: id,
+                  })),
+                ),
+            ),
+          );
+        }
+
+        return interaction.update({ embeds: [embed], components });
+      }
+
+      if (action === "create_tier") {
+        const modal = new ModalBuilder()
+          .setCustomId(`vipadmin_modal_create_tier_${guildId}`)
+          .setTitle("➕ Criar novo Tier")
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("tierId").setLabel("ID do tier").setStyle(TextInputStyle.Short).setRequired(true),
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("roleId").setLabel("ID do cargo Discord").setStyle(TextInputStyle.Short).setRequired(true),
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("tierName").setLabel("Nome de exibição (opcional)").setStyle(TextInputStyle.Short).setRequired(false),
+            ),
+          );
+        return interaction.showModal(modal);
+      }
+
+      if (action === "members") {
+        const embed = new EmbedBuilder()
+          .setTitle("👤 Gerenciar Membros")
+          .setColor(0x57f287)
+          .setDescription("Selecione um membro para aplicar ações de VIP.");
+        const userSelect = new UserSelectMenuBuilder()
+          .setCustomId(`vipadmin_member_select:${guildId}`)
+          .setPlaceholder("Selecione um membro")
+          .setMinValues(1)
+          .setMaxValues(1);
+        return interaction.update({
+          embeds: [embed],
+          components: [
+            new ActionRowBuilder().addComponents(userSelect),
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId(`vipadmin_dash:home:${guildId}:root`).setLabel("◀ Voltar").setStyle(ButtonStyle.Secondary),
+            ),
+          ],
+        });
+      }
+
+      if (action === "member_give") {
+        const modal = new ModalBuilder()
+          .setCustomId(`vipadmin_modal_member_give_${guildId}_${targetId}`)
+          .setTitle("👑 Dar VIP")
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("tierId").setLabel("ID do Tier").setStyle(TextInputStyle.Short).setRequired(true),
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("dias").setLabel("Duração em dias").setStyle(TextInputStyle.Short).setRequired(true),
+            ),
+          );
+        return interaction.showModal(modal);
+      }
+
+      if (action === "member_remove") {
+        const target = await interaction.guild.members.fetch(targetId).catch(() => null);
+        if (!target) {
+          return interaction.reply({ content: "❌ Membro não encontrado no servidor.", flags: MessageFlags.Ephemeral });
+        }
+        await vipChannel.deleteVipChannels(target.id, { guildId });
+        await vipRole.deletePersonalRole(target.id, { guildId });
+        const data = await vipService.getVipData(guildId, target.id);
+        if (data?.tierId) await vipRole.removeTierRole(target.id, data.tierId, { guildId });
+        await vipService.removeVip(guildId, target.id);
+        return interaction.reply({ content: `🚫 VIP de <@${target.id}> removido.`, flags: MessageFlags.Ephemeral });
+      }
+
+      if (action === "member_info") {
+        const data = await vipService.getVipData(guildId, targetId);
+        if (!data) return interaction.reply({ content: "ℹ️ Este membro não possui VIP ativo.", flags: MessageFlags.Ephemeral });
+        const exp = data.expiresAt ? `<t:${Math.floor(data.expiresAt / 1000)}:R>` : "Permanente";
+        const embed = new EmbedBuilder()
+          .setTitle("ℹ️ Informações VIP do Membro")
+          .setColor(0x5865f2)
+          .setDescription(`<@${targetId}>`)
+          .addFields({ name: "Tier", value: `\`${data.tierId || "—"}\``, inline: true }, { name: "Expira", value: exp, inline: true });
+        return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      }
+
+      if (action === "family") {
+        const embed = new EmbedBuilder()
+          .setTitle("🏠 Gestão de Família (Force)")
+          .setColor(0x9b59b6)
+          .setDescription("Selecione o dono da família para abrir ações administrativas.");
+        const userSelect = new UserSelectMenuBuilder()
+          .setCustomId(`vipadmin_family_owner_select:${guildId}`)
+          .setPlaceholder("Selecione o dono da família")
+          .setMinValues(1)
+          .setMaxValues(1);
+        return interaction.update({
+          embeds: [embed],
+          components: [
+            new ActionRowBuilder().addComponents(userSelect),
+            new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setCustomId(`vipadmin_dash:home:${guildId}:root`).setLabel("◀ Voltar").setStyle(ButtonStyle.Secondary),
+            ),
+          ],
+        });
+      }
+
+      if (action === "family_delete") {
+        await familyService.deleteFamily(interaction.guild, targetId);
+        return interaction.reply({ content: `🗑️ Família de <@${targetId}> apagada e canais limpos.`, flags: MessageFlags.Ephemeral });
+      }
+
+      if (action === "family_limit") {
+        const modal = new ModalBuilder()
+          .setCustomId(`vipadmin_modal_family_limit_${guildId}_${targetId}`)
+          .setTitle("🏠 Atualizar limite da família")
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("vagas").setLabel("Novo limite de vagas").setStyle(TextInputStyle.Short).setRequired(true),
+            ),
+          );
+        return interaction.showModal(modal);
+      }
+
+      if (action === "family_info") {
+        const embed = await buildFamilyInfoEmbed(familyService, targetId);
+        return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+      }
+
+      if (action === "set_base_roles") {
+        const gConf = vipService.getGuildConfig(guildId);
+        const modal = new ModalBuilder()
+          .setCustomId(`vipadmin_modal_base_${guildId}`)
+          .setTitle("🎭 Definir Cargos Base VIP")
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("vipBaseRoleId").setLabel("ID do Cargo Base VIP global").setStyle(TextInputStyle.Short).setRequired(false).setValue(gConf?.vipBaseRoleId || ""),
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("cargoFantasmaId").setLabel("ID do Cargo Fantasma (Vigilante)").setStyle(TextInputStyle.Short).setRequired(false).setValue(gConf?.cargoFantasmaId || ""),
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("vipRoleSeparatorId").setLabel("ID do Separador VIP").setStyle(TextInputStyle.Short).setRequired(false).setValue(gConf?.vipRoleSeparatorId || ""),
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("familyRoleSeparatorId").setLabel("ID do Separador de Família").setStyle(TextInputStyle.Short).setRequired(false).setValue(gConf?.familyRoleSeparatorId || ""),
+            ),
+          );
+        return interaction.showModal(modal);
+      }
+
+      if (action === "add_tier") {
+        const tier = await vipConfig.getTierConfig(guildId, targetId);
+        if (!tier) return interaction.reply({ content: `❌ Tier \`${targetId}\` não encontrado no banco.`, flags: MessageFlags.Ephemeral });
+        const id = (sec) => `vipadmin_tier_section:${sec}:${guildId}:${targetId}`;
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(id("eco")).setLabel("💰 Economia").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(id("soc")).setLabel("👨‍👩‍👧 Social").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(id("tec")).setLabel("⚡ Técnico").setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder().setCustomId(id("shop")).setLabel("🛒 Loja").setStyle(ButtonStyle.Secondary),
+        );
+        return interaction.reply({ content: `Qual seção deseja editar para o tier \`${targetId}\`?`, components: [row], flags: MessageFlags.Ephemeral });
+      }
+
+      if (action === "remove_tier") {
+        const tiers = await vipConfig.getGuildTiers(guildId);
+        if (!tiers[targetId]) return interaction.reply({ content: `❌ Tier \`${targetId}\` não encontrado.`, flags: MessageFlags.Ephemeral });
+        await vipConfig.removeTier(guildId, targetId);
+        const newTiers = await vipConfig.getGuildTiers(guildId);
+        const ids = Object.keys(newTiers);
+        if (!ids.length) {
+          return interaction.update({
+            embeds: [new EmbedBuilder().setTitle("👑 Gestão de Tiers").setColor(0x5865f2).setDescription("Tier removido. Nenhum tier restante.")],
+            components: [
+              new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`vipadmin_dash:create_tier:${guildId}:root`).setLabel("➕ Criar Novo Tier").setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId(`vipadmin_dash:home:${guildId}:root`).setLabel("◀ Voltar").setStyle(ButtonStyle.Secondary),
+              ),
+            ],
+          });
+        }
+        const firstTierId = ids[0];
+        const embed = await buildTierDashEmbed(guildId, firstTierId, vipConfig, vipService);
+        return interaction.update({ embeds: [embed], components: buildTierDashComponents(firstTierId, guildId, true) });
+      }
+
+      if (action === "set_booster") {
+        const gConf = vipService.getGuildConfig(guildId);
+        const modal = new ModalBuilder()
+          .setCustomId(`vipadmin_modal_booster_${guildId}`)
+          .setTitle("🚀 Configurar Tier Booster Exclusivo")
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId("boosterTierId").setLabel("ID do Tier Booster (vazio para remover)").setStyle(TextInputStyle.Short).setRequired(false).setValue(gConf?.boosterTierId || ""),
+            ),
+          );
+        return interaction.showModal(modal);
+      }
+
+      if (action === "set_dama_roles") {
+        const gConf = await vipService.getGuildConfig(guildId) || {};
+        const currentIds = gConf?.primeraDamaRoleIds || (gConf?.damaRoleId ? [gConf.damaRoleId] : []);
+        const safeDefaultRoleIds = [];
+        for (const roleId of currentIds.filter(Boolean)) {
+          const exists = await interaction.guild.roles.fetch(roleId).catch(() => null);
+          if (exists) safeDefaultRoleIds.push(roleId);
+        }
+        const roleSelect = new RoleSelectMenuBuilder()
+          .setCustomId(`vipadmin_roleselmenu_dama_${guildId}`)
+          .setPlaceholder("Selecione os cargos de Primeira Dama")
+          .setMinValues(0)
+          .setMaxValues(10)
+          .setDefaultRoles(safeDefaultRoleIds);
+        const embed = new EmbedBuilder()
+          .setTitle("💍 Configurar Cargos de Primeira Dama")
+          .setColor(0xe91e63)
+          .setDescription(safeDefaultRoleIds.length ? `Configuração atual: ${safeDefaultRoleIds.map((id) => `<@&${id}>`).join(", ")}` : "Nenhum cargo configurado atualmente.");
+        return interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(roleSelect)] });
+      }
+
+      if (action === "cotas") {
+        const tier = await vipConfig.getTierConfig(guildId, targetId);
+        const cotasConfig = tier?.cotasConfig;
+        const regras = Array.isArray(cotasConfig) ? cotasConfig : (cotasConfig ? [cotasConfig] : []);
+        const descAtual = regras.length
+          ? regras.map((r, i) => {
+            if (r.modo === "A") return `[${i + 1}] Modo A: ${r.quantidade} cotas hierárquicas`;
+            if (r.modo === "B") return `[${i + 1}] Modo B: ${r.quantidade} cotas do tier \`${r.targetTierId}\``;
+            return `[${i + 1}] Desconhecido`;
+          }).join("\n")
+          : "Sem cotas configuradas.";
+        const idC = (a) => `vipadmin_cotas:${a}:${guildId}:${targetId}`;
+        const embed = new EmbedBuilder().setTitle(`⚙️ Cotas Avançadas — \`${targetId}\``).setColor(0xfee75c).setDescription(`Regras atuais:\n\n${descAtual}`);
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(idC("add_a")).setLabel("➕ Adicionar Modo A").setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId(idC("add_b")).setLabel("➕ Adicionar Modo B").setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId(idC("clear")).setLabel("🗑️ Limpar Todas").setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId(idC("back")).setLabel("◀ Voltar").setStyle(ButtonStyle.Secondary),
+        );
+        return interaction.update({ embeds: [embed], components: [row] });
+      }
+    }
+
+    if (interaction.customId.startsWith("vipadmin_tier_section:")) {
+      const parts = interaction.customId.split(":");
+      const section = parts[1];
+      const guildId = parts[2];
+      const tierId = parts[3];
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Painel de outro servidor.", flags: MessageFlags.Ephemeral });
+      const tier = await vipConfig.getTierConfig(guildId, tierId);
+      if (!tier) return interaction.reply({ content: `Tier \`${tierId}\` não encontrado.`, flags: MessageFlags.Ephemeral });
+      return showSectionModal(interaction, section, guildId, tierId, tier);
+    }
+
+    if (interaction.customId.startsWith("vipadmin_cotas:")) {
+      const parts = interaction.customId.split(":");
+      const action = parts[1];
+      const guildId = parts[2];
+      const tierId = parts[3];
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Painel de outro servidor.", flags: MessageFlags.Ephemeral });
+      if (action === "back") {
+        const tiers = await vipConfig.getGuildTiers(guildId);
+        const embed = await buildTierDashEmbed(guildId, tierId, vipConfig, vipService);
+        return interaction.update({ embeds: [embed], components: buildTierDashComponents(tierId, guildId, Object.keys(tiers).length > 0) });
+      }
       if (action === "clear") {
         await vipConfig.updateTier(guildId, tierId, "cotas", { cotasConfig: [] });
         return interaction.reply({ content: `✅ Todas as cotas do tier \`${tierId}\` foram removidas.`, flags: MessageFlags.Ephemeral });
       }
-
-      // ➕ Adicionar Modo A
       if (action === "add_a") {
         const modal = new ModalBuilder()
           .setCustomId(`vipadmin_modal_cota_A_${guildId}_${tierId}`)
           .setTitle(`Cota Modo A — ${tierId}`)
           .addComponents(
             new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId("quantidade")
-                .setLabel("Quantidade de cotas hierárquicas")
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-                .setPlaceholder("Ex: 3"),
+              new TextInputBuilder().setCustomId("quantidade").setLabel("Quantidade de cotas hierárquicas").setStyle(TextInputStyle.Short).setRequired(true),
             ),
           );
         return interaction.showModal(modal);
       }
-
-      // ➕ Adicionar Modo B
       if (action === "add_b") {
         const modal = new ModalBuilder()
           .setCustomId(`vipadmin_modal_cota_B_${guildId}_${tierId}`)
           .setTitle(`Cota Modo B — ${tierId}`)
           .addComponents(
             new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId("targetTierId")
-                .setLabel("ID do tier alvo (qual tier será dado)")
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-                .setPlaceholder("Ex: ouro"),
+              new TextInputBuilder().setCustomId("targetTierId").setLabel("ID do tier alvo").setStyle(TextInputStyle.Short).setRequired(true),
             ),
             new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId("quantidade")
-                .setLabel("Quantidade de cotas para esse tier")
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-                .setPlaceholder("Ex: 2"),
+              new TextInputBuilder().setCustomId("quantidade").setLabel("Quantidade de cotas").setStyle(TextInputStyle.Short).setRequired(true),
             ),
           );
         return interaction.showModal(modal);
@@ -709,273 +562,336 @@ module.exports = {
     }
   },
 
-  // ─── HANDLE MODAL ───────────────────────────────────────────────────────────
+  async handleSelectMenu(interaction) {
+    return this.handleStringSelectMenu(interaction);
+  },
+
+  async handleStringSelectMenu(interaction) {
+    if (!interaction.customId?.startsWith("vipadmin_tier_select:")) return;
+    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return interaction.reply({ content: "❌ Você não tem permissão.", flags: MessageFlags.Ephemeral });
+    }
+    const guildId = interaction.customId.split(":")[1];
+    if (interaction.guildId !== guildId) {
+      return interaction.reply({ content: "Este menu pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+    }
+    const tierId = interaction.values?.[0];
+    if (!tierId) return interaction.reply({ content: "❌ Nenhum tier selecionado.", flags: MessageFlags.Ephemeral });
+    const { vipConfig, vip: vipService } = interaction.client.services;
+    const tiers = await vipConfig.getGuildTiers(guildId);
+    const embed = await buildTierDashEmbed(guildId, tierId, vipConfig, vipService);
+    return interaction.update({
+      embeds: [embed],
+      components: buildTierDashComponents(tierId, guildId, Object.keys(tiers).length > 0),
+    });
+  },
+
+  async handleUserSelectMenu(interaction) {
+    if (!interaction.inGuild()) return;
+    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return interaction.reply({ content: "❌ Você não tem permissão.", flags: MessageFlags.Ephemeral });
+    }
+
+    const { vip: vipService, family: familyService } = interaction.client.services;
+
+    if (interaction.customId.startsWith("vipadmin_member_select:")) {
+      const guildId = interaction.customId.split(":")[1];
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este menu pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      const targetId = interaction.values?.[0];
+      const vipData = targetId ? await vipService.getVipData(guildId, targetId) : null;
+      const exp = vipData?.expiresAt ? `<t:${Math.floor(vipData.expiresAt / 1000)}:R>` : "Sem VIP ativo";
+      const embed = new EmbedBuilder()
+        .setTitle("👤 Painel de Membro")
+        .setColor(0x57f287)
+        .setDescription(`Membro selecionado: <@${targetId}>`)
+        .addFields(
+          { name: "Tier atual", value: vipData?.tierId ? `\`${vipData.tierId}\`` : "—", inline: true },
+          { name: "Expiração", value: exp, inline: true },
+        );
+      return interaction.update({
+        embeds: [embed],
+        components: [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`vipadmin_dash:member_give:${guildId}:${targetId}`).setLabel("Dar VIP").setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`vipadmin_dash:member_remove:${guildId}:${targetId}`).setLabel("Remover VIP").setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId(`vipadmin_dash:member_info:${guildId}:${targetId}`).setLabel("Ver Info").setStyle(ButtonStyle.Secondary),
+          ),
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`vipadmin_dash:members:${guildId}:root`).setLabel("◀ Escolher outro membro").setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(`vipadmin_dash:home:${guildId}:root`).setLabel("🏠 Painel").setStyle(ButtonStyle.Secondary),
+          ),
+        ],
+      });
+    }
+
+    if (interaction.customId.startsWith("vipadmin_family_owner_select:")) {
+      const guildId = interaction.customId.split(":")[1];
+      if (interaction.guildId !== guildId) return interaction.reply({ content: "Este menu pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      const ownerId = interaction.values?.[0];
+      const embed = await buildFamilyInfoEmbed(familyService, ownerId);
+      return interaction.update({
+        embeds: [embed],
+        components: [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`vipadmin_dash:family_delete:${guildId}:${ownerId}`).setLabel("🗑️ Deletar Família").setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId(`vipadmin_dash:family_limit:${guildId}:${ownerId}`).setLabel("🔢 Alterar Limite").setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(`vipadmin_dash:family_info:${guildId}:${ownerId}`).setLabel("ℹ️ Ver Info").setStyle(ButtonStyle.Secondary),
+          ),
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`vipadmin_dash:family:${guildId}:root`).setLabel("◀ Escolher outro dono").setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(`vipadmin_dash:home:${guildId}:root`).setLabel("🏠 Painel").setStyle(ButtonStyle.Secondary),
+          ),
+        ],
+      });
+    }
+  },
+
   async handleModal(interaction) {
     if (!interaction.customId?.startsWith("vipadmin_modal_")) return;
-
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
       return interaction.reply({ content: "❌ Sem permissão.", flags: MessageFlags.Ephemeral });
     }
 
-    const { vipConfig, vip: vipService } = interaction.client.services;
+    const { vipConfig, vip: vipService, family: familyService, vipChannel, vipRole } = interaction.client.services;
     const customId = interaction.customId;
 
-    // ── Cargos Base ───────────────────────────────────────────────────────────
-    if (customId.startsWith("vipadmin_modal_base_")) {
-      const guildId = customId.replace("vipadmin_modal_base_", "");
-
-      const vipBaseRoleId      = interaction.fields.getTextInputValue("vipBaseRoleId").trim()      || null;
-      const cargoFantasmaId    = interaction.fields.getTextInputValue("cargoFantasmaId").trim()    || null;
-      const vipRoleSepId       = interaction.fields.getTextInputValue("vipRoleSeparatorId").trim() || null;
-      const familyRoleSepId    = interaction.fields.getTextInputValue("familyRoleSeparatorId").trim() || null;
+    if (customId.startsWith("vipadmin_modal_infra_")) {
+      const guildId = customId.replace("vipadmin_modal_infra_", "");
+      const logChannelId = interaction.fields.getTextInputValue("logChannelId").trim() || null;
+      const vipCategoryId = interaction.fields.getTextInputValue("vipCategoryId").trim() || null;
+      const familyCategoryId = interaction.fields.getTextInputValue("familyCategoryId").trim() || null;
+      const criarCallChannelId = interaction.fields.getTextInputValue("criarCallChannelId").trim() || null;
+      const vipRoleSeparatorId = interaction.fields.getTextInputValue("vipRoleSeparatorId").trim() || null;
 
       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
 
-      // Valida os IDs que foram preenchidos
+      for (const [label, id, kind] of [
+        ["Canal de logs", logChannelId, "channel"],
+        ["Categoria VIP", vipCategoryId, "channel"],
+        ["Categoria Família", familyCategoryId, "channel"],
+        ["Canal Criar Call", criarCallChannelId, "channel"],
+        ["Separador VIP", vipRoleSeparatorId, "role"],
+      ]) {
+        if (!id) continue;
+        if (kind === "channel") {
+          const ch = await interaction.guild.channels.fetch(id).catch(() => null);
+          if (!ch) return interaction.editReply({ content: `❌ ${label}: canal com ID \`${id}\` não encontrado.` });
+        } else {
+          const role = await interaction.guild.roles.fetch(id).catch(() => null);
+          if (!role) return interaction.editReply({ content: `❌ ${label}: cargo com ID \`${id}\` não encontrado.` });
+        }
+      }
+
+      await vipService.setGuildConfig(guildId, {
+        logChannelId,
+        vipCategoryId,
+        familyCategoryId,
+        criarCallChannelId,
+        vipRoleSeparatorId,
+        separatorId: vipRoleSeparatorId,
+      });
+      return interaction.editReply({ content: "✅ Infraestrutura atualizada com sucesso." });
+    }
+
+    if (customId.startsWith("vipadmin_modal_create_tier_")) {
+      const guildId = customId.replace("vipadmin_modal_create_tier_", "");
+      if (guildId !== interaction.guildId) return interaction.reply({ content: "Este modal pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      const tierId = interaction.fields.getTextInputValue("tierId").trim().toLowerCase();
+      const roleId = interaction.fields.getTextInputValue("roleId").trim();
+      const tierNameRaw = interaction.fields.getTextInputValue("tierName").trim();
+      if (!tierId) return interaction.reply({ content: "❌ ID do tier inválido.", flags: MessageFlags.Ephemeral });
+      const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
+      if (!role) return interaction.reply({ content: `❌ Cargo com ID \`${roleId}\` não encontrado.`, flags: MessageFlags.Ephemeral });
+      await vipConfig.setBase(guildId, tierId, role.id, tierNameRaw || role.name);
+      return interaction.reply({ content: `✅ Tier \`${tierId}\` criado/atualizado com cargo <@&${role.id}>.`, flags: MessageFlags.Ephemeral });
+    }
+
+    if (customId.startsWith("vipadmin_modal_member_give_")) {
+      const rest = customId.replace("vipadmin_modal_member_give_", "");
+      const [guildId, targetId] = rest.split("_");
+      if (guildId !== interaction.guildId) return interaction.reply({ content: "Este modal pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      const tierId = interaction.fields.getTextInputValue("tierId").trim().toLowerCase();
+      const dias = parseInt(interaction.fields.getTextInputValue("dias").trim(), 10);
+      if (!Number.isFinite(dias) || dias < 1) return interaction.reply({ content: "❌ Duração inválida.", flags: MessageFlags.Ephemeral });
+      const tier = await vipConfig.getTierConfig(guildId, tierId);
+      if (!tier) return interaction.reply({ content: `❌ O Tier \`${tierId}\` não existe.`, flags: MessageFlags.Ephemeral });
+      const target = await interaction.guild.members.fetch(targetId).catch(() => null);
+      if (!target) return interaction.reply({ content: "❌ Membro não encontrado no servidor.", flags: MessageFlags.Ephemeral });
+      const expiresAt = Date.now() + dias * 24 * 60 * 60 * 1000;
+      await vipService.addVip(guildId, target.id, { tierId, expiresAt, addedBy: interaction.user.id, source: "admin" });
+      await vipRole.assignTierRole(target.id, tierId, { guildId }).catch((err) => interaction.client.services?.log?.error?.({ err }, "assignTierRole falhou no vipadmin"));
+      if (tier.canCall || tier.chat_privado) await vipChannel.ensureVipChannels(target.id, { guildId });
+      return interaction.reply({ content: `✅ VIP \`${tierId}\` ativado para <@${target.id}> por **${dias}** dias.`, flags: MessageFlags.Ephemeral });
+    }
+
+    if (customId.startsWith("vipadmin_modal_family_limit_")) {
+      const rest = customId.replace("vipadmin_modal_family_limit_", "");
+      const [guildId, ownerId] = rest.split("_");
+      if (guildId !== interaction.guildId) return interaction.reply({ content: "Este modal pertence a outro servidor.", flags: MessageFlags.Ephemeral });
+      const vagas = parseInt(interaction.fields.getTextInputValue("vagas").trim(), 10);
+      if (!Number.isFinite(vagas) || vagas < 1) return interaction.reply({ content: "❌ Limite inválido.", flags: MessageFlags.Ephemeral });
+      const family = await familyService.getFamilyByOwner(ownerId);
+      if (!family) return interaction.reply({ content: "❌ Família não localizada.", flags: MessageFlags.Ephemeral });
+      await familyService.updateMaxMembers(family.id, vagas);
+      return interaction.reply({ content: `✅ Limite de **${family.name}** atualizado para **${vagas}**.`, flags: MessageFlags.Ephemeral });
+    }
+
+    if (customId.startsWith("vipadmin_modal_base_")) {
+      const guildId = customId.replace("vipadmin_modal_base_", "");
+      const vipBaseRoleId = interaction.fields.getTextInputValue("vipBaseRoleId").trim() || null;
+      const cargoFantasmaId = interaction.fields.getTextInputValue("cargoFantasmaId").trim() || null;
+      const vipRoleSepId = interaction.fields.getTextInputValue("vipRoleSeparatorId").trim() || null;
+      const familyRoleSepId = interaction.fields.getTextInputValue("familyRoleSeparatorId").trim() || null;
+
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
+
       for (const [label, id] of [
-        ["Cargo Base VIP",   vipBaseRoleId],
-        ["Cargo Fantasma",   cargoFantasmaId],
-        ["Separador VIP",    vipRoleSepId],
+        ["Cargo Base VIP", vipBaseRoleId],
+        ["Cargo Fantasma", cargoFantasmaId],
+        ["Separador VIP", vipRoleSepId],
         ["Separador Família", familyRoleSepId],
       ]) {
-        if (id) {
-          const role = await interaction.guild.roles.fetch(id).catch(() => null);
-          if (!role) {
-            return interaction.editReply({ content: `❌ ${label}: cargo com ID \`${id}\` não encontrado.` });
-          }
-        }
+        if (!id) continue;
+        const role = await interaction.guild.roles.fetch(id).catch(() => null);
+        if (!role) return interaction.editReply({ content: `❌ ${label}: cargo com ID \`${id}\` não encontrado.` });
       }
 
       await vipService.setGuildConfig(guildId, {
         vipBaseRoleId,
         cargoFantasmaId,
-        vipRoleSeparatorId:    vipRoleSepId,
+        vipRoleSeparatorId: vipRoleSepId,
         familyRoleSeparatorId: familyRoleSepId,
-        // Compatibilidade
         separatorId: vipRoleSepId,
       });
 
-      return interaction.editReply({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("✅ Cargos Base atualizados")
-            .setColor(0x57f287)
-            .addFields(
-              { name: "🔑 Cargo Base VIP",   value: vipBaseRoleId    ? `<@&${vipBaseRoleId}>`    : "—", inline: true },
-              { name: "👻 Cargo Fantasma",   value: cargoFantasmaId  ? `<@&${cargoFantasmaId}>`  : "—", inline: true },
-              { name: "📌 Sep. VIP",         value: vipRoleSepId     ? `<@&${vipRoleSepId}>`     : "—", inline: true },
-              { name: "📌 Sep. Família",     value: familyRoleSepId  ? `<@&${familyRoleSepId}>`  : "—", inline: true },
-            ),
-        ],
-      });
+      return interaction.editReply({ content: "✅ Cargos base atualizados." });
     }
 
-    // ── Tier Booster Exclusivo ────────────────────────────────────────────────
     if (customId.startsWith("vipadmin_modal_booster_")) {
       const guildId = customId.replace("vipadmin_modal_booster_", "");
       const boosterTierId = interaction.fields.getTextInputValue("boosterTierId").trim() || null;
-
       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((err) => { logger.warn({ err }, "Falha em chamada Discord API"); });
-
       if (boosterTierId) {
         const tierExists = await vipConfig.getTierConfig(guildId, boosterTierId).catch(() => null);
-        if (!tierExists) {
-          return interaction.editReply({ content: `❌ Tier \`${boosterTierId}\` não encontrado. Configure o tier primeiro.` });
-        }
+        if (!tierExists) return interaction.editReply({ content: `❌ Tier \`${boosterTierId}\` não encontrado.` });
       }
-
       await vipService.setGuildConfig(guildId, { boosterTierId });
-
-      return interaction.editReply({
-        content: boosterTierId
-          ? `✅ Tier Booster Exclusivo definido como \`${boosterTierId}\`. Novos Boosters após 15/03/2026 receberão este tier automaticamente.`
-          : "✅ Tier Booster removido. Novos Boosters não receberão VIP automático.",
-      });
+      return interaction.editReply({ content: boosterTierId ? `✅ Tier Booster Exclusivo definido como \`${boosterTierId}\`.` : "✅ Tier Booster removido." });
     }
 
-    // ── Cotas Modo A ──────────────────────────────────────────────────────────
     if (customId.startsWith("vipadmin_modal_cota_A_")) {
-      const rest    = customId.replace("vipadmin_modal_cota_A_", "");
+      const rest = customId.replace("vipadmin_modal_cota_A_", "");
       const [guildId, ...tierParts] = rest.split("_");
-      const tierId  = tierParts.join("_");
-
-      const quantidadeRaw = interaction.fields.getTextInputValue("quantidade").trim();
-      const quantidade    = parseInt(quantidadeRaw, 10);
-      if (!Number.isFinite(quantidade) || quantidade < 1) {
-        return interaction.reply({ content: "❌ Quantidade inválida.", flags: MessageFlags.Ephemeral });
-      }
-
-      const tier          = await vipConfig.getTierConfig(guildId, tierId);
-      const cotasConfig   = tier?.cotasConfig;
-      const regras        = Array.isArray(cotasConfig) ? [...cotasConfig] : (cotasConfig ? [cotasConfig] : []);
+      const tierId = tierParts.join("_");
+      const quantidade = parseInt(interaction.fields.getTextInputValue("quantidade").trim(), 10);
+      if (!Number.isFinite(quantidade) || quantidade < 1) return interaction.reply({ content: "❌ Quantidade inválida.", flags: MessageFlags.Ephemeral });
+      const tier = await vipConfig.getTierConfig(guildId, tierId);
+      const cotasConfig = tier?.cotasConfig;
+      const regras = Array.isArray(cotasConfig) ? [...cotasConfig] : (cotasConfig ? [cotasConfig] : []);
       regras.push({ modo: "A", quantidade });
-
       await vipConfig.updateTier(guildId, tierId, "cotas", { cotasConfig: regras });
-
-      return interaction.reply({
-        content:   `✅ Cota Modo A adicionada ao tier \`${tierId}\`: **${quantidade}** cotas hierárquicas.`,
-        flags: MessageFlags.Ephemeral,
-      });
+      return interaction.reply({ content: `✅ Cota Modo A adicionada ao tier \`${tierId}\`.`, flags: MessageFlags.Ephemeral });
     }
 
-    // ── Cotas Modo B ──────────────────────────────────────────────────────────
     if (customId.startsWith("vipadmin_modal_cota_B_")) {
-      const rest    = customId.replace("vipadmin_modal_cota_B_", "");
+      const rest = customId.replace("vipadmin_modal_cota_B_", "");
       const [guildId, ...tierParts] = rest.split("_");
-      const tierId  = tierParts.join("_");
-
-      const targetTierId  = interaction.fields.getTextInputValue("targetTierId").trim().toLowerCase();
-      const quantidadeRaw = interaction.fields.getTextInputValue("quantidade").trim();
-      const quantidade    = parseInt(quantidadeRaw, 10);
-
-      if (!targetTierId) {
-        return interaction.reply({ content: "❌ ID do tier alvo não pode ser vazio.", flags: MessageFlags.Ephemeral });
-      }
-      if (!Number.isFinite(quantidade) || quantidade < 1) {
-        return interaction.reply({ content: "❌ Quantidade inválida.", flags: MessageFlags.Ephemeral });
-      }
-
-      // Verifica se o tier alvo existe
+      const tierId = tierParts.join("_");
+      const targetTierId = interaction.fields.getTextInputValue("targetTierId").trim().toLowerCase();
+      const quantidade = parseInt(interaction.fields.getTextInputValue("quantidade").trim(), 10);
+      if (!targetTierId) return interaction.reply({ content: "❌ ID do tier alvo não pode ser vazio.", flags: MessageFlags.Ephemeral });
+      if (!Number.isFinite(quantidade) || quantidade < 1) return interaction.reply({ content: "❌ Quantidade inválida.", flags: MessageFlags.Ephemeral });
       const targetTierCheck = await vipConfig.getTierConfig(guildId, targetTierId);
-      if (!targetTierCheck) {
-        return interaction.reply({ content: `❌ Tier alvo \`${targetTierId}\` não encontrado. Crie-o primeiro.`, flags: MessageFlags.Ephemeral });
-      }
-
-      const tier          = await vipConfig.getTierConfig(guildId, tierId);
-      const cotasConfig   = tier?.cotasConfig;
-      const regras        = Array.isArray(cotasConfig) ? [...cotasConfig] : (cotasConfig ? [cotasConfig] : []);
+      if (!targetTierCheck) return interaction.reply({ content: `❌ Tier alvo \`${targetTierId}\` não encontrado.`, flags: MessageFlags.Ephemeral });
+      const tier = await vipConfig.getTierConfig(guildId, tierId);
+      const cotasConfig = tier?.cotasConfig;
+      const regras = Array.isArray(cotasConfig) ? [...cotasConfig] : (cotasConfig ? [cotasConfig] : []);
       regras.push({ modo: "B", targetTierId, quantidade });
-
       await vipConfig.updateTier(guildId, tierId, "cotas", { cotasConfig: regras });
-
-      return interaction.reply({
-        content:   `✅ Cota Modo B adicionada ao tier \`${tierId}\`: **${quantidade}** cotas do tier \`${targetTierId}\`.`,
-        flags: MessageFlags.Ephemeral,
-      });
+      return interaction.reply({ content: `✅ Cota Modo B adicionada ao tier \`${tierId}\`.`, flags: MessageFlags.Ephemeral });
     }
 
-    // ── Seções do Tier (eco / soc / tec / shop) ───────────────────────────────
-    const parts   = customId.split("_");
-    // formato: vipadmin_modal_<section>_<guildId>_<tierId>
+    const parts = customId.split("_");
     const section = parts[2];
     const guildId = parts[3];
-    const tierId  = parts.slice(4).join("_");
-
-    if (!vipConfig) {
-      return interaction.reply({ content: "Serviço vipConfig indisponível.", flags: MessageFlags.Ephemeral });
-    }
+    const tierId = parts.slice(4).join("_");
 
     if (section === "eco") {
       const valor_daily_extra = parseNum(interaction.fields.getTextInputValue("valor_daily_extra")) ?? 0;
-      const bonus_inicial     = parseNum(interaction.fields.getTextInputValue("bonus_inicial"))     ?? 0;
-      const midas             = parseBool(interaction.fields.getTextInputValue("midas"));
-      const preco_shop        = parseNum(interaction.fields.getTextInputValue("preco_shop"));
-
+      const bonus_inicial = parseNum(interaction.fields.getTextInputValue("bonus_inicial")) ?? 0;
+      const midas = parseBool(interaction.fields.getTextInputValue("midas"));
+      const preco_shop = parseNum(interaction.fields.getTextInputValue("preco_shop"));
       if (valor_daily_extra < 0) return interaction.reply({ content: "Daily extra inválido.", flags: MessageFlags.Ephemeral });
-      if (bonus_inicial     < 0) return interaction.reply({ content: "Bônus inicial inválido.", flags: MessageFlags.Ephemeral });
+      if (bonus_inicial < 0) return interaction.reply({ content: "Bônus inicial inválido.", flags: MessageFlags.Ephemeral });
       if (preco_shop !== null && preco_shop < 0) return interaction.reply({ content: "preco_shop inválido.", flags: MessageFlags.Ephemeral });
-
-      await vipConfig.updateTier(guildId, tierId, "eco", {
-        valor_daily_extra,
-        bonus_inicial,
-        ...(midas    !== null ? { midas }     : {}),
-        ...(preco_shop !== null ? { preco_shop } : {}),
-      });
+      await vipConfig.updateTier(guildId, tierId, "eco", { valor_daily_extra, bonus_inicial, ...(midas !== null ? { midas } : {}), ...(preco_shop !== null ? { preco_shop } : {}) });
       return interaction.reply({ content: `✅ Economia do tier \`${tierId}\` atualizada.`, flags: MessageFlags.Ephemeral });
     }
 
     if (section === "soc") {
-      const vagas_familia    = parseNum(interaction.fields.getTextInputValue("vagas_familia"))    ?? 0;
-      const primeiras_damas  = parseNum(interaction.fields.getTextInputValue("primeiras_damas"))  ?? 0;
-      const cotaRoleId       = interaction.fields.getTextInputValue("cotaRoleId").trim()          || null;
-      const pode_presentear  = parseBool(interaction.fields.getTextInputValue("pode_presentear"));
-
-      if (vagas_familia   < 0) return interaction.reply({ content: "Vagas família inválido.", flags: MessageFlags.Ephemeral });
+      const vagas_familia = parseNum(interaction.fields.getTextInputValue("vagas_familia")) ?? 0;
+      const primeiras_damas = parseNum(interaction.fields.getTextInputValue("primeiras_damas")) ?? 0;
+      const cotaRoleId = interaction.fields.getTextInputValue("cotaRoleId").trim() || null;
+      const pode_presentear = parseBool(interaction.fields.getTextInputValue("pode_presentear"));
+      if (vagas_familia < 0) return interaction.reply({ content: "Vagas família inválido.", flags: MessageFlags.Ephemeral });
       if (primeiras_damas < 0) return interaction.reply({ content: "Primeiras damas inválido.", flags: MessageFlags.Ephemeral });
-
-      await vipConfig.updateTier(guildId, tierId, "soc", {
-        vagas_familia,
-        primeiras_damas,
-        cotaRoleId,
-        ...(pode_presentear !== null ? { pode_presentear } : {}),
-      });
+      await vipConfig.updateTier(guildId, tierId, "soc", { vagas_familia, primeiras_damas, cotaRoleId, ...(pode_presentear !== null ? { pode_presentear } : {}) });
       return interaction.reply({ content: `✅ Configuração social do tier \`${tierId}\` atualizada.`, flags: MessageFlags.Ephemeral });
     }
 
     if (section === "tec") {
-      const canCall           = parseBool(interaction.fields.getTextInputValue("canCall"));
-      const chat_privado      = parseBool(interaction.fields.getTextInputValue("chat_privado"));
-      const hasCustomRole     = parseBool(interaction.fields.getTextInputValue("hasCustomRole"));
+      const canCall = parseBool(interaction.fields.getTextInputValue("canCall"));
+      const chat_privado = parseBool(interaction.fields.getTextInputValue("chat_privado"));
+      const hasCustomRole = parseBool(interaction.fields.getTextInputValue("hasCustomRole"));
       const high_quality_voice = parseBool(interaction.fields.getTextInputValue("high_quality_voice"));
-
       await vipConfig.updateTier(guildId, tierId, "tec", {
-        ...(canCall            !== null ? { canCall }            : {}),
-        ...(chat_privado       !== null ? { chat_privado }       : {}),
-        ...(hasCustomRole      !== null ? { hasCustomRole }      : {}),
+        ...(canCall !== null ? { canCall } : {}),
+        ...(chat_privado !== null ? { chat_privado } : {}),
+        ...(hasCustomRole !== null ? { hasCustomRole } : {}),
         ...(high_quality_voice !== null ? { high_quality_voice } : {}),
       });
       return interaction.reply({ content: `✅ Configuração técnica do tier \`${tierId}\` atualizada.`, flags: MessageFlags.Ephemeral });
     }
 
     if (section === "shop") {
-      const shop_enabled     = parseBool(interaction.fields.getTextInputValue("shop_enabled"));
+      const shop_enabled = parseBool(interaction.fields.getTextInputValue("shop_enabled"));
       const shop_price_per_day = parseNum(interaction.fields.getTextInputValue("shop_price_per_day"));
-      const shop_fixed_price   = parseNum(interaction.fields.getTextInputValue("shop_fixed_price"));
-      const shop_default_days  = parseNum(interaction.fields.getTextInputValue("shop_default_days"));
-
+      const shop_fixed_price = parseNum(interaction.fields.getTextInputValue("shop_fixed_price"));
+      const shop_default_days = parseNum(interaction.fields.getTextInputValue("shop_default_days"));
       if (shop_price_per_day !== null && shop_price_per_day < 0) return interaction.reply({ content: "Preço por dia inválido.", flags: MessageFlags.Ephemeral });
-      if (shop_fixed_price   !== null && shop_fixed_price   < 0) return interaction.reply({ content: "Preço fixo inválido.", flags: MessageFlags.Ephemeral });
-      if (shop_default_days  !== null && shop_default_days  < 0) return interaction.reply({ content: "Dias padrão inválidos.", flags: MessageFlags.Ephemeral });
-
+      if (shop_fixed_price !== null && shop_fixed_price < 0) return interaction.reply({ content: "Preço fixo inválido.", flags: MessageFlags.Ephemeral });
+      if (shop_default_days !== null && shop_default_days < 0) return interaction.reply({ content: "Dias padrão inválidos.", flags: MessageFlags.Ephemeral });
       await vipConfig.updateTier(guildId, tierId, "shop", {
-        ...(shop_enabled     !== null ? { shop_enabled }     : {}),
+        ...(shop_enabled !== null ? { shop_enabled } : {}),
         ...(shop_price_per_day !== null ? { shop_price_per_day } : {}),
-        ...(shop_fixed_price   !== null ? { shop_fixed_price }   : {}),
-        ...(shop_default_days  !== null ? { shop_default_days }  : {}),
+        ...(shop_fixed_price !== null ? { shop_fixed_price } : {}),
+        ...(shop_default_days !== null ? { shop_default_days } : {}),
       });
       return interaction.reply({ content: `✅ Loja do tier \`${tierId}\` atualizada.`, flags: MessageFlags.Ephemeral });
     }
   },
 
-  // ── 💍 RoleSelectMenu: Cargos de Primeira Dama ────────────────────────────
   async handleRoleSelectMenu(interaction) {
     if (!interaction.inGuild()) return;
     if (!interaction.customId?.startsWith("vipadmin_roleselmenu_dama_")) return;
-
     if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-      return interaction.reply({ content: "❌ Você precisa de permissão **ManageGuild** para isso.", flags: MessageFlags.Ephemeral });
+      return interaction.reply({ content: "❌ Você precisa de permissão ManageGuild para isso.", flags: MessageFlags.Ephemeral });
     }
-
-    const parts = interaction.customId.split("_");
-    // vipadmin_roleselmenu_dama_{guildId}
-    const guildId = parts[3];
-
+    const guildId = interaction.customId.split("_")[3];
     if (interaction.guildId !== guildId) return interaction.reply({ content: "Este menu pertence a outro servidor.", flags: MessageFlags.Ephemeral });
-
     const { vip: vipService } = interaction.client.services;
-
     const selectedRoleIds = interaction.values || [];
-
     await interaction.deferUpdate().catch((err) => { logger.warn({ err }, "Falha em deferUpdate no vipadmin roleselmenu dama"); });
-
     await vipService.setGuildConfig(guildId, { primeraDamaRoleIds: selectedRoleIds });
-
     const embed = new EmbedBuilder()
       .setTitle("✅ Cargos de Primeira Dama Atualizados")
       .setColor(0xe91e63)
-      .setDescription(
-        selectedRoleIds.length
-          ? `Os seguintes cargos foram configurados:\n${selectedRoleIds.map(id => `• <@&${id}>`).join("\n")}`
-          : "Todos os cargos de Primeira Dama foram **removidos**.",
-      )
-      .setFooter({ text: "vipadmin | © WDA - Todos os direitos reservados" });
-
+      .setDescription(selectedRoleIds.length ? `Os seguintes cargos foram configurados:\n${selectedRoleIds.map((id) => `• <@&${id}>`).join("\n")}` : "Todos os cargos de Primeira Dama foram removidos.");
     return interaction.editReply({ embeds: [embed], components: [] });
   },
 };
 
-// ─── Função interna para mostrar modais de seção ──────────────────────────────
-async function _showSectionModal(interaction, section, guildId, tierId, tier) {
+async function showSectionModal(interaction, section, guildId, tierId, tier) {
   if (section === "eco") {
     const modal = new ModalBuilder()
       .setCustomId(`vipadmin_modal_eco_${guildId}_${tierId}`)
