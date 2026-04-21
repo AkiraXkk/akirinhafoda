@@ -156,6 +156,63 @@ async function main() {
   });
   // =====================================================================
 
+  // =====================================================================
+  // 💬 TERMINAL GOD MODE (CHAT CLI)
+  // =====================================================================
+  client.once("ready", () => {
+    const readline = require('readline');
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    let canalAtualId = null;
+
+    logger.info("Terminal God Mode ativado! Use 'chat ID_DO_CANAL' para conectar a um chat.");
+
+    rl.on('line', async (input) => {
+        if (!input || input.trim() === '') return;
+        
+        const args = input.trim().split(' ');
+        const comando = args[0].toLowerCase();
+
+        // Comando para selecionar o canal
+        if (comando === 'chat') {
+            const id = args[1];
+            if (!id) {
+                console.log("\x1b[33m[AVISO] Você esqueceu de informar o ID do canal. Use: chat 1234567890\x1b[0m");
+                return;
+            }
+            try {
+                const canal = await client.channels.fetch(id);
+                if (canal && canal.isTextBased()) {
+                    canalAtualId = id;
+                    console.log(`\x1b[32m[SISTEMA] Conectado com sucesso ao chat: #${canal.name} (${canal.guild.name})\x1b[0m`);
+                } else {
+                    console.log("\x1b[31m[ERRO] Esse ID não pertence a um canal de texto válido (ou não tenho acesso).\x1b[0m");
+                }
+            } catch (e) {
+                console.log("\x1b[31m[ERRO] Não foi possível encontrar o canal. Verifique se o ID está correto.\x1b[0m");
+            }
+            return;
+        }
+
+        // Enviar mensagem para o canal selecionado
+        if (canalAtualId) {
+            try {
+                const canal = await client.channels.fetch(canalAtualId);
+                await canal.send(input);
+                console.log(`\x1b[34m[VOCÊ -> #${canal.name}]:\x1b[0m ${input}`);
+            } catch (err) {
+                console.log(`\x1b[31m[ERRO] Falha ao enviar a mensagem: ${err.message}\x1b[0m`);
+            }
+        } else {
+            console.log("\x1b[33m[AVISO] Você precisa se conectar a um chat primeiro. Digite: chat ID_DO_CANAL\x1b[0m");
+        }
+    });
+  });
+  // =====================================================================
+
   await client.login(config.discord.token);
 }
 
