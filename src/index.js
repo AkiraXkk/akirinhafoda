@@ -191,24 +191,25 @@ async function main() {
             return;
         }
 
-        // --- LÓGICA: EXECUTAR COMANDO E ENVIAR NO DISCORD ---
+        // --- LÓGICA: EXECUTAR COMANDO COM SUPORTE A SUBCOMANDOS ---
         if (comando === 'executar') {
             const nomeCmd = args[1];
+            const subCmd  = args[2] || null; // Pega o "ver", "coins", etc.
             const cmd = client.commands.get(nomeCmd);
 
             if (!cmd) {
-                console.log(`\x1b[31m[ERRO] Comando "/${nomeCmd}" não existe na memória.\x1b[0m`);
+                console.log(`\x1b[31m[ERRO] Comando "/${nomeCmd}" não encontrado.\x1b[0m`);
                 return;
             }
 
             if (!canalAtualId) {
-                console.log("\x1b[33m[AVISO] Conecte-se a um chat primeiro usando: chat ID\x1b[0m");
+                console.log("\x1b[33m[AVISO] Conecte-se a um chat primeiro! Use: chat ID\x1b[0m");
                 return;
             }
 
             try {
                 const canal = await client.channels.fetch(canalAtualId);
-                console.log(`\x1b[35m[TERMINAL] Disparando /${nomeCmd} no canal #${canal.name}...\x1b[0m`);
+                console.log(`\x1b[35m[TERMINAL] Executando /${nomeCmd} ${subCmd || ''} em #${canal.name}...\x1b[0m`);
 
                 let mensagemResposta = null;
 
@@ -217,10 +218,22 @@ async function main() {
                     channel: canal,
                     user: client.user,
                     member: canal.guild.members.me,
+                    commandName: nomeCmd,
                     isCommand: () => true,
+                    isChatInputCommand: () => true,
                     
+                    // 🛡️ NOVO: Simulador de Opções e Subcomandos
+                    options: {
+                        getSubcommand: () => subCmd, // Retorna o que você digitou depois do nome do comando
+                        getString: () => null,
+                        getInteger: () => null,
+                        getUser: () => null,
+                        getMember: () => null,
+                        getBoolean: () => null,
+                    },
+
                     deferReply: async () => {
-                        mensagemResposta = await canal.send("⏳ *Processando comando via terminal...*");
+                        mensagemResposta = await canal.send("⏳ *Processando comando solicitado via terminal...*");
                     },
                     editReply: async (content) => {
                         if (mensagemResposta) await mensagemResposta.edit(content);
@@ -235,13 +248,15 @@ async function main() {
                 };
 
                 await cmd.execute(fakeInteraction);
-                console.log(`\x1b[32m[SUCESSO] Comando /${nomeCmd} executado com sucesso!\x1b[0m`);
+                console.log(`\x1b[32m[SUCESSO] Comando /${nomeCmd} enviado!\x1b[0m`);
 
             } catch (err) {
                 console.log(`\x1b[31m[ERRO NA EXECUÇÃO]: ${err.message}\x1b[0m`);
+                console.error(err); // Isso ajuda a ver se falta mais alguma opção
             }
             return;
         }
+
 
         // --- LÓGICA: ENVIAR MENSAGEM SIMPLES ---
         if (canalAtualId) {
