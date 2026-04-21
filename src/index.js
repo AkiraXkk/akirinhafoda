@@ -44,7 +44,7 @@ function createClient() {
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildVoiceStates,
       GatewayIntentBits.GuildMembers,
-      GatewayIntentBits.GuildPresences, // ✅ INTENT DE LER O STATUS ADICIONADA AQUI
+      GatewayIntentBits.GuildPresences, 
     ],
   });
 }
@@ -78,10 +78,6 @@ async function main() {
     shopService: client.services.shop,
     logger,
   });
-
-  // 👇 Opcional: Iniciar o notificador de parcerias se você estiver usando 👇
-  // client.services.partnershipNotifier = createPartnershipNotifier({ client, logger });
-  // client.services.partnershipNotifier.start();
 
   // ── Sistema VIP ──────────────────────────────────────────────────────────────
   const vipStore = createVipStore({ filePath: config.vip.storePath });
@@ -143,21 +139,19 @@ async function main() {
 
     setInterval(() => {
       try {
-        // MÁGICA: Busca o comando direto da memória (sem usar require e caminhos de pastas!)
         const eventoCmd = client.commands.get("evento"); 
-
         if (eventoCmd && typeof eventoCmd.checkSorteios === "function") {
           eventoCmd.checkSorteios(client);
         }
       } catch (err) {
         logger.error({ err }, "Falha ao executar o verificador de Sorteios");
       }
-    }, 60000); // Roda a cada 60 segundos (1 minuto)
+    }, 60000);
   });
   // =====================================================================
 
   // =====================================================================
-  // 💬 TERMINAL GOD MODE (CHAT CLI)
+  // 💬 TERMINAL GOD MODE (CHAT & EXECUTE CLI)
   // =====================================================================
   client.once("ready", () => {
     const readline = require('readline');
@@ -168,7 +162,7 @@ async function main() {
 
     let canalAtualId = null;
 
-    logger.info("Terminal God Mode ativado! Use 'chat ID_DO_CANAL' para conectar a um chat.");
+    logger.info("Terminal God Mode Online! Comandos: 'chat ID', 'executar NOME', ou digite para falar.");
 
     rl.on('line', async (input) => {
         if (!input || input.trim() === '') return;
@@ -176,38 +170,90 @@ async function main() {
         const args = input.trim().split(' ');
         const comando = args[0].toLowerCase();
 
-        // Comando para selecionar o canal
+        // --- LÓGICA: SELECIONAR CANAL ---
         if (comando === 'chat') {
             const id = args[1];
             if (!id) {
-                console.log("\x1b[33m[AVISO] Você esqueceu de informar o ID do canal. Use: chat 1234567890\x1b[0m");
+                console.log("\x1b[33m[AVISO] Use: chat ID_DO_CANAL\x1b[0m");
                 return;
             }
             try {
                 const canal = await client.channels.fetch(id);
                 if (canal && canal.isTextBased()) {
                     canalAtualId = id;
-                    console.log(`\x1b[32m[SISTEMA] Conectado com sucesso ao chat: #${canal.name} (${canal.guild.name})\x1b[0m`);
+                    console.log(`\x1b[32m[SISTEMA] Conectado a: #${canal.name} (${canal.guild.name})\x1b[0m`);
                 } else {
-                    console.log("\x1b[31m[ERRO] Esse ID não pertence a um canal de texto válido (ou não tenho acesso).\x1b[0m");
+                    console.log("\x1b[31m[ERRO] Canal inválido ou sem permissão.\x1b[0m");
                 }
             } catch (e) {
-                console.log("\x1b[31m[ERRO] Não foi possível encontrar o canal. Verifique se o ID está correto.\x1b[0m");
+                console.log("\x1b[31m[ERRO] Não encontrei o canal. Verifique o ID.\x1b[0m");
             }
             return;
         }
 
-        // Enviar mensagem para o canal selecionado
+        // --- LÓGICA: EXECUTAR COMANDO E ENVIAR NO DISCORD ---
+        if (comando === 'executar') {
+            const nomeCmd = args[1];
+            const cmd = client.commands.get(nomeCmd);
+
+            if (!cmd) {
+                console.log(`\x1b[31m[ERRO] Comando "/${nomeCmd}" não existe na memória.\x1b[0m`);
+                return;
+            }
+
+            if (!canalAtualId) {
+                console.log("\x1b[33m[AVISO] Conecte-se a um chat primeiro usando: chat ID\x1b[0m");
+                return;
+            }
+
+            try {
+                const canal = await client.channels.fetch(canalAtualId);
+                console.log(`\x1b[35m[TERMINAL] Disparando /${nomeCmd} no canal #${canal.name}...\x1b[0m`);
+
+                let mensagemResposta = null;
+
+                const fakeInteraction = {
+                    guild: canal.guild,
+                    channel: canal,
+                    user: client.user,
+                    member: canal.guild.members.me,
+                    isCommand: () => true,
+                    
+                    deferReply: async () => {
+                        mensagemResposta = await canal.send("⏳ *Processando comando via terminal...*");
+                    },
+                    editReply: async (content) => {
+                        if (mensagemResposta) await mensagemResposta.edit(content);
+                        else mensagemResposta = await canal.send(content);
+                    },
+                    reply: async (content) => {
+                        mensagemResposta = await canal.send(content);
+                    },
+                    followUp: async (content) => {
+                        await canal.send(content);
+                    }
+                };
+
+                await cmd.execute(fakeInteraction);
+                console.log(`\x1b[32m[SUCESSO] Comando /${nomeCmd} executado com sucesso!\x1b[0m`);
+
+            } catch (err) {
+                console.log(`\x1b[31m[ERRO NA EXECUÇÃO]: ${err.message}\x1b[0m`);
+            }
+            return;
+        }
+
+        // --- LÓGICA: ENVIAR MENSAGEM SIMPLES ---
         if (canalAtualId) {
             try {
                 const canal = await client.channels.fetch(canalAtualId);
                 await canal.send(input);
                 console.log(`\x1b[34m[VOCÊ -> #${canal.name}]:\x1b[0m ${input}`);
             } catch (err) {
-                console.log(`\x1b[31m[ERRO] Falha ao enviar a mensagem: ${err.message}\x1b[0m`);
+                console.log(`\x1b[31m[ERRO] Falha ao enviar: ${err.message}\x1b[0m`);
             }
         } else {
-            console.log("\x1b[33m[AVISO] Você precisa se conectar a um chat primeiro. Digite: chat ID_DO_CANAL\x1b[0m");
+            console.log("\x1b[33m[AVISO] Digite 'chat ID' para começar a falar.\x1b[0m");
         }
     });
   });
