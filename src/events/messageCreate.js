@@ -7,6 +7,9 @@ const { checkMessage: automodCheckMessage } = require("../services/automodServic
 const ticketStore = createDataStore("tickets.json");
 const chatStore = createDataStore("sejawda_chats.json");
 const partnersStore = createDataStore("partners.json");
+const PARTNER_CONTENT_TEMPLATE = "**Servidor:** {server}\n**Tier:** {tier}\n**Representante:** {owner}\n**Responsável:** {staff}\n**Ping:** {ping}\n**Link:** {link}";
+const PARTNER_EMBED_TEMPLATE = "--- {☩} NOVA PARCERIA FECHADA! {☩} ---\n\n{description}\n\n{☩}----------{🤝}----------{☩}";
+const PARTNER_FALLBACK_PING = "Sem menção";
 
 module.exports = {
   name: Events.MessageCreate,
@@ -33,7 +36,7 @@ module.exports = {
           return;
         }
 
-        const normalizedInvite = rawInvite.startsWith("http") ? rawInvite : `https://${rawInvite}`;
+        const normalizedInvite = normalizeInviteInput(rawInvite);
 
         const channelId = data?.channelId;
         const channel = channelId ? await client.channels.fetch(channelId).catch(() => null) : null;
@@ -199,15 +202,30 @@ function buildFallbackPartnerContent(data, inviteLink) {
   const processedBy = data?.processedBy || data?.responsavel || "Sistema";
   const ownerLine = ownerId ? `<@${ownerId}>` : "Desconhecido";
   const staffLine = processedBy === "Sistema" ? processedBy : `<@${processedBy}>`;
-  return `**Servidor:** ${serverName}\n**Tier:** ${tier}\n**Representante:** ${ownerLine}\n**Responsável:** ${staffLine}\n**Ping:** Sem menção\n**Link:** ${inviteLink}`;
+  return PARTNER_CONTENT_TEMPLATE
+    .replace("{server}", serverName)
+    .replace("{tier}", tier)
+    .replace("{owner}", ownerLine)
+    .replace("{staff}", staffLine)
+    .replace("{ping}", PARTNER_FALLBACK_PING)
+    .replace("{link}", inviteLink);
 }
 
 function buildFallbackPartnerEmbed(data) {
   const description = data?.description || data?.descricao || "Nenhuma descrição fornecida.";
   const embed = createEmbed({
     color: 0x2ecc71,
-    description: `--- {☩} NOVA PARCERIA FECHADA! {☩} ---\n\n${description}\n\n{☩}----------{🤝}----------{☩}`,
+    description: PARTNER_EMBED_TEMPLATE.replace("{description}", description),
   });
   if (data?.banner?.startsWith?.("http")) embed.setImage(data.banner);
   return embed;
+}
+
+function normalizeInviteInput(rawInvite) {
+  if (!rawInvite) return "";
+  if (rawInvite.startsWith("http")) return rawInvite;
+  if (rawInvite.includes("discord.gg/") || rawInvite.includes("discord.com/invite/")) {
+    return `https://${rawInvite}`;
+  }
+  return `https://discord.gg/${rawInvite}`;
 }

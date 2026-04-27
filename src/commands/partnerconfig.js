@@ -5,6 +5,9 @@ const { createEmbed } = require("../embeds");
 const { createDataStore } = require("../store/dataStore");
 
 const partnersStore = createDataStore("partners.json");
+const AUDIT_RATE_LIMIT_DELAY_MS = 2500;
+const RECOVERY_EXPIRATION_MS = 72 * 60 * 60 * 1000;
+const PARTNER_RECOVERY_DM_TEXT = "⚠️ Seu link de parceria na WDA expirou! Você tem exatamente 3 dias (72h) para responder esta mensagem com um NOVO LINK de convite válido. Caso contrário, sua parceria será removida automaticamente.";
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -228,7 +231,7 @@ module.exports = {
               if (!wasPending || !hadWaitingSince) {
                 const user = await client.users.fetch(ownerId).catch(() => null);
                 if (user) {
-                  const dmSent = await user.send("⚠️ Seu link de parceria na WDA expirou! Você tem exatamente 3 dias (72h) para responder esta mensagem com um NOVO LINK de convite válido. Caso contrário, sua parceria será removida automaticamente.").then(() => true).catch(async () => {
+                  const dmSent = await user.send(PARTNER_RECOVERY_DM_TEXT).then(() => true).catch(async () => {
                     erros++;
                     await sendPartnershipStaffLog({
                       guild,
@@ -258,7 +261,7 @@ module.exports = {
             // C) Check de Expiração Crítica
             if (data?.status === "PENDING_RECOVERY") {
               const waitingSince = typeof data?.waitingSince === "number" ? data.waitingSince : 0;
-              if (waitingSince && (Date.now() - waitingSince) > 259200000) {
+              if (waitingSince && (Date.now() - waitingSince) > RECOVERY_EXPIRATION_MS) {
                 await removePartnershipRoles(member, guildConfig);
                 await deletePartnerMessage({ guild, channelId: data?.channelId, messageId: data?.messageId });
                 delete partners[id];
@@ -291,7 +294,7 @@ module.exports = {
             });
           } finally {
             // 🛡️ ANTI-RATE LIMIT
-            await new Promise(res => setTimeout(res, 2500));
+            await new Promise(res => setTimeout(res, AUDIT_RATE_LIMIT_DELAY_MS));
           }
         }
 
