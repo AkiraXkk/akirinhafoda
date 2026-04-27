@@ -223,9 +223,19 @@ function buildFallbackPartnerEmbed(data) {
 
 function normalizeInviteInput(rawInvite) {
   if (!rawInvite) return "";
-  if (rawInvite.startsWith("http")) return rawInvite;
-  if (rawInvite.includes("discord.gg/") || rawInvite.includes("discord.com/invite/")) {
-    return `https://${rawInvite}`;
+  const trimmed = rawInvite.trim();
+  const lower = trimmed.toLowerCase();
+  if (trimmed.startsWith("http")) return trimmed;
+  if (
+    lower.startsWith("discord.gg/") ||
+    lower.startsWith("www.discord.gg/") ||
+    lower.startsWith("discord.com/invite/") ||
+    lower.startsWith("www.discord.com/invite/")
+  ) {
+    return `https://${trimmed}`;
   }
-  return `https://discord.gg/${rawInvite}`;
+  if (lower.includes("discord.gg/") || lower.includes("discord.com/invite/")) {
+    return trimmed;
+  }
+  return `https://discord.gg/${trimmed}`;
 }
