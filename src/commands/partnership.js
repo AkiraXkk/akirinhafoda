@@ -267,7 +267,7 @@ module.exports = {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const allPartners = await partnersStore.load();
-      const myPartners = Object.values(allPartners).filter(p => p.status === "accepted" && p.requesterId === interaction.user.id);
+      const myPartners = Object.values(allPartners).filter(p => (p.status === "accepted" || p.status === "ACTIVE") && p.requesterId === interaction.user.id);
 
       if (myPartners.length === 0) {
         return interaction.editReply({ embeds: [createErrorEmbed("Você não possui nenhuma parceria ativa no momento.")] });

@@ -1,14 +1,87 @@
 const { Events } = require("discord.js");
 const { logger } = require("../logger");
 const { createDataStore } = require("../store/dataStore");
+const { createEmbed } = require("../embeds");
 const { checkMessage: automodCheckMessage } = require("../services/automodService");
 
 const ticketStore = createDataStore("tickets.json");
 const chatStore = createDataStore("sejawda_chats.json");
+const partnersStore = createDataStore("partners.json");
+const PARTNER_CONTENT_TEMPLATE = "**Servidor:** {server}\n**Tier:** {tier}\n**Representante:** {owner}\n**Responsável:** {staff}\n**Ping:** {ping}\n**Link:** {link}";
+const PARTNER_EMBED_TEMPLATE = "--- {☩} NOVA PARCERIA FECHADA! {☩} ---\n\n{description}\n\n{☩}----------{🤝}----------{☩}";
+const PARTNER_FALLBACK_PING = "Sem menção";
 
 module.exports = {
   name: Events.MessageCreate,
   async execute(message, client) {
+    // ==========================================
+    // NOVO: COLETOR DE DM PARA RECUPERAÇÃO
+    // ==========================================
+    if (message.channel?.isDMBased?.() && !message.author.bot) {
+      try {
+        const partners = await partnersStore.load();
+        const pendingEntry = Object.entries(partners).find(([, data]) => {
+          const ownerId = resolvePartnerOwnerId(data);
+          return ownerId === message.author.id && data?.status === "PENDING_RECOVERY";
+        });
+
+        if (!pendingEntry) return;
+
+        const [id, data] = pendingEntry;
+        const rawInvite = String(message.content || "").trim();
+        const inviteData = await client.fetchInvite(rawInvite).catch(() => null);
+
+        if (!inviteData) {
+          await message.reply("❌ Este não é um link de convite válido do Discord. Tente novamente.");
+          return;
+        }
+
+        const normalizedInvite = normalizeInviteInput(rawInvite);
+
+        const channelId = data?.channelId;
+        const channel = channelId ? await client.channels.fetch(channelId).catch(() => null) : null;
+
+        if (!channel?.isTextBased?.()) {
+          await message.reply("❌ Não consegui localizar o canal da parceria para repostar a mensagem. Contate a Staff.");
+          return;
+        }
+
+        const oldMessage = data?.messageId ? await channel.messages.fetch(data.messageId).catch(() => null) : null;
+        const oldContent = oldMessage?.content || null;
+        const oldEmbeds = oldMessage?.embeds?.length ? oldMessage.embeds : null;
+
+        if (oldMessage) await oldMessage.delete().catch(() => null);
+
+        const { content, embeds } = buildRecoveredPartnerPost({
+          data,
+          inviteLink: normalizedInvite,
+          oldContent,
+          fallbackEmbeds: oldEmbeds
+        });
+
+        const sentMessage = await channel.send({ content, embeds });
+
+        await partnersStore.update(id, (current) => {
+          if (!current) return current;
+          const next = { ...current };
+          next.inviteLink = normalizedInvite;
+          next.convite = normalizedInvite;
+          next.messageId = sentMessage.id;
+          next.channelId = channel.id;
+          next.status = "ACTIVE";
+          if (next.waitingSince) delete next.waitingSince;
+          return next;
+        });
+
+        await message.reply("✅ Link atualizado com sucesso! Sua parceria foi renovada e postada novamente.");
+        return;
+      } catch (err) {
+        logger.error({ err }, "Erro ao processar recuperação de parceria via DM");
+        await message.reply("❌ Ocorreu um erro ao processar seu link. Tente novamente mais tarde.");
+        return;
+      }
+    }
+
     if (message.author.bot || !message.guild) return;
 
     // ── AutoMod: verifica a mensagem contra todas as regras ativas ─────────
@@ -98,3 +171,71 @@ module.exports = {
     }
   },
 };
+
+// ==========================================
+// Helpers auxiliares (DM Recovery)
+// ==========================================
+function resolvePartnerOwnerId(data) {
+  return data?.requesterId || data?.representante || data?.ownerId || data?.responsavel || null;
+}
+
+function buildRecoveredPartnerPost({ data, inviteLink, oldContent, fallbackEmbeds }) {
+  const updatedContent = replaceInviteInContent(oldContent || "", inviteLink);
+  const content = updatedContent || buildFallbackPartnerContent(data, inviteLink);
+  const embeds = fallbackEmbeds && fallbackEmbeds.length
+    ? fallbackEmbeds
+    : [buildFallbackPartnerEmbed(data)];
+  return { content, embeds };
+}
+
+function replaceInviteInContent(content, inviteLink) {
+  if (!content) return "";
+  const regex = /(\*\*Link:\*\*\s*)(\S+)/i;
+  if (regex.test(content)) return content.replace(regex, `$1${inviteLink}`);
+  return "";
+}
+
+function buildFallbackPartnerContent(data, inviteLink) {
+  const serverName = data?.serverName || data?.servidor || "Servidor Desconhecido";
+  const tier = data?.tier || "Bronze";
+  const ownerId = resolvePartnerOwnerId(data);
+  const processedBy = data?.processedBy || data?.responsavel || "Sistema";
+  const ownerLine = ownerId ? `<@${ownerId}>` : "Desconhecido";
+  const staffLine = processedBy === "Sistema" ? processedBy : `<@${processedBy}>`;
+  return PARTNER_CONTENT_TEMPLATE
+    .replace("{server}", serverName)
+    .replace("{tier}", tier)
+    .replace("{owner}", ownerLine)
+    .replace("{staff}", staffLine)
+    .replace("{ping}", PARTNER_FALLBACK_PING)
+    .replace("{link}", inviteLink);
+}
+
+function buildFallbackPartnerEmbed(data) {
+  const description = data?.description || data?.descricao || "Nenhuma descrição fornecida.";
+  const embed = createEmbed({
+    color: 0x2ecc71,
+    description: PARTNER_EMBED_TEMPLATE.replace("{description}", description),
+  });
+  if (data?.banner?.startsWith?.("http")) embed.setImage(data.banner);
+  return embed;
+}
+
+function normalizeInviteInput(rawInvite) {
+  if (!rawInvite) return "";
+  const trimmed = rawInvite.trim();
+  const lower = trimmed.toLowerCase();
+  if (trimmed.startsWith("http")) return trimmed;
+  if (
+    lower.startsWith("discord.gg/") ||
+    lower.startsWith("www.discord.gg/") ||
+    lower.startsWith("discord.com/invite/") ||
+    lower.startsWith("www.discord.com/invite/")
+  ) {
+    return `https://${trimmed}`;
+  }
+  if (lower.includes("discord.gg/") || lower.includes("discord.com/invite/")) {
+    return trimmed;
+  }
+  return `https://discord.gg/${trimmed}`;
+}

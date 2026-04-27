@@ -16,7 +16,7 @@ module.exports = {
         let changed = false;
 
         for (const [id, data] of Object.entries(partners)) {
-          if (data.status !== "accepted" || !data.acceptedAt) continue;
+          if ((data.status !== "accepted" && data.status !== "ACTIVE") || !data.acceptedAt) continue;
 
           const acceptedDate = new Date(data.acceptedAt);
           const diffDays = (now - acceptedDate) / (1000 * 60 * 60 * 24);
