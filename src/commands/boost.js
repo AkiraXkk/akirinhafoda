@@ -114,7 +114,7 @@ module.exports = {
       const pData = partners[searchId];
 
       if (!pData) return interaction.reply({ embeds: [createErrorEmbed("❌ Parceria não encontrada. Verifique o ID.")], flags: MessageFlags.Ephemeral });
-      if (pData.status !== "accepted") return interaction.reply({ embeds: [createErrorEmbed("❌ Esta parceria não está ativa/aceita.")], flags: MessageFlags.Ephemeral });
+      if (pData.status !== "accepted" && pData.status !== "ACTIVE") return interaction.reply({ embeds: [createErrorEmbed("❌ Esta parceria não está ativa/aceita.")], flags: MessageFlags.Ephemeral });
 
       if (sub === "cobrar") {
         if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) return interaction.reply({ embeds: [createErrorEmbed("Apenas administradores podem cobrar parcerias.")], flags: MessageFlags.Ephemeral });

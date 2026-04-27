@@ -8,7 +8,7 @@
 //     para suporte a Cotas Avançadas (cotasConfig)
 // ============================================================
 
-const { Client, GatewayIntentBits } = require("discord.js");
+const { Client, GatewayIntentBits, Partials } = require("discord.js");
 const { config }          = require("./config");
 const { logger }          = require("./logger");
 const { loadCommands }    = require("./loadCommands");
@@ -45,7 +45,10 @@ function createClient() {
       GatewayIntentBits.GuildVoiceStates,
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildPresences, 
+      GatewayIntentBits.DirectMessages,
     ],
+    // 🔒 NOVO: Partials para leitura segura de DMs fora do cache
+    partials: [Partials.Channel, Partials.Message, Partials.User],
   });
 }
 

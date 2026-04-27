@@ -15,7 +15,7 @@ function createPartnershipNotifier({ client, logger }) {
       const FOUR_DAYS_MS = 4 * 24 * 60 * 60 * 1000; 
 
       for (const [id, pData] of Object.entries(partners)) {
-        if (pData.status !== "accepted") continue;
+        if (pData.status !== "accepted" && pData.status !== "ACTIVE") continue;
         if (!pData.autoBump) continue;
 
         const lastBump = pData.lastBump || new Date(pData.date).getTime();

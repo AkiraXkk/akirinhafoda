@@ -73,7 +73,7 @@ module.exports = {
       
       const partnership = Object.values(partners).find(p => 
         (p.requesterGuild === targetGuildId || p.partnerGuild === targetGuildId) && 
-        p.status === "accepted"
+        (p.status === "accepted" || p.status === "ACTIVE")
       );
       
       if (!partnership) {
@@ -175,7 +175,7 @@ module.exports = {
       }
 
       const partners = await partnersStore.load();
-      const activePartnerships = Object.values(partners).filter(p => p.status === "accepted");
+      const activePartnerships = Object.values(partners).filter(p => p.status === "accepted" || p.status === "ACTIVE");
       
       if (activePartnerships.length === 0) {
         return interaction.reply({

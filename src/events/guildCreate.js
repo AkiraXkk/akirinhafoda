@@ -16,7 +16,7 @@ module.exports = {
       const partners = await partnersStore.load();
       const partnership = Object.values(partners).find(p => 
         (p.requesterGuild === guild.id || p.partnerGuild === guild.id) && 
-        p.status === "accepted"
+        (p.status === "accepted" || p.status === "ACTIVE")
       );
 
       if (!partnership) {
