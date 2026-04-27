@@ -180,6 +180,8 @@ module.exports = {
         const client = interaction.client;
         const guild = interaction.guild;
         const logService = client?.services?.log;
+        const auditGuildConfig = guildConfig;
+        const auditConfig = pConfig;
         const partners = await partnersStore.load();
 
         const entries = Object.entries(partners).filter(([, data]) => isPartnerAuditableStatus(data?.status));
@@ -205,7 +207,7 @@ module.exports = {
 
               await sendPartnershipStaffLog({
                 guild,
-                pConfig,
+                pConfig: auditConfig,
                 logService,
                 title: "Parceria Removida (Dono ausente)",
                 description: `A parceria **${data?.serverName || id}** foi removida porque o dono não está mais no servidor.`,
@@ -235,7 +237,7 @@ module.exports = {
                     erros++;
                     await sendPartnershipStaffLog({
                       guild,
-                      pConfig,
+                      pConfig: auditConfig,
                       logService,
                       title: "Aviso de link expirado falhou",
                       description: `Aviso de link expirado falhou para <@${ownerId}> (DMs fechadas). A parceria será removida em 3 dias de qualquer forma.`,
@@ -248,7 +250,7 @@ module.exports = {
                   erros++;
                   await sendPartnershipStaffLog({
                     guild,
-                    pConfig,
+                    pConfig: auditConfig,
                     logService,
                     title: "Aviso de link expirado falhou",
                     description: `Aviso de link expirado falhou para <@${ownerId}> (usuário não encontrado). A parceria será removida em 3 dias de qualquer forma.`,
@@ -262,7 +264,7 @@ module.exports = {
             if (data?.status === "PENDING_RECOVERY") {
               const waitingSince = typeof data?.waitingSince === "number" ? data.waitingSince : 0;
               if (waitingSince && (Date.now() - waitingSince) > RECOVERY_EXPIRATION_MS) {
-                await removePartnershipRoles(member, guildConfig);
+                await removePartnershipRoles(member, auditGuildConfig);
                 await deletePartnerMessage({ guild, channelId: data?.channelId, messageId: data?.messageId });
                 delete partners[id];
                 changed = true;
@@ -270,7 +272,7 @@ module.exports = {
 
                 await sendPartnershipStaffLog({
                   guild,
-                  pConfig,
+                  pConfig: auditConfig,
                   logService,
                   title: "Parceria Removida (Recuperação expirada)",
                   description: `A parceria **${data?.serverName || id}** foi removida após 72h sem resposta.`,
@@ -286,7 +288,7 @@ module.exports = {
             erros++;
             await sendPartnershipStaffLog({
               guild,
-              pConfig,
+              pConfig: auditConfig,
               logService,
               title: "Erro na auditoria de parceria",
               description: `Falha ao auditar a parceria **${id}**.`,
