@@ -89,6 +89,14 @@ module.exports = {
       logger.error({ err }, "AutoMod: Erro ao verificar mensagem")
     );
 
+    // ── ImageLock: deleta mensagens sem imagem em canais bloqueados ─────────
+    const imageLockCommand = client.commands.get("imagelock");
+    if (imageLockCommand?.checkImageLock) {
+      imageLockCommand.checkImageLock(message).catch((err) =>
+        logger.error({ err }, "ImageLock: Erro ao verificar mensagem")
+      );
+    }
+
     // ── SLA: Atualiza lastMessageAt/lastMessageBy nos tickets ──
     try {
       const tickets = await ticketStore.load();
